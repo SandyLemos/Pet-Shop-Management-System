@@ -21,6 +21,35 @@ function App() {
    return s === "tosa" || s === "banho_tosa" || s === "higienica"
  }
 
+ const handleRevertService = (petId: string, etapa: string, motivo: string) => {
+   setPets((prevPets) =>
+     prevPets.map((pet) => {
+       if (pet.id === petId) {
+         return {
+           ...pet,
+           status: "espera" as SlotStatus, // Volta para a primeira coluna
+           banhoCompleto: false,
+           escovarCompleto: false,
+           tosaCompleta: false,
+           atendimentoIniciado: false, // Libera edição total do perfil
+           // Grava a auditoria
+           historicoReversoes: [
+             ...(pet.historicoReversoes || []),
+             {
+               etapa,
+               motivo,
+               data: new Date().toISOString(),
+             },
+           ],
+         }
+       }
+       return pet
+     }),
+   )
+
+   toast.success(`Serviço de ${etapa} revertido com sucesso.`)
+ }
+
 const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
   setPets((currentPets) =>
     currentPets.map((pet) => {
@@ -67,6 +96,25 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
     toast.success(`${petData.nomePet} cadastrado com sucesso!`);
   };
 
+  const onRevertService = (petId: string, etapa: string, motivo: string) => {
+    console.log(`Auditoria: Pet ${petId} teve o ${etapa} revertido: ${motivo}`)
+
+    setPets((prevPets) =>
+      prevPets.map((pet) => {
+        if (pet.id === petId) {
+          return {
+            ...pet,
+            // Se a etapa for banho, desmarcamos apenas o banho
+            ...(etapa === "banho" && { banhoCompleto: false }),
+            // Se no futuro tiver reversão de tosa:
+            ...(etapa === "tosa" && { tosaCompleta: false }),
+          }
+        }
+        return pet
+      }),
+    )
+  }
+
   const handleCheckout = (petId: string) => {
     const pet = pets.find(p => p.id === petId);
     setPets(pets.filter(p => p.id !== petId));
@@ -83,14 +131,27 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
     toast.success(`Pet removido`);
   };
 
-  const handleAssignProfessional = (petId: string, profissionalBanho?: string, profissionalTosa?: string) => {
-    setPets(pets.map(pet => {
-      if (pet.id === petId) {
-        return { ...pet, profissionalBanho, profissionalTosa, status: 'banho' as SlotStatus };
-      }
-      return pet;
-    }));
-  };
+ const handleAssignProfessional = (
+   petId: string,
+   profissionalBanho?: string,
+   profissionalTosa?: string,
+ ) => {
+   setPets(
+     pets.map((pet) => {
+       if (pet.id === petId) {
+         return {
+           ...pet,
+           profissionalBanho,
+           profissionalTosa,
+           status: "banho" as SlotStatus,
+           atendimentoIniciado: true, // Trava o registro aqui
+         }
+       }
+       return pet
+     }),
+   )
+   toast.success("Atendimento iniciado e profissionais registrados!")
+ }
 
   const handleMarkServiceComplete = (
     petId: string,
@@ -128,18 +189,28 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
       {/* Header e Stats (Mantidos como seu original) */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-3 rounded-lg">
-                <Dog className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-gray-900">PetShop Manager</h1>
-                <p className="text-sm text-gray-600">Sistema de Gestão de Atendimento</p>
-              </div>
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-3 rounded-lg">
+              <Dog className="w-6 h-6 text-white" />
             </div>
-            <div className="text-right">
-              <p className="font-semibold">{new Date().toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long" })}</p>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                PetShop Manager
+              </h1>
+              <p className="text-sm text-gray-600">
+                Sistema de Gestão de Atendimento
+              </p>
             </div>
+          </div>
+          <div className="text-right">
+            <p className="font-semibold">
+              {new Date().toLocaleDateString("pt-BR", {
+                weekday: "long",
+                day: "numeric",
+                month: "long",
+              })}
+            </p>
+          </div>
         </div>
       </div>
 
@@ -147,19 +218,27 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-green-500">
             <p className="text-sm text-gray-600">Slots Livres</p>
-            <p className="text-3xl font-bold text-green-600">{stats.slotsLivres}</p>
+            <p className="text-3xl font-bold text-green-600">
+              {stats.slotsLivres}
+            </p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-yellow-500">
             <p className="text-sm text-gray-600">Aguardando</p>
-            <p className="text-3xl font-bold text-yellow-600">{stats.aguardando}</p>
+            <p className="text-3xl font-bold text-yellow-600">
+              {stats.aguardando}
+            </p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-blue-500">
             <p className="text-sm text-gray-600">Em Produção</p>
-            <p className="text-3xl font-bold text-blue-600">{stats.emProducao}</p>
+            <p className="text-3xl font-bold text-blue-600">
+              {stats.emProducao}
+            </p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-emerald-500">
             <p className="text-sm text-gray-600">Prontos</p>
-            <p className="text-3xl font-bold text-emerald-600">{stats.prontos}</p>
+            <p className="text-3xl font-bold text-emerald-600">
+              {stats.prontos}
+            </p>
           </div>
           <div className="bg-white rounded-lg shadow-sm p-4 border-l-4 border-gray-500">
             <p className="text-sm text-gray-600">Total Hoje</p>
@@ -172,8 +251,14 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
         <Tabs defaultValue="grid" className="space-y-4">
           <div className="flex items-center justify-between bg-white rounded-lg p-4 shadow-sm">
             <TabsList>
-              <TabsTrigger value="grid" className="gap-2"><LayoutGrid className="w-4 h-4" />Visão Geral</TabsTrigger>
-              <TabsTrigger value="kanban" className="gap-2"><LayoutList className="w-4 h-4" />Fluxo de Trabalho</TabsTrigger>
+              <TabsTrigger value="grid" className="gap-2">
+                <LayoutGrid className="w-4 h-4" />
+                Visão Geral
+              </TabsTrigger>
+              <TabsTrigger value="kanban" className="gap-2">
+                <LayoutList className="w-4 h-4" />
+                Fluxo de Trabalho
+              </TabsTrigger>
               <TabsTrigger value="ready" className="gap-2">
                 <CheckCircle2 className="w-4 h-4 text-green-600" />
                 Prontos para Retirada
@@ -189,7 +274,15 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
             <div className="flex items-center gap-2">
               <Filter className="w-4 h-4 text-gray-600" />
               <div className="flex gap-1">
-                {['all', 'banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao'].map((f) => (
+                {[
+                  "all",
+                  "banho",
+                  "tosa",
+                  "banho_tosa",
+                  "higienica",
+                  "ozonio",
+                  "hidratacao",
+                ].map((f) => (
                   <Button
                     key={f}
                     variant={filter === f ? "default" : "outline"}
@@ -197,7 +290,7 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
                     onClick={() => setFilter(f as any)}
                     className="capitalize"
                   >
-                    {f.replace('_', ' ')}
+                    {f.replace("_", " ")}
                   </Button>
                 ))}
               </div>
@@ -208,9 +301,13 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
             <SlotGrid pets={pets} onAddPet={handleAddPet} filter={filter} />
           </TabsContent>
 
-          <TabsContent value="kanban" className="bg-white rounded-lg shadow-sm p-6">
+          <TabsContent
+            value="kanban"
+            className="bg-white rounded-lg shadow-sm p-6"
+          >
             <KanbanBoard
               pets={pets}
+              onRevertService={onRevertService}
               onUpdateStatus={handleUpdateStatus}
               onCheckout={handleCheckout}
               onAddPet={handleAddPet}
@@ -223,23 +320,28 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
 
           <TabsContent value="ready">
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mt-6">
-              {pets.filter(p => p.status === 'finalizado').map(pet => (
-                <PetCard
-                  key={pet.id}
-                  pet={pet}
-                  onUpdateStatus={handleUpdateStatus}
-                  onCheckout={handleCheckout}
-                  onEditPet={handleEditPet}
-                  onDeletePet={handleDeletePet}
-                  onAssignProfessional={handleAssignProfessional}
-                  onMarkServiceComplete={handleMarkServiceComplete}
-                  allPets={pets}
-                />
-              ))}
+              {pets
+                .filter((p) => p.status === "finalizado")
+                .map((pet) => (
+                  <PetCard
+                    key={pet.id}
+                    pet={pet}
+                    onRevertService={handleRevertService}
+                    onUpdateStatus={handleUpdateStatus}
+                    onCheckout={handleCheckout}
+                    onEditPet={handleEditPet}
+                    onDeletePet={handleDeletePet}
+                    onAssignProfessional={handleAssignProfessional}
+                    onMarkServiceComplete={handleMarkServiceComplete}
+                    allPets={pets}
+                  />
+                ))}
               {stats.prontos === 0 && (
                 <div className="col-span-full py-20 text-center bg-white rounded-xl border-2 border-dashed border-slate-200">
                   <CheckCircle2 className="w-12 h-12 text-slate-200 mx-auto mb-2" />
-                  <p className="text-slate-400">Nenhum animal pronto para retirada.</p>
+                  <p className="text-slate-400">
+                    Nenhum animal pronto para retirada.
+                  </p>
                 </div>
               )}
             </div>
@@ -247,7 +349,7 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
         </Tabs>
       </div>
     </div>
-  );
+  )
 }
 
 export default App;

@@ -160,7 +160,7 @@ export function PetRegistration({
       foto,
       servico: servico as any,
       observacoes,
-      slotNumber: showSlotSelector ? selectedSlot : undefined,
+      slotNumber: selectedSlot || defaultSlot,
     })
   }
 
@@ -203,6 +203,7 @@ export function PetRegistration({
           <Input
             id="nomePet"
             placeholder="Ex: Bob"
+            disabled={isEditing && initialData?.atendimentoIniciado} // Bloqueia
             className={inputStyle}
             value={nomePet}
             onChange={(e) => setNomePet(e.target.value)}
@@ -213,6 +214,7 @@ export function PetRegistration({
         <div className="grid grid-cols-2 gap-3">
           <NativeSelect
             label="Espécie"
+            disabled={isEditing && initialData?.atendimentoIniciado}
             value={especie}
             onChange={(v: any) => {
               setEspecie(v)
@@ -226,6 +228,7 @@ export function PetRegistration({
           <NativeSelect
             label="Porte"
             value={porte}
+            disabled={(isEditing && initialData?.atendimentoIniciado)}
             onChange={(v: any) => setPorte(v)}
             options={["pequeno", "medio", "grande"]}
           />
@@ -235,7 +238,7 @@ export function PetRegistration({
           label="Raça"
           value={raca}
           onChange={setRaca}
-          disabled={!especie}
+          disabled={!especie || (isEditing && initialData?.atendimentoIniciado)}
           options={
             especie === "cao" ? RACAS_CAO : especie === "gato" ? RACAS_GATO : []
           }
@@ -299,6 +302,7 @@ export function PetRegistration({
         </h3>
         <NativeSelect
           label="Tipo de Serviço *"
+          disabled={isEditing && initialData?.atendimentoIniciado}
           value={servico}
           onChange={(v: any) => setServico(v)}
           options={[
