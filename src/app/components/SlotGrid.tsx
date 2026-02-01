@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Dog, Clock, Droplet, Wind, Scissors, CheckCircle2 } from 'lucide-react';
+import { Dog, Clock, Droplet, Wind, Scissors, CheckCircle2, ChevronDown, ChevronUp, Minus, MinusCircle } from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
+import { Button } from './ui/button';
 import type { Pet, SlotStatus } from '../types/pet';
 
 interface SlotGridProps {
@@ -14,8 +15,27 @@ interface SlotGridProps {
 export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [visibleSlots, setVisibleSlots] = useState(10); // Começa com 10 slots
 
   const totalSlots = 100;
+  const SLOTS_PER_BATCH = 10; // Liberar 10 slots por vez
+  const MIN_VISIBLE_SLOTS = 10; // Mínimo de slots que devem estar visíveis
+
+  // Calcula quantos slots estão ocupados na faixa visível
+  const occupiedSlotsInVisibleRange = useMemo(() => {
+    return pets.filter(p => p.slotNumber <= visibleSlots).length;
+  }, [pets, visibleSlots]);
+
+  // Calcula quantos slots livres ainda existem na faixa visível
+  const freeSlotsInVisibleRange = visibleSlots - occupiedSlotsInVisibleRange;
+
+  // Expande automaticamente quando todos os slots visíveis estão ocupados
+  useEffect(() => {
+    if (freeSlotsInVisibleRange === 0 && visibleSlots < totalSlots) {
+      // Expande automaticamente mais 10 slots
+      setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
+    }
+  }, [freeSlotsInVisibleRange, visibleSlots, totalSlots]);
   
   const getSlotStatus = (slotNumber: number): { status: SlotStatus; pet?: Pet } => {
     const pet = pets.find(p => p.slotNumber === slotNumber);
@@ -81,10 +101,160 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
     return pet.servico === filter;
   };
 
+  // Função para expandir manualmente mais slots
+  const handleExpandSlots = () => {
+    setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
+  };
+
+  // Função para remover 1 slot por vez
+  const handleRemoveOneSlot = () => {
+    setVisibleSlots(prev => {
+      const newValue = prev - 1;
+      // Não permite remover se:
+      // 1. Já está no mínimo (10 slots)
+      // 2. Se o último slot visível está ocupado
+      const lastSlotOccupied = pets.some(p => p.slotNumber === prev);
+      if (newValue < MIN_VISIBLE_SLOTS || lastSlotOccupied) {
+        return prev;
+      }
+      return newValue;
+    });
+  };
+
+  // Função para remover 10 slots por vez
+  const handleRemoveBatchSlots = () => {
+    setVisibleSlots(prev => {
+      const newValue = prev - SLOTS_PER_BATCH;
+      // Não permite ir abaixo do mínimo
+      if (newValue < MIN_VISIBLE_SLOTS) {
+        return prev;
+      }
+      
+      // Verifica se algum dos slots que seriam removidos está ocupado
+      const slotsToRemove = Array.from(
+        { length: SLOTS_PER_BATCH }, 
+        (_, i) => prev - i
+      );
+      const hasOccupiedSlot = slotsToRemove.some(slotNum => 
+        pets.some(p => p.slotNumber === slotNum)
+      );
+      
+      if (hasOccupiedSlot) {
+        return prev;
+      }
+      
+      return newValue;
+    });
+  };
+
+  // Verifica se pode remover slots (pelo menos 1 slot além do mínimo e último slot livre)
+  const canRemoveSlots = visibleSlots > MIN_VISIBLE_SLOTS && !pets.some(p => p.slotNumber === visibleSlots);
+  
+  // Verifica se pode remover 10 slots de uma vez
+  const canRemoveBatch = useMemo(() => {
+    if (visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS) return false;
+    const slotsToRemove = Array.from(
+      { length: SLOTS_PER_BATCH }, 
+      (_, i) => visibleSlots - i
+    );
+    return !slotsToRemove.some(slotNum => 
+      pets.some(p => p.slotNumber === slotNum)
+    );
+  }, [visibleSlots, pets]);
+
   return (
     <div>
+      {/* Indicador de slots visíveis */}
+      <div className="px-4 pt-4 pb-2">
+        <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-3">
+              <div className="bg-blue-500 text-white px-3 py-1 rounded-md font-bold text-sm">
+                {visibleSlots}/{totalSlots}
+              </div>
+              <div className="text-sm text-blue-800">
+                <span className="font-semibold">{freeSlotsInVisibleRange}</span> slots livres visíveis
+              </div>
+            </div>
+          </div>
+
+          {/* Controles de Expansão e Remoção */}
+          <div className="flex items-center gap-2">
+            {/* Botões de Remoção */}
+            <div className="flex items-center gap-1 mr-2">
+              <span className="text-xs text-slate-600 font-medium mr-2">Remover:</span>
+              
+              {/* Remover 1 slot */}
+              <Button
+                onClick={handleRemoveOneSlot}
+                disabled={!canRemoveSlots}
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 gap-1 border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                title={
+                  !canRemoveSlots 
+                    ? visibleSlots === MIN_VISIBLE_SLOTS 
+                      ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
+                      : "Último slot está ocupado"
+                    : "Remover 1 slot"
+                }
+              >
+                <Minus className="w-3 h-3" />
+                <span className="text-xs font-semibold">1</span>
+              </Button>
+
+              {/* Remover 10 slots */}
+              <Button
+                onClick={handleRemoveBatchSlots}
+                disabled={!canRemoveBatch}
+                variant="outline"
+                size="sm"
+                className="h-8 px-2 gap-1 border-red-400 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
+                title={
+                  !canRemoveBatch
+                    ? visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS
+                      ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
+                      : "Alguns dos últimos 10 slots estão ocupados"
+                    : "Remover 10 slots"
+                }
+              >
+                <MinusCircle className="w-3 h-3" />
+                <span className="text-xs font-semibold">10</span>
+              </Button>
+            </div>
+
+            {/* Separador visual */}
+            <div className="h-6 w-px bg-slate-300"></div>
+
+            {/* Botões de Adição */}
+            <div className="flex items-center gap-1 ml-2">
+              <span className="text-xs text-slate-600 font-medium mr-2">Adicionar:</span>
+              
+              {visibleSlots < totalSlots && (
+                <Button
+                  onClick={handleExpandSlots}
+                  variant="outline"
+                  size="sm"
+                  className="h-8 px-2 gap-1 border-green-300 text-green-700 hover:bg-green-50"
+                  title="Adicionar 10 slots"
+                >
+                  <ChevronDown className="w-3 h-3" />
+                  <span className="text-xs font-semibold">+10</span>
+                </Button>
+              )}
+
+              {visibleSlots >= totalSlots && (
+                <div className="text-xs text-slate-500 italic px-2">
+                  Limite máximo atingido
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="grid grid-cols-10 gap-2 p-4">
-        {Array.from({ length: totalSlots }, (_, i) => {
+        {Array.from({ length: visibleSlots }, (_, i) => {
           const slotNumber = i + 1;
           const { status, pet } = getSlotStatus(slotNumber);
           
