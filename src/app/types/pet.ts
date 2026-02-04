@@ -16,8 +16,10 @@ export interface Pet {
     | "higienica"
     | "ozonio"
     | "hidratacao"
+  proximaEtapa?: string
   profissionalBanho?: string
   profissionalTosa?: string
+  profissionalEscovar?: string
   atendimentoIniciado?: boolean // Nova Flag
   historicoReversoes?: {
     etapa: string

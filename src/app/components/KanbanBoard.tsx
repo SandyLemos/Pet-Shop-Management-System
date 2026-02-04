@@ -35,6 +35,7 @@ interface KanbanBoardProps {
     petId: string,
     profissionalBanho?: string,
     profissionalTosa?: string,
+    profissionalEscovar?: string,
   ) => void
   onMarkServiceComplete: (
     petId: string,
@@ -53,6 +54,7 @@ interface PetCardProps {
     petId: string,
     profissionalBanho?: string,
     profissionalTosa?: string,
+    profissionalEscovar?: string,
   ) => void
   onMarkServiceComplete: (
     petId: string,
@@ -80,9 +82,22 @@ export function PetCard({
   const [isEditProfessionalOpen, setIsEditProfessionalOpen] = useState(false)
   const [isReversionDialogOpen, setIsReversionDialogOpen] = useState(false)
 
-  // Lógica para decidir qual modal o botão "Editar" deve abrir
   const handleEditClick = (e: React.MouseEvent) => {
     e.stopPropagation()
+
+    // VERIFICAÇÃO DE SEGURANÇA: Bloqueia edição se o serviço da coluna atual já acabou
+    const servicoConcluido =
+      (pet.status === "banho" && pet.banhoCompleto) ||
+      (pet.status === "escovar" && pet.escovarCompleto) ||
+      (pet.status === "tosa" && pet.tosaCompleta)
+
+    if (servicoConcluido) {
+      alert(
+        "Este serviço já foi marcado como completo e não pode mais ser editado.",
+      )
+      return
+    }
+
     if (pet.atendimentoIniciado) {
       setIsEditProfessionalOpen(true)
     } else {
@@ -157,6 +172,50 @@ export function PetCard({
   const nomeLongo = pet.nomePet && pet.nomePet.length > 12
   const usarLayoutExpandido = temFoto || nomeLongo
 
+  const [etapaDestino, setEtapaDestino] = useState<string>("")
+
+  const prepararAvanco = (e: React.MouseEvent, etapa: string) => {
+    e.stopPropagation()
+    setEtapaDestino(etapa)
+    setIsProfessionalDialogOpen(true)
+  }
+
+  // Verificação para o ícone
+  const podeEditar = !(
+    (pet.status === "banho" && pet.banhoCompleto) ||
+    (pet.status === "escovar" && pet.escovarCompleto) ||
+    (pet.status === "tosa" && pet.tosaCompleta)
+  )
+
+  const isInicioAtendimento = pet.status === "espera"
+
+  // Dentro do seu componente PetCard
+  const handleQuickEditProfessional = (novoProfissional: string) => {
+    // Inicializamos as variáveis com o que já existe no pet
+    let pBanho = pet.profissionalBanho
+    let pEscovar = pet.profissionalEscovar
+    let pTosa = pet.profissionalTosa
+
+    // O "Cérebro" da edição: identifica o serviço pela coluna atual
+    switch (pet.status) {
+      case "banho":
+        pBanho = novoProfissional
+        break
+      case "escovar":
+        pEscovar = novoProfissional
+        break
+      case "tosa":
+        pTosa = novoProfissional
+        break
+      default:
+        // Se estiver em espera, tratamos como atribuição inicial de banho
+        pBanho = novoProfissional
+    }
+
+    // Chama a função que já ajustamos no App.tsx
+    onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Card className="mb-3 relative">
@@ -187,15 +246,17 @@ export function PetCard({
                   {getServiceLabel(pet.servico)}
                 </Badge>
 
-                <button
-                  className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors"
-                  onClick={handleEditClick}
-                >
-                  <div className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100">
-                    <Pencil className="w-3.5 h-3.5" />
-                  </div>
-                  {usarLayoutExpandido && <span>Editar</span>}
-                </button>
+                {podeEditar && (
+                  <button
+                    className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors"
+                    onClick={handleEditClick}
+                  >
+                    <div className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100">
+                      <Pencil className="w-3.5 h-3.5" />
+                    </div>
+                    {usarLayoutExpandido && <span>Editar</span>}
+                  </button>
+                )}
 
                 {pet.status === "espera" && (
                   <button
@@ -279,14 +340,16 @@ export function PetCard({
                   {getServiceLabel(pet.servico)}
                 </Badge>
                 {/* SUBSTITUIÇÃO AQUI: Botão inteligente que decide qual modal abrir */}
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-7 w-7 p-0 text-gray-500 hover:text-blue-600 transition-colors"
-                  onClick={handleEditClick}
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                </Button>
+                {podeEditar && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-7 w-7 p-0 text-gray-500 hover:text-blue-600 transition-colors"
+                    onClick={handleEditClick}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </Button>
+                )}
                 {pet.status === "espera" && (
                   <Button
                     variant="ghost"
@@ -305,19 +368,87 @@ export function PetCard({
           </CardHeader>
         )}
         <CardContent className="space-y-2">
-          {/* Mostrar profissional(is) apenas se já foi atribuído */}
-          {(pet.profissionalBanho || pet.profissionalTosa) && (
-            <div className="space-y-1">
+          {/* Seção de Profissionais: Só não aparece se estiver em "Aguardando" e sem ninguém atribuído */}
+          {pet.status !== "espera" && (
+            <div className="space-y-1.5 py-2 border-y border-gray-100 my-2 bg-slate-50/50 rounded-sm px-2">
+              {/* BANHO: Mostra sempre que houver o nome */}
               {pet.profissionalBanho && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Droplet className="w-4 h-4" />
-                  <span>Banho: {pet.profissionalBanho}</span>
+                <div
+                  className={`flex items-center gap-2 text-xs ${pet.banhoCompleto ? "text-gray-400" : "text-gray-700"}`}
+                >
+                  <Droplet
+                    className={`w-3.5 h-3.5 ${pet.banhoCompleto ? "text-gray-300" : "text-blue-500"}`}
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="font-medium">Banho:</span>
+                    <span
+                      className={
+                        pet.banhoCompleto
+                          ? "line-through decoration-gray-300"
+                          : "font-bold"
+                      }
+                    >
+                      {pet.profissionalBanho}
+                    </span>
+                    {pet.banhoCompleto && (
+                      <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />
+                    )}
+                  </span>
                 </div>
               )}
-              {pet.profissionalTosa && (
-                <div className="flex items-center gap-2 text-sm text-gray-600">
-                  <Scissors className="w-4 h-4" />
-                  <span>Tosa: {pet.profissionalTosa}</span>
+
+              {/* ESCOVAR: Mostra se tiver profissionalEscovar OU se estiver na coluna de escovação */}
+              {(pet.profissionalEscovar ||
+                pet.status === "escovar" ||
+                pet.escovarCompleto) && (
+                <div
+                  className={`flex items-center gap-2 text-xs ${pet.escovarCompleto ? "text-gray-400" : "text-gray-700"}`}
+                >
+                  <Wind
+                    className={`w-3.5 h-3.5 ${pet.escovarCompleto ? "text-gray-300" : "text-cyan-500"}`}
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="font-medium">Escovar:</span>
+                    <span
+                      className={
+                        pet.escovarCompleto
+                          ? "line-through decoration-gray-300"
+                          : "font-bold"
+                      }
+                    >
+                      {/* Lógica de prioridade: Profissional da Escova > Profissional do Banho > Julia Ferreira (fallback) */}
+                      {pet.profissionalEscovar}
+                    </span>
+                    {pet.escovarCompleto && (
+                      <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />
+                    )}
+                  </span>
+                </div>
+              )}
+
+              {/* TOSA: Mantém sua lógica original */}
+              {needsTosa && (pet.profissionalTosa || pet.status === "tosa") && (
+                <div
+                  className={`flex items-center gap-2 text-xs ${pet.tosaCompleta ? "text-gray-400" : "text-gray-700"}`}
+                >
+                  <Scissors
+                    className={`w-3.5 h-3.5 ${pet.tosaCompleta ? "text-gray-300" : "text-purple-500"}`}
+                  />
+                  <span className="flex items-center gap-1">
+                    <span className="font-medium">Tosa:</span>
+                    <span
+                      className={
+                        pet.tosaCompleta
+                          ? "line-through decoration-gray-300"
+                          : "font-bold"
+                      }
+                    >
+                      {pet.profissionalTosa || "Pendente"}
+                    </span>
+                    {pet.tosaCompleta && (
+                      <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />
+                    )}
+                  </span>
                 </div>
               )}
             </div>
@@ -361,179 +492,170 @@ export function PetCard({
 
           {/* Botões de ação baseados no status */}
           <div className="pt-2 space-y-2">
-            {/* Aguardando - Iniciar Atendimento */}
+            {/* MODAL ÚNICO PARA SELEÇÃO DE PROFISSIONAL */}
+            <Dialog
+              open={isProfessionalDialogOpen}
+              onOpenChange={setIsProfessionalDialogOpen}
+            >
+              <DialogContent>
+                <DialogHeader>
+                  <DialogTitle>Selecionar Profissional</DialogTitle>
+                </DialogHeader>
+                <ProfessionalSelector
+                  pet={{ ...pet, proximaEtapa: etapaDestino }}
+                  onAssignProfessional={onAssignProfessional}
+                  onSubmit={(profissional) => {
+                    if (pet.status === "espera") {
+                      onAssignProfessional(pet.id, profissional)
+                      onUpdateStatus(pet.id, "banho")
+                    } else {
+                      // Define quem é quem baseado para onde o pet está indo
+                      const pBanho =
+                        etapaDestino === "banho" ? profissional : undefined
+                      const pEscovar =
+                        etapaDestino === "escovar" ? profissional : undefined // NOVO
+                      const pTosa =
+                        etapaDestino === "tosa" ? profissional : undefined
+
+                      // Envia os 4 parâmetros para a função pai
+                      onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
+                      onUpdateStatus(pet.id, etapaDestino as any)
+                    }
+                    setIsProfessionalDialogOpen(false)
+                    setEtapaDestino("")
+                  }}
+                  onCancel={() => {
+                    setIsProfessionalDialogOpen(false)
+                    setEtapaDestino("")
+                  }}
+                />
+              </DialogContent>
+            </Dialog>
+
+            {/* LOGICA DE EXIBIÇÃO DOS BOTÕES POR STATUS */}
             {pet.status === "espera" && (
-              <Dialog
-                open={isProfessionalDialogOpen}
-                onOpenChange={setIsProfessionalDialogOpen}
+              <Button
+                className="w-full bg-blue-500 hover:bg-blue-600"
+                onClick={(e) => prepararAvanco(e, "banho")}
               >
-                <DialogTrigger asChild>
-                  <Button
-                    variant="default"
-                    size="sm"
-                    className="w-full bg-blue-500 hover:bg-blue-600"
-                  >
-                    <Droplet className="w-4 h-4 mr-2" />
-                    Iniciar Atendimento
-                  </Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Selecionar Profissional</DialogTitle>
-                  </DialogHeader>
-                  <ProfessionalSelector
-                    pet={pet}
-                    onSubmit={(profBanho, profTosa) => {
-                      onAssignProfessional(pet.id, profBanho, profTosa)
-                      setIsProfessionalDialogOpen(false)
-                    }}
-                    onCancel={() => setIsProfessionalDialogOpen(false)}
-                  />
-                </DialogContent>
-              </Dialog>
+                <Droplet className="w-4 h-4 mr-2" />
+                Iniciar Atendimento
+              </Button>
             )}
 
-            {/* Banho - Marcar como completo e Avançar para Escovar */}
-            {/* --- COLUNA BANHO --- */}
             {pet.status === "banho" && (
               <div className="space-y-2">
                 {!pet.banhoCompleto ? (
                   <>
-                    {/* Ação Principal: Concluir etapa */}
                     <Button
                       onClick={() => onMarkServiceComplete(pet.id, "banho")}
-                      className="w-full bg-blue-500 hover:bg-blue-600"
+                      className="w-full bg-blue-500"
                     >
-                      <CheckCircle2 className="w-4 h-4 mr-2" />
-                      Marcar Banho Completo
+                      <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar Banho
+                      Completo
                     </Button>
-
-                    {/* REGRA 1: Reversão Livre (Ainda não concluiu o banho) */}
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="w-full text-gray-400 hover:text-gray-600 hover:bg-gray-50 h-8"
+                      className="w-full text-gray-400"
                       onClick={() => onUpdateStatus(pet.id, "espera")}
                     >
-                      <ArrowLeft className="w-3 h-3 mr-2" />
-                      Voltar para Aguardando
+                      <ArrowLeft className="w-3 h-3 mr-2" /> Voltar para
+                      Aguardando
                     </Button>
                   </>
                 ) : (
                   <>
-                    {/* Ação Principal: Avançar para próxima etapa */}
                     <Button
-                      onClick={() => onUpdateStatus(pet.id, "escovar")}
-                      className="w-full bg-cyan-500 hover:bg-cyan-600"
+                      onClick={(e) => prepararAvanco(e, "escovar")}
+                      className="w-full bg-cyan-500"
                     >
-                      <Wind className="w-4 h-4 mr-2" />
-                      Avançar para Escovar
+                      <Wind className="w-4 h-4 mr-2" /> Avançar para Escovar
                     </Button>
-
-                    {/* REGRA 2: Reversão Auditada (Banho já está check) */}
                     <Button
                       variant="outline"
                       size="sm"
-                      className="w-full border-red-100 text-red-400 hover:text-red-600 hover:bg-red-50 hover:border-red-200 h-8"
+                      className="w-full border-red-100 text-red-400"
                       onClick={() => setIsReversionDialogOpen(true)}
                     >
-                      <RotateCcw className="w-3 h-3 mr-2" />
-                      Reverter Banho
+                      <RotateCcw className="w-3 h-3 mr-2" /> Reverter Banho
                     </Button>
                   </>
                 )}
               </div>
             )}
 
-            {/* Escovar - Marcar como completo e Avançar para Tosa */}
-            {/* Escovar - Ações */}
             {pet.status === "escovar" && (
-              <>
+              <div className="space-y-2">
                 {!pet.escovarCompleto ? (
                   <Button
                     onClick={() => onMarkServiceComplete(pet.id, "escovar")}
-                    className="w-full bg-cyan-500 hover:bg-cyan-600"
+                    className="w-full bg-cyan-500"
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Finalizar Escovação
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Finalizar
+                    Escovação
                   </Button>
-                ) : (
-                  // APÓS concluir a escovação, decide para onde vai
-                  <>
-                    {needsTosa ? (
-                      <Button
-                        onClick={() => onUpdateStatus(pet.id, "tosa")}
-                        className="w-full bg-purple-500 hover:bg-purple-600"
-                      >
-                        <Scissors className="w-4 h-4 mr-2" />
-                        Avançar para Tosa
-                      </Button>
-                    ) : (
-                      <Button
-                        onClick={handleMarkAsReady}
-                        className="w-full bg-green-500 hover:bg-green-600"
-                      >
-                        <CheckCircle2 className="w-4 h-4 mr-2" />
-                        Enviar para Retirada
-                      </Button>
-                    )}
-                  </>
-                )}
-
-                <Button
-                  onClick={handlePreviousStatus}
-                  variant="outline"
-                  className="w-full"
-                >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar para Banho
-                </Button>
-              </>
-            )}
-
-            {/* --- BOTÕES PARA O STATUS TOSA --- */}
-            {pet.status === "tosa" && (
-              <div className="space-y-2 mt-4">
-                {!pet.tosaCompleta ? (
+                ) : needsTosa ? (
                   <Button
-                    onClick={() => onMarkServiceComplete(pet.id, "tosa")}
-                    className="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold"
+                    onClick={(e) => prepararAvanco(e, "tosa")}
+                    className="w-full bg-purple-500"
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Marcar Tosa Completa
+                    <Scissors className="w-4 h-4 mr-2" /> Avançar para Tosa
                   </Button>
                 ) : (
                   <Button
                     onClick={handleMarkAsReady}
-                    className="w-full bg-green-500 hover:bg-green-600"
+                    className="w-full bg-green-500"
                   >
-                    <CheckCircle2 className="w-4 h-4 mr-2" />
-                    Enviar para Retirada
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Enviar para
+                    Retirada
                   </Button>
                 )}
-
-                {/* Botão para voltar caso precise corrigir algo na secagem */}
                 <Button
                   onClick={handlePreviousStatus}
                   variant="outline"
                   className="w-full"
                 >
-                  <ArrowLeft className="w-4 h-4 mr-2" />
-                  Voltar para Escova
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Voltar para Banho
                 </Button>
               </div>
             )}
 
-            {/* Finalizado - Pronto para Retirada */}
+            {pet.status === "tosa" && (
+              <div className="space-y-2">
+                {!pet.tosaCompleta ? (
+                  <Button
+                    onClick={() => onMarkServiceComplete(pet.id, "tosa")}
+                    className="w-full bg-purple-600"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar Tosa
+                    Completa
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleMarkAsReady}
+                    className="w-full bg-green-500"
+                  >
+                    <CheckCircle2 className="w-4 h-4 mr-2" /> Enviar para
+                    Retirada
+                  </Button>
+                )}
+                <Button
+                  onClick={handlePreviousStatus}
+                  variant="outline"
+                  className="w-full"
+                >
+                  <ArrowLeft className="w-4 h-4 mr-2" /> Voltar para Escovar
+                </Button>
+              </div>
+            )}
+
             {pet.status === "finalizado" && (
               <Button
                 onClick={() => onCheckout(pet.id)}
-                variant="default"
-                size="sm"
-                className="w-full bg-green-600 hover:bg-green-700"
+                className="w-full bg-green-600"
               >
-                <CheckCircle2 className="w-4 h-4 mr-2" />
-                Retirar Pet
+                <CheckCircle2 className="w-4 h-4 mr-2" /> Retirar Pet
               </Button>
             )}
           </div>
@@ -574,15 +696,45 @@ export function PetCard({
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Alterar Responsáveis pelo Serviço</DialogTitle>
+            <DialogTitle>
+              {pet.status === "espera" && "Selecionar Banhista"}
+              {pet.status === "banho" && "Alterar Responsável pelo Banho"}
+              {pet.status === "escovar" && "Alterar Responsável pela Escovação"}
+              {pet.status === "tosa" && "Alterar Tosador"}
+            </DialogTitle>
           </DialogHeader>
           <ProfessionalSelector
-            pet={pet}
-            onSubmit={(profBanho, profTosa) => {
-              onAssignProfessional(pet.id, profBanho, profTosa)
+            pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
+            onCancel={() => {
               setIsEditProfessionalOpen(false)
+              setEtapaDestino("")
             }}
-            onCancel={() => setIsEditProfessionalOpen(false)}
+            onAssignProfessional={onAssignProfessional} // Apenas repassa a prop
+            onSubmit={(profissionalEscolhido) => {
+              if (pet.status === "espera") {
+                // Início do atendimento
+                onAssignProfessional(pet.id, profissionalEscolhido)
+                onUpdateStatus(pet.id, "banho")
+              } else if (etapaDestino) {
+                // Avançando para outra coluna
+                const pBanho =
+                  etapaDestino === "banho" ? profissionalEscolhido : undefined
+                const pEscovar =
+                  etapaDestino === "escovar" ? profissionalEscolhido : undefined
+                const pTosa =
+                  etapaDestino === "tosa" ? profissionalEscolhido : undefined
+
+                onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
+                onUpdateStatus(pet.id, etapaDestino as SlotStatus)
+              } else {
+                // EDIÇÃO VIA LÁPIS: Apenas troca o nome no serviço que já está ocorrendo
+                // Aqui usamos aquela função "Cérebro" que você já tem no PetCard
+                handleQuickEditProfessional(profissionalEscolhido)
+              }
+
+              setIsEditProfessionalOpen(false)
+              setEtapaDestino("")
+            }}
           />
         </DialogContent>
       </Dialog>

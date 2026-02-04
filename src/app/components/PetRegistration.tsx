@@ -130,7 +130,12 @@ export function PetRegistration({
     initialData?.porte || "",
   )
   const [foto, setFoto] = useState(initialData?.foto || "")
-  const [servico, setServico] = useState(initialData?.servico || "")
+  const [servico, setServico] = useState(() => {
+    if (initialData?.servico === "banho_tosa") {
+      return "tosa" // Converte o valor antigo (banho + tosa) para o novo automaticamente
+    }
+    return initialData?.servico || ""
+  })
   const [observacoes, setObservacoes] = useState(initialData?.observacoes || "")
   const [selectedSlot, setSelectedSlot] = useState(
     initialData?.slotNumber || defaultSlot || 1,
@@ -308,7 +313,6 @@ export function PetRegistration({
           options={[
             { value: "banho", label: "💧 Banho" },
             { value: "tosa", label: "✂️ Tosa" },
-            { value: "banho_tosa", label: "✨ Banho + Tosa" },
             { value: "higienica", label: "🌿 Higiênica (Tosa)" },
             { value: "ozonio", label: "⚡ Ozônio (Banho)" },
             { value: "hidratacao", label: "💧 Hidratação (Banho)" },

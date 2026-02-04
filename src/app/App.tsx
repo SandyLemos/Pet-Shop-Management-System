@@ -135,22 +135,26 @@ const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
    petId: string,
    profissionalBanho?: string,
    profissionalTosa?: string,
+   profissionalEscovar?: string, 
  ) => {
-   setPets(
-     pets.map((pet) => {
+   setPets((prevPets) =>
+     prevPets.map((pet) => {
        if (pet.id === petId) {
          return {
            ...pet,
-           profissionalBanho,
-           profissionalTosa,
-           status: "banho" as SlotStatus,
-           atendimentoIniciado: true, // Trava o registro aqui
+           profissionalBanho: profissionalBanho ?? pet.profissionalBanho,
+           profissionalTosa: profissionalTosa ?? pet.profissionalTosa,
+           profissionalEscovar: profissionalEscovar ?? pet.profissionalEscovar,
+
+           // Só muda para "banho" se o pet ainda estiver em "espera"
+           status: pet.status === "espera" ? "banho" : pet.status,
+           atendimentoIniciado: true,
          }
        }
        return pet
      }),
    )
-   toast.success("Atendimento iniciado e profissionais registrados!")
+   toast.success("Profissional registrado com sucesso!")
  }
 
   const handleMarkServiceComplete = (
