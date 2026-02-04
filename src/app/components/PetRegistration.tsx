@@ -5,7 +5,7 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
-import { Upload } from "lucide-react"
+import { Upload, Save, CheckCircle2 } from "lucide-react"
 import type { Pet } from "../types/pet"
 
 const RACAS_CAO = [
@@ -182,11 +182,14 @@ export function PetRegistration({
   const inputStyle =
     "h-11 rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
 
-  return (
-    <form
-      onSubmit={handleSubmit}
-      className="space-y-4 px-1 max-h-[80vh] overflow-y-auto"
-    >
+return (
+  <form
+    onSubmit={handleSubmit}
+    className="flex flex-col h-full max-h-[80vh] relative bg-white"
+  >
+    {/* ÁREA DE CAMPOS COM SCROLL */}
+    <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 space-y-6 scrollbar-hide">
+      {/* 1. SLOT (SE DISPONÍVEL) */}
       {showSlotSelector && (
         <NativeSelect
           label="Slot/Vaga *"
@@ -196,19 +199,20 @@ export function PetRegistration({
         />
       )}
 
-      <div className="border-t pt-4 space-y-4">
-        <h3 className="font-bold text-sm text-slate-700 uppercase tracking-tight">
-          Dados do Pet
-        </h3>
-
+      <div className="pt-2 space-y-4">
+        {/* 2. NOME DO PET (OBRIGATÓRIO #1) */}
         <div className="space-y-2">
-          <Label htmlFor="nomePet" className="text-slate-700 font-semibold">
+          <Label
+            htmlFor="nomePet"
+            className="text-slate-700 font-bold text-base"
+          >
             Nome do Pet *
           </Label>
           <Input
             id="nomePet"
             placeholder="Ex: Bob"
-            disabled={isEditing && initialData?.atendimentoIniciado} // Bloqueia
+            autoFocus
+            disabled={isEditing && initialData?.atendimentoIniciado}
             className={inputStyle}
             value={nomePet}
             onChange={(e) => setNomePet(e.target.value)}
@@ -216,9 +220,10 @@ export function PetRegistration({
           />
         </div>
 
+        {/* 3. ESPÉCIE, PORTE E RAÇA (OBRIGATÓRIO #2) */}
         <div className="grid grid-cols-2 gap-3">
           <NativeSelect
-            label="Espécie"
+            label="Espécie *"
             disabled={isEditing && initialData?.atendimentoIniciado}
             value={especie}
             onChange={(v: any) => {
@@ -231,16 +236,16 @@ export function PetRegistration({
             ]}
           />
           <NativeSelect
-            label="Porte"
+            label="Porte *"
             value={porte}
-            disabled={(isEditing && initialData?.atendimentoIniciado)}
+            disabled={isEditing && initialData?.atendimentoIniciado}
             onChange={(v: any) => setPorte(v)}
             options={["pequeno", "medio", "grande"]}
           />
         </div>
 
         <NativeSelect
-          label="Raça"
+          label="Raça *"
           value={raca}
           onChange={setRaca}
           disabled={!especie || (isEditing && initialData?.atendimentoIniciado)}
@@ -252,8 +257,53 @@ export function PetRegistration({
           }
         />
 
+        {/* 4. DADOS DO TUTOR (OBRIGATÓRIO #3) */}
         <div className="space-y-2">
-          <Label className="text-slate-700 font-semibold">Foto do Pet</Label>
+          <Label
+            htmlFor="nomeTutor"
+            className="text-slate-700 font-bold text-base"
+          >
+            Nome do Tutor *
+          </Label>
+          <Input
+            id="nomeTutor"
+            placeholder="Ex: João Silva"
+            className={inputStyle}
+            value={nomeTutor}
+            onChange={(e) => setNomeTutor(e.target.value)}
+            required
+          />
+        </div>
+
+        {/* 5. SERVIÇO (OBRIGATÓRIO #4) */}
+        <div className="space-y-2">
+          <NativeSelect
+            label="Tipo de Serviço *"
+            disabled={isEditing && initialData?.atendimentoIniciado}
+            value={servico}
+            onChange={(v: any) => setServico(v)}
+            options={[
+              { value: "banho", label: "💧 Banho" },
+              { value: "tosa", label: "✂️ Tosa" },
+              { value: "higienica", label: "🌿 Higiênica (Tosa)" },
+              { value: "ozonio", label: "⚡ Ozônio (Banho)" },
+              { value: "hidratacao", label: "💧 Hidratação (Banho)" },
+            ]}
+          />
+        </div>
+
+        {/* DIVISOR PARA CAMPOS OPCIONAIS */}
+        <div className="border-t border-dashed pt-4 opacity-60">
+          <h3 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">
+            Informações Opcionais
+          </h3>
+        </div>
+
+        {/* FOTO */}
+        <div className="space-y-2">
+          <Label className="text-slate-600 font-semibold text-sm">
+            Foto do Pet
+          </Label>
           <div className="flex gap-3">
             {foto && (
               <img
@@ -276,53 +326,20 @@ export function PetRegistration({
               >
                 <Upload className="w-4 h-4" />
                 <span className="text-[10px] font-medium mt-1">
-                  Fazer upload
+                  Upload Foto
                 </span>
               </Label>
             </div>
           </div>
         </div>
-      </div>
 
-      <div className="border-t pt-4 space-y-4">
-        <h3 className="font-bold text-sm text-slate-700 uppercase tracking-tight">
-          Dados do Tutor
-        </h3>
-        <div className="space-y-2">
-          <Label htmlFor="nomeTutor" className="text-slate-700 font-semibold">
-            Nome do Tutor *
+        {/* OBSERVAÇÕES */}
+        <div className="space-y-2 pb-4">
+          <Label className="text-slate-600 font-semibold text-sm">
+            Observações
           </Label>
-          <Input
-            id="nomeTutor"
-            placeholder="Ex: João Silva"
-            className={inputStyle}
-            value={nomeTutor}
-            onChange={(e) => setNomeTutor(e.target.value)}
-            required
-          />
-        </div>
-
-        <h3 className="font-bold text-sm text-slate-700 uppercase tracking-tight mt-4">
-          Serviço
-        </h3>
-        <NativeSelect
-          label="Tipo de Serviço *"
-          disabled={isEditing && initialData?.atendimentoIniciado}
-          value={servico}
-          onChange={(v: any) => setServico(v)}
-          options={[
-            { value: "banho", label: "💧 Banho" },
-            { value: "tosa", label: "✂️ Tosa" },
-            { value: "higienica", label: "🌿 Higiênica (Tosa)" },
-            { value: "ozonio", label: "⚡ Ozônio (Banho)" },
-            { value: "hidratacao", label: "💧 Hidratação (Banho)" },
-          ]}
-        />
-
-        <div className="space-y-2">
-          <Label className="text-slate-700 font-semibold">Observações</Label>
           <Textarea
-            placeholder="Observações importantes..."
+            placeholder="Alergias, comportamento, etc..."
             className="rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
             value={observacoes}
             onChange={(e) => setObservacoes(e.target.value)}
@@ -330,13 +347,26 @@ export function PetRegistration({
           />
         </div>
       </div>
+    </div>
 
+    {/* RODAPÉ FIXO COM BOTÃO FLUTUANTE */}
+    <div className="absolute bottom-0 left-0 right-0 p-5 bg-white/80 backdrop-blur-md border-t border-slate-100/50 z-10">
       <Button
         type="submit"
-        className="w-full h-11 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold transition-all mt-4"
+        className="w-full h-14 rounded-2xl bg-indigo-700 hover:bg-indigo-600 text-white font-bold text-lg shadow-[0_10px_15px_-3px_rgba(79,70,229,0.3)] transition-all duration-200 active:scale-[0.98] flex items-center justify-center gap-3"
       >
-        {isEditing ? "Salvar Alterações" : "Cadastrar Pet"}
+        {isEditing ? (
+          <>
+            <Save className="w-5 h-5 stroke-[2.5px]" />
+            <span>Atualizar Registro</span>
+          </>
+        ) : (
+          <>
+            <CheckCircle2 className="w-5 h-5 stroke-[2.5px]" />
+            <span>Finalizar e Cadastrar</span>
+          </>
+        )}
       </Button>
-    </form>
-  )
-}
+    </div>
+  </form>
+)}
