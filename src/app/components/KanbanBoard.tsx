@@ -180,12 +180,16 @@ export function PetCard({
     setIsProfessionalDialogOpen(true)
   }
 
+  const estaProntoParaRetirada =
+    pet.status === "finalizado"
+
   // Verificação para o ícone
   const podeEditar = !(
     (pet.status === "banho" && pet.banhoCompleto) ||
     (pet.status === "escovar" && pet.escovarCompleto) ||
-    (pet.status === "tosa" && pet.tosaCompleta)
-  )
+    (pet.status === "tosa" && pet.tosaCompleta) ||
+    estaProntoParaRetirada
+  ) 
 
   const isInicioAtendimento = pet.status === "espera"
 
@@ -246,17 +250,32 @@ export function PetCard({
                   {getServiceLabel(pet.servico)}
                 </Badge>
 
-                {podeEditar && (
-                  <button
-                    className="flex items-center gap-2 text-xs text-gray-500 hover:text-blue-600 transition-colors"
-                    onClick={handleEditClick}
+                <button
+                  // Adicionado 'disabled' e troca as cores dinamicamente
+                  disabled={!podeEditar}
+                  className={`flex items-center gap-2 text-xs transition-colors ${
+                    podeEditar
+                      ? "text-gray-500 hover:text-blue-600 cursor-pointer"
+                      : "text-gray-300 cursor-not-allowed opacity-60"
+                  }`}
+                  onClick={handleEditClick}
+                  title={
+                    podeEditar
+                      ? "Editar profissional"
+                      : "Serviço finalizado - Edição bloqueada"
+                  }
+                >
+                  <div
+                    className={`h-7 w-7 flex items-center justify-center rounded-full border transition-colors ${
+                      podeEditar
+                        ? "bg-gray-50 border-gray-100"
+                        : "bg-gray-100 border-transparent"
+                    }`}
                   >
-                    <div className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100">
-                      <Pencil className="w-3.5 h-3.5" />
-                    </div>
-                    {usarLayoutExpandido && <span>Editar</span>}
-                  </button>
-                )}
+                    <Pencil className="w-3.5 h-3.5" />
+                  </div>
+                  {usarLayoutExpandido && <span>Editar</span>}
+                </button>
 
                 {pet.status === "espera" && (
                   <button
@@ -340,16 +359,22 @@ export function PetCard({
                   {getServiceLabel(pet.servico)}
                 </Badge>
                 {/* SUBSTITUIÇÃO AQUI: Botão inteligente que decide qual modal abrir */}
-                {podeEditar && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-gray-500 hover:text-blue-600 transition-colors"
-                    onClick={handleEditClick}
-                  >
-                    <Pencil className="w-3.5 h-3.5" />
-                  </Button>
-                )}
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={!podeEditar} // Bloqueia o clique nativamente
+                  className={`h-7 w-7 p-0 transition-colors ${
+                    podeEditar
+                      ? "text-gray-500 hover:text-blue-600"
+                      : "text-gray-200 cursor-not-allowed"
+                  }`}
+                  onClick={handleEditClick}
+                  title={
+                    podeEditar ? "Editar profissional" : "Edição bloqueada"
+                  }
+                >
+                  <Pencil className="w-3.5 h-3.5" />
+                </Button>
                 {pet.status === "espera" && (
                   <Button
                     variant="ghost"
