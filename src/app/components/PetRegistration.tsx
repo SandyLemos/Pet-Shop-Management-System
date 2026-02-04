@@ -277,11 +277,21 @@ return (
 
         {/* 5. SERVIÇO (OBRIGATÓRIO #4) */}
         <div className="space-y-2">
+          {/* Rótulo destacado para combinar com Nome do Pet/Tutor */}
+          <Label
+            htmlFor="tipoServico"
+            className="text-slate-700 font-bold text-base"
+          >
+            Tipo de Serviço *
+          </Label>
+
           <NativeSelect
-            label="Tipo de Serviço *"
+            id="tipoServico"
+            label=""
             disabled={isEditing && initialData?.atendimentoIniciado}
             value={servico}
             onChange={(v: any) => setServico(v)}
+            className={`${inputStyle} h-12`} 
             options={[
               { value: "banho", label: "💧 Banho" },
               { value: "tosa", label: "✂️ Tosa" },
@@ -290,6 +300,9 @@ return (
               { value: "hidratacao", label: "💧 Hidratação (Banho)" },
             ]}
           />
+          {/* <p className="text-[11px] text-blue-500 font-medium italic px-1">
+            * Isso define a coluna inicial do fluxo de trabalho.
+          </p> */}
         </div>
 
         {/* DIVISOR PARA CAMPOS OPCIONAIS */}
