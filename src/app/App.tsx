@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'; // ← adicionar useEffect
+import React, { useState, useEffect } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
@@ -10,10 +10,7 @@ import {
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
-import { addPet, subscribeToPets, deletePet } from '../services/petService';
-
-
-
+import { addPet, subscribeToPets, deletePet, updatePet } from '../services/petService';
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -79,7 +76,6 @@ function LoginScreen({
     if (success) {
       toast.success('Bem-vindo ao PetShop Manager! 🐾');
     }
-    // erro já é tratado e devolvido pelo hook, apenas exibe localmente
     setLoading(false);
   };
 
@@ -115,6 +111,7 @@ function LoginScreen({
                 onChange={(e) => setEmail(e.target.value)}
                 placeholder="seu@email.com"
                 required
+                autoComplete="email"
                 className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
               />
             </div>
@@ -129,6 +126,7 @@ function LoginScreen({
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder="••••••••"
                   required
+                  autoComplete="current-password"
                   className="w-full px-4 py-2.5 pr-11 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
                 />
                 <button
@@ -193,22 +191,22 @@ function SplashScreen() {
 export default function App() {
   const { user, loading, error, isAuthenticated, login, logout } = useAuth();
 
-const [pets, setPets] = useState<Pet[]>([]);
-
-// 🔥 Escuta os pets do dia em tempo real
-useEffect(() => {
-  if (!isAuthenticated) return;
-
-const unsubscribe = subscribeToPets(
-  (petsDoFirestore: Pet[]) => setPets(petsDoFirestore),  // ← adicionar ": Pet[]"
-  () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
-);
-
-  return () => unsubscribe(); // cancela ao deslogar
-}, [isAuthenticated]);
-  const [filter, setFilter]               = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
-  const [dailyCounter, setDailyCounter]   = useState<number>(1);
+  const [pets, setPets]                     = useState<Pet[]>([]);
+  const [filter, setFilter]                 = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
+  const [dailyCounter, setDailyCounter]     = useState<number>(1);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+
+  // 🔥 Escuta os pets do dia em tempo real
+  useEffect(() => {
+    if (!isAuthenticated) return;
+
+    const unsubscribe = subscribeToPets(
+      (petsDoFirestore: Pet[]) => setPets(petsDoFirestore ?? []), // ✅ fallback seguro
+      () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
+    );
+
+    return () => unsubscribe();
+  }, [isAuthenticated]);
 
   // 1️⃣ Firebase ainda verificando sessão → exibe splash
   if (loading) return <SplashScreen />;
@@ -230,6 +228,7 @@ const unsubscribe = subscribeToPets(
   }
 
   // ── Handlers ───────────────────────────────────────────────────────────────
+
   const handleRevertService = (petId: string, etapa: string, motivo: string) => {
     setPets((prev) =>
       prev.map((pet) => {
@@ -256,24 +255,18 @@ const unsubscribe = subscribeToPets(
       prev.map((pet) => {
         if (pet.id !== petId) return pet;
         const updated = { ...pet, status: newStatus };
-        if (newStatus === 'banho')  { updated.banhoCompleto = false; updated.escovarCompleto = false; }
-        if (newStatus === 'escovar'){ updated.escovarCompleto = false; updated.tosaCompleta = false; }
-        if (newStatus === 'tosa')   { updated.tosaCompleta = false; }
+        if (newStatus === 'banho')   { updated.banhoCompleto = false; updated.escovarCompleto = false; }
+        if (newStatus === 'escovar') { updated.escovarCompleto = false; updated.tosaCompleta = false; }
+        if (newStatus === 'tosa')    { updated.tosaCompleta = false; }
         return updated;
       }),
     );
   };
 
-  // Depois (salva no Firestore + mantém no estado local)
+  // ✅ Corrigido: não duplica mais o pet (subscriber já atualiza o estado)
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
     try {
-      const id = await addPet(petData);          // ← salva no Firebase
-      const newPet: Pet = {
-        ...petData,
-        id,                                       // ← usa o ID do Firestore
-        checkInTime: new Date().toISOString(),
-      };
-      setPets((prev) => [...prev, newPet]);
+      await addPet(petData);
       setDailyCounter((c) => c + 1);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
     } catch {
@@ -281,26 +274,32 @@ const unsubscribe = subscribeToPets(
     }
   };
 
-
   const handleCheckout = (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     setPets((prev) => prev.filter((p) => p.id !== petId));
     if (pet) toast.success(`${pet.nomePet} retirado com sucesso!`);
   };
 
-  const handleEditPet = (petId: string, updatedData: Partial<Pet>) => {
-    setPets((prev) => prev.map((p) => p.id === petId ? { ...p, ...updatedData } : p));
+  // ✅ Corrigido: agora persiste no Firestore
+  const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
+    try {
+      await updatePet(petId, updatedData);
+      setPets((prev) =>
+        prev.map((p) => (p.id === petId ? { ...p, ...updatedData } : p)),
+      );
+    } catch {
+      toast.error('Erro ao editar pet. Tente novamente.');
+    }
   };
 
   const handleDeletePet = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
-
     try {
-      await deletePet(pet); // ← salva no Firebase e remove da fila
+      await deletePet(pet);
     } catch (err) {
       console.error('[handleDeletePet] Erro ao deletar pet:', err);
-      alert('Erro ao deletar o pet. Tente novamente.');
+      toast.error('Erro ao deletar o pet. Tente novamente.');
     }
   };
 
@@ -326,9 +325,9 @@ const unsubscribe = subscribeToPets(
       prev.map((p) => {
         if (p.id !== petId) return p;
         const updated = { ...p };
-        if (type === 'banho')  updated.banhoCompleto  = true;
+        if (type === 'banho')   updated.banhoCompleto   = true;
         if (type === 'escovar') updated.escovarCompleto = true;
-        if (type === 'tosa')   updated.tosaCompleta   = true;
+        if (type === 'tosa')    updated.tosaCompleta    = true;
         return updated;
       }),
     );
@@ -364,7 +363,6 @@ const unsubscribe = subscribeToPets(
             </div>
             <div>
               <h1 className="text-2xl font-bold text-gray-900">PetShop Manager</h1>
-              {/* Exibe o e-mail do usuário logado */}
               <p className="text-sm text-gray-500">
                 {user?.email ?? 'Studio3D Criativo - Gestão'}
               </p>
@@ -404,13 +402,16 @@ const unsubscribe = subscribeToPets(
             </div>
           </div>
 
-          <SlotGrid
-            pets={pets}
-            onAddPet={handleAddPet}
-            onEditPet={handleEditPet}
-            onDeletePet={handleDeletePet}
-            filter={filter}
-          />
+          {/* ✅ Corrigido: SlotGrid agora está dentro do TabsContent correto */}
+          <TabsContent value="grid">
+            <SlotGrid
+              pets={pets}
+              onAddPet={handleAddPet}
+              onEditPet={handleEditPet}
+              onDeletePet={handleDeletePet}
+              filter={filter}
+            />
+          </TabsContent>
 
           <TabsContent value="kanban">
             <KanbanBoard

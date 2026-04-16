@@ -6,8 +6,8 @@ import {
   orderBy,
   serverTimestamp,
   doc,
-  deleteDoc,        // ← adicionar
-  setDoc,           // ← adicionar
+  deleteDoc,
+  updateDoc,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import type { Pet } from '../app/types/pet';
@@ -52,7 +52,7 @@ export function subscribeToPets(
     q,
     (snapshot) => {
       const pets = snapshot.docs.map((d) => fromFirestore(d.id, d.data()));
-      callback(pets);
+      callback(pets ?? []); // ✅ fallback seguro
     },
     (err) => {
       console.error('[Firestore] subscribeToPets:', err);
@@ -74,31 +74,37 @@ export async function addPet(
   return ref.id;
 }
 
+// ─── Edição ────────────────────────────────────────────────────────────────
+
+export async function updatePet(
+  petId: string,
+  updatedData: Partial<Pet>,
+): Promise<void> {
+  const petRef = doc(db, 'dias', getTodayKey(), 'pets', petId);
+  await updateDoc(petRef, { ...updatedData });
+}
+
 // ─── Deleção ───────────────────────────────────────────────────────────────
 
-/**
- * Deleta o pet da fila ativa E salva um registro
- * na subcoleção "deletados" para relatórios futuros.
- */
 export async function deletePet(pet: Pet): Promise<void> {
   // 1. Salva o registro na coleção de deletados (para relatórios)
   await addDoc(deletedCollection(), {
-    petId:          pet.id,
-    nomePet:        pet.nomePet,
-    nomeTutor:      pet.nomeTutor,
-    especie:        pet.especie,
-    raca:           pet.raca ?? null,
-    porte:          pet.porte ?? null,
-    servico:        pet.servico,
-    slotNumber:     pet.slotNumber,
-    statusNoMomento: pet.status,           // status quando foi deletado
+    petId:               pet.id,
+    nomePet:             pet.nomePet,
+    nomeTutor:           pet.nomeTutor,
+    especie:             pet.especie,
+    raca:                pet.raca ?? null,
+    porte:               pet.porte ?? null,
+    servico:             pet.servico,
+    slotNumber:          pet.slotNumber,
+    statusNoMomento:     pet.status,
     atendimentoIniciado: pet.atendimentoIniciado ?? false,
     profissionalBanho:   pet.profissionalBanho ?? null,
     profissionalTosa:    pet.profissionalTosa ?? null,
     profissionalEscovar: pet.profissionalEscovar ?? null,
-    checkInTime:    pet.checkInTime,
-    deletadoEm:     serverTimestamp(),     // momento exato da exclusão
-    motivoDelecao:  pet.status === 'espera' ? 'removido_fila' : 'forcado_pelo_admin',
+    checkInTime:         pet.checkInTime,
+    deletadoEm:          serverTimestamp(),
+    motivoDelecao:       pet.status === 'espera' ? 'removido_fila' : 'forcado_pelo_admin',
   });
 
   // 2. Remove o pet da fila ativa
