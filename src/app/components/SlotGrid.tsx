@@ -4,39 +4,42 @@ import { Badge } from './ui/badge';
 import { Dog, Clock, Droplet, Wind, Scissors, CheckCircle2, ChevronDown, ChevronUp, Minus, MinusCircle } from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
 import { Button } from './ui/button';
+import { PetDetailModal } from './PetDetailModal';
 import type { Pet, SlotStatus } from '../types/pet';
 
 interface SlotGridProps {
   pets: Pet[];
   onAddPet: (pet: Omit<Pet, 'id' | 'checkInTime'>) => void;
+  onEditPet: (petId: string, updatedData: Partial<Pet>) => void;
+  onDeletePet: (petId: string) => void;
   filter: 'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao';
 }
 
-export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
+export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: SlotGridProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const [visibleSlots, setVisibleSlots] = useState(10); // Começa com 10 slots
+  const [visibleSlots, setVisibleSlots] = useState(10);
+
+  // ── Novo: estados do modal de detalhes ──
+  const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
+  const [isDetailOpen, setIsDetailOpen] = useState(false);
 
   const totalSlots = 100;
-  const SLOTS_PER_BATCH = 10; // Liberar 10 slots por vez
-  const MIN_VISIBLE_SLOTS = 10; // Mínimo de slots que devem estar visíveis
+  const SLOTS_PER_BATCH = 10;
+  const MIN_VISIBLE_SLOTS = 10;
 
-  // Calcula quantos slots estão ocupados na faixa visível
   const occupiedSlotsInVisibleRange = useMemo(() => {
     return pets.filter(p => p.slotNumber <= visibleSlots).length;
   }, [pets, visibleSlots]);
 
-  // Calcula quantos slots livres ainda existem na faixa visível
   const freeSlotsInVisibleRange = visibleSlots - occupiedSlotsInVisibleRange;
 
-  // Expande automaticamente quando todos os slots visíveis estão ocupados
   useEffect(() => {
     if (freeSlotsInVisibleRange === 0 && visibleSlots < totalSlots) {
-      // Expande automaticamente mais 10 slots
       setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
     }
   }, [freeSlotsInVisibleRange, visibleSlots, totalSlots]);
-  
+
   const getSlotStatus = (slotNumber: number): { status: SlotStatus; pet?: Pet } => {
     const pet = pets.find(p => p.slotNumber === slotNumber);
     if (!pet) return { status: 'livre' };
@@ -75,11 +78,18 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
     }
   };
 
+  // ── Atualizado: distingue slot livre de slot ocupado ──
   const handleSlotClick = (slotNumber: number) => {
-    const { status } = getSlotStatus(slotNumber);
+    const { status, pet } = getSlotStatus(slotNumber);
+
     if (status === 'livre') {
+      // Abre formulário de cadastro
       setSelectedSlot(slotNumber);
       setIsDialogOpen(true);
+    } else if (pet) {
+      // Abre modal de detalhes do pet
+      setSelectedPet(pet);
+      setIsDetailOpen(true);
     }
   };
 
@@ -97,22 +107,17 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
 
   const shouldShowSlot = (pet?: Pet) => {
     if (filter === 'all') return true;
-    if (!pet) return true; // Sempre mostra slots livres
+    if (!pet) return true;
     return pet.servico === filter;
   };
 
-  // Função para expandir manualmente mais slots
   const handleExpandSlots = () => {
     setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
   };
 
-  // Função para remover 1 slot por vez
   const handleRemoveOneSlot = () => {
     setVisibleSlots(prev => {
       const newValue = prev - 1;
-      // Não permite remover se:
-      // 1. Já está no mínimo (10 slots)
-      // 2. Se o último slot visível está ocupado
       const lastSlotOccupied = pets.some(p => p.slotNumber === prev);
       if (newValue < MIN_VISIBLE_SLOTS || lastSlotOccupied) {
         return prev;
@@ -121,43 +126,35 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
     });
   };
 
-  // Função para remover 10 slots por vez
   const handleRemoveBatchSlots = () => {
     setVisibleSlots(prev => {
       const newValue = prev - SLOTS_PER_BATCH;
-      // Não permite ir abaixo do mínimo
       if (newValue < MIN_VISIBLE_SLOTS) {
         return prev;
       }
-      
-      // Verifica se algum dos slots que seriam removidos está ocupado
       const slotsToRemove = Array.from(
-        { length: SLOTS_PER_BATCH }, 
+        { length: SLOTS_PER_BATCH },
         (_, i) => prev - i
       );
-      const hasOccupiedSlot = slotsToRemove.some(slotNum => 
+      const hasOccupiedSlot = slotsToRemove.some(slotNum =>
         pets.some(p => p.slotNumber === slotNum)
       );
-      
       if (hasOccupiedSlot) {
         return prev;
       }
-      
       return newValue;
     });
   };
 
-  // Verifica se pode remover slots (pelo menos 1 slot além do mínimo e último slot livre)
   const canRemoveSlots = visibleSlots > MIN_VISIBLE_SLOTS && !pets.some(p => p.slotNumber === visibleSlots);
-  
-  // Verifica se pode remover 10 slots de uma vez
+
   const canRemoveBatch = useMemo(() => {
     if (visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS) return false;
     const slotsToRemove = Array.from(
-      { length: SLOTS_PER_BATCH }, 
+      { length: SLOTS_PER_BATCH },
       (_, i) => visibleSlots - i
     );
-    return !slotsToRemove.some(slotNum => 
+    return !slotsToRemove.some(slotNum =>
       pets.some(p => p.slotNumber === slotNum)
     );
   }, [visibleSlots, pets]);
@@ -183,7 +180,7 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
             {/* Botões de Remoção */}
             <div className="flex items-center gap-1 mr-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Remover:</span>
-              
+
               {/* Remover 1 slot */}
               <Button
                 onClick={handleRemoveOneSlot}
@@ -192,11 +189,11 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
                 size="sm"
                 className="h-8 px-2 gap-1 border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 title={
-                  !canRemoveSlots 
-                    ? visibleSlots === MIN_VISIBLE_SLOTS 
+                  !canRemoveSlots
+                    ? visibleSlots === MIN_VISIBLE_SLOTS
                       ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
-                      : "Último slot está ocupado"
-                    : "Remover 1 slot"
+                      : 'Último slot está ocupado'
+                    : 'Remover 1 slot'
                 }
               >
                 <Minus className="w-3 h-3" />
@@ -214,8 +211,8 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
                   !canRemoveBatch
                     ? visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS
                       ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
-                      : "Alguns dos últimos 10 slots estão ocupados"
-                    : "Remover 10 slots"
+                      : 'Alguns dos últimos 10 slots estão ocupados'
+                    : 'Remover 10 slots'
                 }
               >
                 <MinusCircle className="w-3 h-3" />
@@ -229,7 +226,7 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
             {/* Botões de Adição */}
             <div className="flex items-center gap-1 ml-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Adicionar:</span>
-              
+
               {visibleSlots < totalSlots && (
                 <Button
                   onClick={handleExpandSlots}
@@ -253,31 +250,35 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
         </div>
       </div>
 
+      {/* Grade de slots */}
       <div className="grid grid-cols-10 gap-2 p-4">
         {Array.from({ length: visibleSlots }, (_, i) => {
           const slotNumber = i + 1;
           const { status, pet } = getSlotStatus(slotNumber);
-          
-          // Sempre renderiza o slot, não importa o filtro
           const isFiltered = filter !== 'all' && pet && pet.servico !== filter;
 
           return (
-            <Dialog key={slotNumber} open={isDialogOpen && selectedSlot === slotNumber} onOpenChange={(open) => {
-              if (!open) {
-                setIsDialogOpen(false);
-                setSelectedSlot(null);
-              }
-            }}>
+            <Dialog
+              key={slotNumber}
+              open={isDialogOpen && selectedSlot === slotNumber}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setIsDialogOpen(false);
+                  setSelectedSlot(null);
+                }
+              }}
+            >
               <DialogTrigger asChild>
                 <button
                   onClick={() => handleSlotClick(slotNumber)}
                   className={`
                     aspect-square rounded-lg border-2 transition-all
                     flex flex-col items-center justify-center gap-1
+                    cursor-pointer
                     ${isFiltered ? 'opacity-30' : getStatusColor(status)}
-                    ${status === 'livre' ? 'cursor-pointer' : 'cursor-default'}
+                    ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
                   `}
-                  title={pet ? `${pet.nomePet} - ${pet.nomeTutor}` : `Slot ${slotNumber} - Livre`}
+                  title={pet ? `${pet.nomePet} - ${pet.nomeTutor} (clique para detalhes)` : `Slot ${slotNumber} - Livre`}
                 >
                   {getStatusIcon(status)}
                   <span className="text-xs font-semibold">{slotNumber}</span>
@@ -288,16 +289,39 @@ export function SlotGrid({ pets, onAddPet, filter }: SlotGridProps) {
                   )}
                 </button>
               </DialogTrigger>
-              <DialogContent className="max-w-2xl">
-                <DialogHeader>
-                  <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
-                </DialogHeader>
-                <PetRegistration onSubmit={handleRegister} />
-              </DialogContent>
+
+              {/* Dialog de cadastro (apenas slots livres) */}
+              {status === 'livre' && (
+                <DialogContent className="max-w-2xl">
+                  <DialogHeader>
+                    <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
+                  </DialogHeader>
+                  <PetRegistration onSubmit={handleRegister} />
+                </DialogContent>
+              )}
             </Dialog>
           );
         })}
       </div>
+
+      {/* Modal de detalhes do pet */}
+      <PetDetailModal
+        pet={selectedPet}
+        open={isDetailOpen}
+        onClose={() => {
+          setIsDetailOpen(false);
+          setSelectedPet(null);
+        }}
+        onEdit={(pet) => {
+          setIsDetailOpen(false);
+          onEditPet(pet.id, pet);
+        }}
+        onDelete={(petId) => {
+          onDeletePet(petId);
+          setIsDetailOpen(false);
+          setSelectedPet(null);
+        }}
+      />
 
       {/* Legenda */}
       <div className="flex gap-4 px-4 pb-4 flex-wrap">

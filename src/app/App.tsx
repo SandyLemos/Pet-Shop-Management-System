@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react'; // ← adicionar useEffect
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
@@ -10,6 +10,10 @@ import {
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
+import { addPet, subscribeToPets } from '../services/petService';
+
+
+
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -189,7 +193,19 @@ function SplashScreen() {
 export default function App() {
   const { user, loading, error, isAuthenticated, login, logout } = useAuth();
 
-  const [pets, setPets]                   = useState<Pet[]>([]);
+const [pets, setPets] = useState<Pet[]>([]);
+
+// 🔥 Escuta os pets do dia em tempo real
+useEffect(() => {
+  if (!isAuthenticated) return;
+
+  const unsubscribe = subscribeToPets(
+    (petsDoFirestore) => setPets(petsDoFirestore),
+    () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
+  );
+
+  return () => unsubscribe(); // cancela ao deslogar
+}, [isAuthenticated]);
   const [filter, setFilter]               = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
   const [dailyCounter, setDailyCounter]   = useState<number>(1);
   const [showLogoutModal, setShowLogoutModal] = useState(false);
@@ -248,16 +264,23 @@ export default function App() {
     );
   };
 
-  const handleAddPet = (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
-    const newPet: Pet = {
-      ...petData,
-      id: String(dailyCounter).padStart(3, '0'),
-      checkInTime: new Date().toISOString(),
-    };
-    setPets((prev) => [...prev, newPet]);
-    setDailyCounter((c) => c + 1);
-    toast.success(`${petData.nomePet} cadastrado com sucesso!`);
+  // Depois (salva no Firestore + mantém no estado local)
+  const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
+    try {
+      const id = await addPet(petData);          // ← salva no Firebase
+      const newPet: Pet = {
+        ...petData,
+        id,                                       // ← usa o ID do Firestore
+        checkInTime: new Date().toISOString(),
+      };
+      setPets((prev) => [...prev, newPet]);
+      setDailyCounter((c) => c + 1);
+      toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
+    } catch {
+      toast.error('Erro ao cadastrar pet. Tente novamente.');
+    }
   };
+
 
   const handleCheckout = (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
@@ -373,9 +396,13 @@ export default function App() {
             </div>
           </div>
 
-          <TabsContent value="grid">
-            <SlotGrid pets={pets} onAddPet={handleAddPet} filter={filter} />
-          </TabsContent>
+          <SlotGrid
+            pets={pets}
+            onAddPet={handleAddPet}
+            onEditPet={handleEditPet}
+            onDeletePet={handleDeletePet}
+            filter={filter}
+          />
 
           <TabsContent value="kanban">
             <KanbanBoard
