@@ -3,9 +3,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
+import { AdminSidebar } from './components/AdminSidebar';
 import {
   LayoutGrid, LayoutList, Dog, Filter,
-  LogIn, Eye, EyeOff, LogOut, AlertTriangle,
+  LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
@@ -189,19 +190,21 @@ function SplashScreen() {
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
-  const { user, loading, error, isAuthenticated, login, logout } = useAuth();
+  const { user, loading, error, isAuthenticated, login, logout, isAdmin } = useAuth();
 
-  const [pets, setPets]                     = useState<Pet[]>([]);
-  const [filter, setFilter]                 = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
-  const [dailyCounter, setDailyCounter]     = useState<number>(1);
-  const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [pets, setPets]                         = useState<Pet[]>([]);
+  const [filter, setFilter]                     = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
+  const [dailyCounter, setDailyCounter]         = useState<number>(1);
+  const [showLogoutModal, setShowLogoutModal]   = useState(false);
+  const [showAdminSidebar, setShowAdminSidebar] = useState(false);
+  const [adminActivePage, setAdminActivePage]   = useState<'criar' | 'deletar' | 'editar' | null>(null);
 
   // 🔥 Escuta os pets do dia em tempo real
   useEffect(() => {
     if (!isAuthenticated) return;
 
     const unsubscribe = subscribeToPets(
-      (petsDoFirestore: Pet[]) => setPets(petsDoFirestore ?? []), // ✅ fallback seguro
+      (petsDoFirestore: Pet[]) => setPets(petsDoFirestore ?? []),
       () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
     );
 
@@ -263,7 +266,6 @@ export default function App() {
     );
   };
 
-  // ✅ Corrigido: não duplica mais o pet (subscriber já atualiza o estado)
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
     try {
       await addPet(petData);
@@ -280,7 +282,6 @@ export default function App() {
     if (pet) toast.success(`${pet.nomePet} retirado com sucesso!`);
   };
 
-  // ✅ Corrigido: agora persiste no Firestore
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
     try {
       await updatePet(petId, updatedData);
@@ -354,6 +355,18 @@ export default function App() {
         />
       )}
 
+      {/* Sidebar Admin */}
+      {showAdminSidebar && (
+        <AdminSidebar
+          userName={user?.displayName ?? user?.email ?? 'Usuário'}
+          userEmail={user?.email ?? ''}
+          isAdmin={isAdmin}
+          onClose={() => setShowAdminSidebar(false)}
+          onNavigate={(page) => setAdminActivePage(page)}
+          activePage={adminActivePage}
+        />
+      )}
+
       {/* Header */}
       <div className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
@@ -368,14 +381,29 @@ export default function App() {
               </p>
             </div>
           </div>
-          <Button
-            variant="ghost"
-            className="text-red-500 font-bold flex items-center gap-2 hover:bg-red-50"
-            onClick={() => setShowLogoutModal(true)}
-          >
-            <LogOut size={16} />
-            Sair
-          </Button>
+
+          <div className="flex items-center gap-3">
+            {/* Botão Admin — só aparece para admins */}
+            {isAdmin && (
+              <Button
+                variant="ghost"
+                className="text-purple-600 font-bold flex items-center gap-2 hover:bg-purple-50"
+                onClick={() => setShowAdminSidebar(true)}
+              >
+                <Settings size={16} />
+                Admin
+              </Button>
+            )}
+
+            <Button
+              variant="ghost"
+              className="text-red-500 font-bold flex items-center gap-2 hover:bg-red-50"
+              onClick={() => setShowLogoutModal(true)}
+            >
+              <LogOut size={16} />
+              Sair
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -402,7 +430,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* ✅ Corrigido: SlotGrid agora está dentro do TabsContent correto */}
           <TabsContent value="grid">
             <SlotGrid
               pets={pets}

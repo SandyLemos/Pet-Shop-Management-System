@@ -1,8 +1,8 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore'; // ← adiciona isso
+import { getFirestore } from 'firebase/firestore';
 
-const firebaseConfig = {
+export const firebaseConfig = {  // ← export aqui
   apiKey: "AIzaSyDOTSk5LUCZpZOW-BeD1vSsfZkQLz1-eJg",
   authDomain: "pet-shop-manegement.firebaseapp.com",
   projectId: "pet-shop-manegement",
@@ -15,5 +15,5 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 
 export const auth = getAuth(app);
-export const db   = getFirestore(app); // ← exporta o Firestore
+export const db   = getFirestore(app);
 export default app;
