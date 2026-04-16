@@ -10,7 +10,7 @@ import {
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
-import { addPet, subscribeToPets } from '../services/petService';
+import { addPet, subscribeToPets, deletePet } from '../services/petService';
 
 
 
@@ -199,10 +199,10 @@ const [pets, setPets] = useState<Pet[]>([]);
 useEffect(() => {
   if (!isAuthenticated) return;
 
-  const unsubscribe = subscribeToPets(
-    (petsDoFirestore) => setPets(petsDoFirestore),
-    () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
-  );
+const unsubscribe = subscribeToPets(
+  (petsDoFirestore: Pet[]) => setPets(petsDoFirestore),  // ← adicionar ": Pet[]"
+  () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
+);
 
   return () => unsubscribe(); // cancela ao deslogar
 }, [isAuthenticated]);
@@ -292,8 +292,16 @@ useEffect(() => {
     setPets((prev) => prev.map((p) => p.id === petId ? { ...p, ...updatedData } : p));
   };
 
-  const handleDeletePet = (petId: string) => {
-    setPets((prev) => prev.filter((p) => p.id !== petId));
+  const handleDeletePet = async (petId: string) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) return;
+
+    try {
+      await deletePet(pet); // ← salva no Firebase e remove da fila
+    } catch (err) {
+      console.error('[handleDeletePet] Erro ao deletar pet:', err);
+      alert('Erro ao deletar o pet. Tente novamente.');
+    }
   };
 
   const handleAssignProfessional = (petId: string, pB?: string, pT?: string, pE?: string) => {
