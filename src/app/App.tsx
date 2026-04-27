@@ -5,7 +5,7 @@ import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
 import { AdminSidebar } from './components/AdminSidebar';
 import {
-  LayoutGrid, LayoutList, Dog, Filter,
+  LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
 } from 'lucide-react';
 import { toast, Toaster } from 'sonner';
@@ -74,38 +74,61 @@ function LoginScreen({
     setError('');
     setLoading(true);
     const success = await onLogin(email, password);
-    if (success) {
-      toast.success('Bem-vindo ao PetShop Manager! 🐾');
-    }
+    if (!success) setError('E-mail ou senha inválidos. Tente novamente.');
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center px-4">
-      <div className="w-full max-w-md">
-        <div className="bg-white rounded-2xl shadow-lg border border-slate-100 overflow-hidden">
+    <div
+      className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
+      style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 40%, #E8192C 100%)' }}
+    >
+      {/* Círculos decorativos de fundo */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div
+          className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10"
+          style={{ background: '#E8192C' }}
+        />
+        <div
+          className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10"
+          style={{ background: '#3B2FBE' }}
+        />
+        <div
+          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-5"
+          style={{ background: '#ffffff' }}
+        />
+      </div>
 
-          {/* Header */}
-          <div className="bg-gradient-to-br from-blue-500 to-purple-500 px-8 py-10 flex flex-col items-center gap-3">
-            <div className="bg-white/20 backdrop-blur-sm p-4 rounded-2xl">
-              <Dog className="w-10 h-10 text-white" />
+      <div className="relative w-full max-w-md z-10">
+        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
+
+          {/* ── Header com Logo ── */}
+          <div
+            className="flex flex-col items-center gap-2 px-8 pt-10 pb-6"
+            style={{ background: 'linear-gradient(160deg, #1a1560 0%, #3B2FBE 60%, #E8192C 100%)' }}
+          >
+            <div className="bg-white rounded-2xl px-6 py-4 shadow-lg">
+              <img
+                src="/logo-elite.png"
+                alt="Elite Pet Shop"
+                className="h-20 w-auto object-contain"
+              />
             </div>
-            <div className="text-center">
-              <h1 className="text-2xl font-bold text-white">PetShop Manager</h1>
-              <p className="text-blue-100 text-sm mt-1">Studio3D Criativo - Gestão</p>
-            </div>
+            <p className="text-white/70 text-xs mt-2 tracking-widest uppercase font-semibold">
+              Sistema de Gestão
+            </p>
           </div>
 
-          {/* Formulário */}
+          {/* ── Formulário ── */}
           <form onSubmit={handleSubmit} className="px-8 py-8 space-y-5">
-            <div className="text-center mb-2">
-              <h2 className="text-lg font-semibold text-gray-800">Acesse sua conta</h2>
-              <p className="text-sm text-gray-500">Informe suas credenciais para continuar</p>
+            <div className="text-center mb-1">
+              <h2 className="text-lg font-bold text-gray-800">Acesse sua conta</h2>
+              <p className="text-sm text-gray-400">Informe suas credenciais para continuar</p>
             </div>
 
             {/* E-mail */}
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">E-mail</label>
+              <label className="text-sm font-semibold text-gray-600">E-mail</label>
               <input
                 type="email"
                 value={email}
@@ -113,13 +136,15 @@ function LoginScreen({
                 placeholder="seu@email.com"
                 required
                 autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none transition"
+                onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #3B2FBE55')}
+                onBlur={(e)  => (e.target.style.boxShadow = '')}
               />
             </div>
 
             {/* Senha */}
             <div className="space-y-1">
-              <label className="text-sm font-medium text-gray-700">Senha</label>
+              <label className="text-sm font-semibold text-gray-600">Senha</label>
               <div className="relative">
                 <input
                   type={showPassword ? 'text' : 'password'}
@@ -128,7 +153,9 @@ function LoginScreen({
                   placeholder="••••••••"
                   required
                   autoComplete="current-password"
-                  className="w-full px-4 py-2.5 pr-11 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition"
+                  className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none transition"
+                  onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #3B2FBE55')}
+                  onBlur={(e)  => (e.target.style.boxShadow = '')}
                 />
                 <button
                   type="button"
@@ -142,7 +169,8 @@ function LoginScreen({
 
             {/* Erro */}
             {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-lg">
+              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-xl flex items-center gap-2">
+                <AlertTriangle size={15} className="flex-shrink-0" />
                 {error}
               </div>
             )}
@@ -151,7 +179,12 @@ function LoginScreen({
             <button
               type="submit"
               disabled={loading}
-              className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white font-semibold py-2.5 rounded-lg transition-all shadow-md hover:shadow-lg disabled:opacity-70 disabled:cursor-not-allowed"
+              className="w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
+              style={{
+                background: loading
+                  ? '#aaa'
+                  : 'linear-gradient(135deg, #3B2FBE 0%, #E8192C 100%)',
+              }}
             >
               {loading ? (
                 <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
@@ -165,8 +198,9 @@ function LoginScreen({
           </form>
         </div>
 
-        <p className="text-center text-xs text-gray-400 mt-6">
-          © {new Date().getFullYear()} Studio3D Criativo. Todos os direitos reservados.
+        {/* Rodapé */}
+        <p className="text-center text-xs text-white/50 mt-5">
+          © {new Date().getFullYear()} Elite Pet Shop · Desenvolvido por Studio3D Criativo
         </p>
       </div>
     </div>
@@ -176,13 +210,20 @@ function LoginScreen({
 // ─── Tela de Loading inicial ──────────────────────────────────────────────────
 function SplashScreen() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
-      <div className="flex flex-col items-center gap-4">
-        <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-4 rounded-2xl shadow-lg">
-          <Dog className="w-8 h-8 text-white" />
+    <div
+      className="min-h-screen flex items-center justify-center"
+      style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 40%, #E8192C 100%)' }}
+    >
+      <div className="flex flex-col items-center gap-5">
+        <div className="bg-white rounded-2xl px-6 py-4 shadow-xl">
+          <img
+            src="/logo-elite.png"
+            alt="Elite Pet Shop"
+            className="h-16 w-auto object-contain"
+          />
         </div>
-        <span className="w-6 h-6 border-2 border-blue-400 border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-gray-400">Verificando sessão...</p>
+        <span className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
+        <p className="text-sm text-white/60 tracking-widest uppercase">Verificando sessão...</p>
       </div>
     </div>
   );
@@ -222,7 +263,11 @@ export default function App() {
         <LoginScreen
           onLogin={async (email, password) => {
             const success = await login(email, password);
-            if (!success && error) toast.error(error);
+            if (success) {
+              toast.success('Bem-vindo ao Elite Pet Shop! 🐾');
+            } else if (error) {
+              toast.error(error);
+            }
             return success;
           }}
         />
@@ -344,7 +389,7 @@ export default function App() {
 
   // 3️⃣ Autenticado → renderiza app completo
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="min-h-screen bg-slate-50">
       <Toaster position="top-right" richColors />
 
       {/* Modal de logout */}
@@ -367,47 +412,52 @@ export default function App() {
         />
       )}
 
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-gradient-to-br from-blue-500 to-purple-500 p-3 rounded-lg">
-              <Dog className="w-6 h-6 text-white" />
+      {/* ── Header ── */}
+      <div
+        className="shadow-md"
+        style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 50%, #E8192C 100%)' }}
+      >
+        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+
+          {/* Logo no header */}
+          <div className="flex items-center gap-4">
+            <div className="bg-white rounded-xl px-4 py-2 shadow-md">
+              <img
+                src="/logo-elite.png"
+                alt="Elite Pet Shop"
+                className="h-10 w-auto object-contain"
+              />
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">PetShop Manager</h1>
-              <p className="text-sm text-gray-500">
-                {user?.email ?? 'Studio3D Criativo - Gestão'}
+            <div className="hidden sm:block">
+              <p className="text-white/60 text-xs">
+                {user?.email ?? 'Sistema de Gestão'}
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-3">
-            {/* Botão Admin — só aparece para admins */}
+          {/* Botões do header */}
+          <div className="flex items-center gap-2">
             {isAdmin && (
-              <Button
-                variant="ghost"
-                className="text-purple-600 font-bold flex items-center gap-2 hover:bg-purple-50"
+              <button
                 onClick={() => setShowAdminSidebar(true)}
+                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
               >
                 <Settings size={16} />
-                Admin
-              </Button>
+                <span className="hidden sm:inline">Admin</span>
+              </button>
             )}
-
-            <Button
-              variant="ghost"
-              className="text-red-500 font-bold flex items-center gap-2 hover:bg-red-50"
+            <button
               onClick={() => setShowLogoutModal(true)}
+              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
             >
               <LogOut size={16} />
-              Sair
-            </Button>
+              <span className="hidden sm:inline">Sair</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Conteúdo */}
+      {/* ── Conteúdo ── */}
       <div className="max-w-7xl mx-auto px-6 py-8">
         <Tabs defaultValue="grid" className="space-y-6">
           <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
