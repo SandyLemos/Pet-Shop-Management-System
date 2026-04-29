@@ -8,22 +8,30 @@ import {
   doc,
   deleteDoc,
   updateDoc,
+  getDoc,
+  getDocs,
+  setDoc,
 } from 'firebase/firestore';
+import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
-import type { Pet } from '../app/types/pet';
+import type { Pet, Profissional } from '../app/types/pet';
 
-/** Gera a chave do dia: "2026-04-15" */
+/** Gera a chave do dia: "2026-04-28" */
 export function getTodayKey(): string {
   return new Date().toISOString().split('T')[0];
 }
 
-/** Referência da coleção de pets do dia atual */
+/** Referência da coleção de pets ativos do dia */
 const petsCollection = () =>
   collection(db, 'dias', getTodayKey(), 'pets');
 
-/** Referência da coleção de registros deletados */
-const deletedCollection = () =>
-  collection(db, 'dias', getTodayKey(), 'deletados');
+/** Referência da coleção de logs do dia */
+const logsCollection = () =>
+  collection(db, 'dias', getTodayKey(), 'logs');
+
+/** Referência da coleção global de profissionais */
+const profissionaisCollection = () =>
+  collection(db, 'profissionais');
 
 // ─── Conversor Firestore → Pet ─────────────────────────────────────────────
 
@@ -40,7 +48,19 @@ function fromFirestore(id: string, data: any): Pet {
   } as Pet;
 }
 
-// ─── Escuta em tempo real ──────────────────────────────────────────────────
+// ─── Conversor Firestore → Profissional ───────────────────────────────────
+
+function profissionalFromFirestore(id: string, data: any): Profissional {
+  return {
+    id,
+    nome:      data.nome      ?? '',
+    sobrenome: data.sobrenome ?? '',
+    funcao:    data.funcao    ?? '',
+    ativo:     data.ativo     ?? true,
+  };
+}
+
+// ─── Escuta em tempo real — Pets ──────────────────────────────────────────
 
 export function subscribeToPets(
   callback: (pets: Pet[]) => void,
@@ -52,7 +72,7 @@ export function subscribeToPets(
     q,
     (snapshot) => {
       const pets = snapshot.docs.map((d) => fromFirestore(d.id, d.data()));
-      callback(pets ?? []); // ✅ fallback seguro
+      callback(pets ?? []);
     },
     (err) => {
       console.error('[Firestore] subscribeToPets:', err);
@@ -61,7 +81,30 @@ export function subscribeToPets(
   );
 }
 
-// ─── Cadastro ──────────────────────────────────────────────────────────────
+// ─── Escuta em tempo real — Profissionais ─────────────────────────────────
+
+export function subscribeToProfissionais(
+  callback: (profissionais: Profissional[]) => void,
+  onError?: (err: Error) => void,
+): () => void {
+  const q = query(profissionaisCollection(), orderBy('nome', 'asc'));
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const lista = snapshot.docs.map((d) =>
+        profissionalFromFirestore(d.id, d.data()),
+      );
+      callback(lista);
+    },
+    (err) => {
+      console.error('[Firestore] subscribeToProfissionais:', err);
+      onError?.(err);
+    },
+  );
+}
+
+// ─── Cadastro — Pet ────────────────────────────────────────────────────────
 
 export async function addPet(
   petData: Omit<Pet, 'id' | 'checkInTime'>,
@@ -74,7 +117,22 @@ export async function addPet(
   return ref.id;
 }
 
-// ─── Edição ────────────────────────────────────────────────────────────────
+// ─── Cadastro — Profissional ───────────────────────────────────────────────
+
+export async function addProfissional(
+  data: Omit<Profissional, 'id'>,
+): Promise<string> {
+  const ref = await addDoc(profissionaisCollection(), {
+    nome:      data.nome,
+    sobrenome: data.sobrenome,
+    funcao:    data.funcao,
+    ativo:     data.ativo ?? true,
+    criadoEm:  serverTimestamp(),
+  });
+  return ref.id;
+}
+
+// ─── Edição — Pet ──────────────────────────────────────────────────────────
 
 export async function updatePet(
   petId: string,
@@ -84,30 +142,75 @@ export async function updatePet(
   await updateDoc(petRef, { ...updatedData });
 }
 
-// ─── Deleção ───────────────────────────────────────────────────────────────
+// ─── Edição — Profissional ────────────────────────────────────────────────
 
-export async function deletePet(pet: Pet): Promise<void> {
-  // 1. Salva o registro na coleção de deletados (para relatórios)
-  await addDoc(deletedCollection(), {
+export async function updateProfissional(
+  id: string,
+  data: Partial<Omit<Profissional, 'id'>>,
+): Promise<void> {
+  const ref = doc(db, 'profissionais', id);
+  await updateDoc(ref, { ...data });
+}
+
+// ─── Exclusão — Profissional ──────────────────────────────────────────────
+
+export async function deleteProfissional(id: string): Promise<void> {
+  const ref = doc(db, 'profissionais', id);
+  await deleteDoc(ref);
+}
+
+// ─── Encerramento (entregue / removido / cancelado) ───────────────────────
+
+export type TipoEncerramento = 'entregue' | 'removido' | 'cancelado';
+
+export async function encerrarPet(
+  pet: Pet,
+  tipo: TipoEncerramento,
+): Promise<void> {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  let removidoPorId: string | null = null;
+  let removidoPorNome: string | null = null;
+
+  if (user) {
+    removidoPorId = user.uid;
+    const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+    if (userDoc.exists()) {
+      removidoPorNome = userDoc.data().nome ?? 'Desconhecido';
+    }
+  }
+
+  const checkOut = new Date();
+  const checkIn  = new Date(pet.checkInTime);
+  const duracaoMinutos = Math.round(
+    (checkOut.getTime() - checkIn.getTime()) / 60_000,
+  );
+
+  await addDoc(logsCollection(), {
+    tipo,
     petId:               pet.id,
     nomePet:             pet.nomePet,
     nomeTutor:           pet.nomeTutor,
-    especie:             pet.especie,
-    raca:                pet.raca ?? null,
-    porte:               pet.porte ?? null,
+    especie:             pet.especie             ?? null,
+    raca:                pet.raca                ?? null,
+    porte:               pet.porte               ?? null,
     servico:             pet.servico,
     slotNumber:          pet.slotNumber,
-    statusNoMomento:     pet.status,
-    atendimentoIniciado: pet.atendimentoIniciado ?? false,
-    profissionalBanho:   pet.profissionalBanho ?? null,
-    profissionalTosa:    pet.profissionalTosa ?? null,
-    profissionalEscovar: pet.profissionalEscovar ?? null,
+    statusFinal:         pet.status,
     checkInTime:         pet.checkInTime,
-    deletadoEm:          serverTimestamp(),
-    motivoDelecao:       pet.status === 'espera' ? 'removido_fila' : 'forcado_pelo_admin',
+    checkOutTime:        serverTimestamp(),
+    duracaoMinutos,
+    removidoPorId,
+    removidoPorNome,
+    profissionalBanho:   pet.profissionalBanho   ?? null,
+    profissionalTosa:    pet.profissionalTosa     ?? null,
+    profissionalEscovar: pet.profissionalEscovar ?? null,
+    atendimentoIniciado: pet.atendimentoIniciado ?? false,
+    observacoes:         pet.observacoes         ?? null,
+    historicoReversoes:  pet.historicoReversoes  ?? [],
   });
 
-  // 2. Remove o pet da fila ativa
   const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
   await deleteDoc(petRef);
 }

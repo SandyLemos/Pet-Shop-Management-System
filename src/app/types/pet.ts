@@ -1,5 +1,14 @@
 export type SlotStatus = 'livre' | 'espera' | 'banho' | 'escovar' | 'tosa' | 'finalizado';
 
+// ─── Profissional ──────────────────────────────────────────────────────────────
+export interface Profissional {
+  id: string
+  nome: string
+  sobrenome: string
+  funcao: string
+  ativo: boolean
+}
+
 export interface Pet {
   id: string
   slotNumber: number

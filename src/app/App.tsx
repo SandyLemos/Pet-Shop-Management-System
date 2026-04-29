@@ -11,7 +11,7 @@ import {
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
-import { addPet, subscribeToPets, deletePet, updatePet } from '../services/petService';
+import { addPet, subscribeToPets, encerrarPet, updatePet } from '../services/petService';
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -85,18 +85,9 @@ function LoginScreen({
     >
       {/* Círculos decorativos de fundo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div
-          className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10"
-          style={{ background: '#E8192C' }}
-        />
-        <div
-          className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10"
-          style={{ background: '#3B2FBE' }}
-        />
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-5"
-          style={{ background: '#ffffff' }}
-        />
+        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#E8192C' }} />
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#3B2FBE' }} />
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-5" style={{ background: '#ffffff' }} />
       </div>
 
       <div className="relative w-full max-w-md z-10">
@@ -108,11 +99,7 @@ function LoginScreen({
             style={{ background: 'linear-gradient(160deg, #1a1560 0%, #3B2FBE 60%, #E8192C 100%)' }}
           >
             <div className="bg-white rounded-2xl px-6 py-4 shadow-lg">
-              <img
-                src="/logo-elite.png"
-                alt="Elite Pet Shop"
-                className="h-20 w-auto object-contain"
-              />
+              <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-20 w-auto object-contain" />
             </div>
             <p className="text-white/70 text-xs mt-2 tracking-widest uppercase font-semibold">
               Sistema de Gestão
@@ -216,11 +203,7 @@ function SplashScreen() {
     >
       <div className="flex flex-col items-center gap-5">
         <div className="bg-white rounded-2xl px-6 py-4 shadow-xl">
-          <img
-            src="/logo-elite.png"
-            alt="Elite Pet Shop"
-            className="h-16 w-auto object-contain"
-          />
+          <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-16 w-auto object-contain" />
         </div>
         <span className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
         <p className="text-sm text-white/60 tracking-widest uppercase">Verificando sessão...</p>
@@ -321,10 +304,16 @@ export default function App() {
     }
   };
 
-  const handleCheckout = (petId: string) => {
+  // ✅ handleCheckout agora usa encerrarPet com tipo 'entregue'
+  const handleCheckout = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
-    setPets((prev) => prev.filter((p) => p.id !== petId));
-    if (pet) toast.success(`${pet.nomePet} retirado com sucesso!`);
+    if (!pet) return;
+    try {
+      await encerrarPet(pet, 'entregue');
+      toast.success(`${pet.nomePet} entregue ao tutor com sucesso! 🐾`);
+    } catch {
+      toast.error('Erro ao registrar entrega. Tente novamente.');
+    }
   };
 
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
@@ -338,14 +327,16 @@ export default function App() {
     }
   };
 
+  // ✅ handleDeletePet agora usa encerrarPet com tipo 'removido'
   const handleDeletePet = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
     try {
-      await deletePet(pet);
-    } catch (err) {
-      console.error('[handleDeletePet] Erro ao deletar pet:', err);
-      toast.error('Erro ao deletar o pet. Tente novamente.');
+      await encerrarPet(pet, 'removido');
+      toast.success(`${pet.nomePet} removido da fila.`);
+    } catch (err) { // ← adiciona o (err) aqui
+      console.error('[handleDeletePet] Erro ao remover pet:', err);
+      toast.error('Erro ao remover o pet. Tente novamente.');
     }
   };
 
@@ -422,11 +413,7 @@ export default function App() {
           {/* Logo no header */}
           <div className="flex items-center gap-4">
             <div className="bg-white rounded-xl px-4 py-2 shadow-md">
-              <img
-                src="/logo-elite.png"
-                alt="Elite Pet Shop"
-                className="h-10 w-auto object-contain"
-              />
+              <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-10 w-auto object-contain" />
             </div>
             <div className="hidden sm:block">
               <p className="text-white/60 text-xs">
