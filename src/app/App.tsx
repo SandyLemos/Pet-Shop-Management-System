@@ -11,7 +11,13 @@ import {
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
-import { addPet, subscribeToPets, encerrarPet, updatePet } from '../services/petService';
+import {
+  addPet,
+  subscribeToPets,
+  encerrarPet,
+  updatePet,
+  marcarComoAvisado,
+} from '../services/petService';
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -258,40 +264,45 @@ export default function App() {
     );
   }
 
-  // ── Handlers ───────────────────────────────────────────────────────────────
+  // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  const handleRevertService = (petId: string, etapa: string, motivo: string) => {
-    setPets((prev) =>
-      prev.map((pet) => {
-        if (pet.id !== petId) return pet;
-        return {
-          ...pet,
-          status: 'espera' as SlotStatus,
-          banhoCompleto: false,
-          escovarCompleto: false,
-          tosaCompleta: false,
-          atendimentoIniciado: false,
-          historicoReversoes: [
-            ...(pet.historicoReversoes || []),
-            { etapa, motivo, data: new Date().toISOString() },
-          ],
-        };
-      }),
-    );
-    toast.success(`Serviço de ${etapa} revertido com sucesso.`);
+  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
+  const handleRevertService = async (petId: string, etapa: string, motivo: string) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) return;
+
+    const updates: Partial<Pet> = {
+      status:              'espera' as SlotStatus,
+      banhoCompleto:       false,
+      escovarCompleto:     false,
+      tosaCompleta:        false,
+      atendimentoIniciado: false,
+      historicoReversoes: [
+        ...(pet.historicoReversoes || []),
+        { etapa, motivo, data: new Date().toISOString() },
+      ],
+    };
+
+    try {
+      await updatePet(petId, updates);
+      toast.success(`Serviço de ${etapa} revertido com sucesso.`);
+    } catch {
+      toast.error('Erro ao reverter serviço. Tente novamente.');
+    }
   };
 
-  const handleUpdateStatus = (petId: string, newStatus: SlotStatus) => {
-    setPets((prev) =>
-      prev.map((pet) => {
-        if (pet.id !== petId) return pet;
-        const updated = { ...pet, status: newStatus };
-        if (newStatus === 'banho')   { updated.banhoCompleto = false; updated.escovarCompleto = false; }
-        if (newStatus === 'escovar') { updated.escovarCompleto = false; updated.tosaCompleta = false; }
-        if (newStatus === 'tosa')    { updated.tosaCompleta = false; }
-        return updated;
-      }),
-    );
+  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
+  const handleUpdateStatus = async (petId: string, newStatus: SlotStatus) => {
+    const updates: Partial<Pet> = { status: newStatus };
+    if (newStatus === 'banho')   { updates.banhoCompleto = false; updates.escovarCompleto = false; }
+    if (newStatus === 'escovar') { updates.escovarCompleto = false; updates.tosaCompleta = false; }
+    if (newStatus === 'tosa')    { updates.tosaCompleta = false; }
+
+    try {
+      await updatePet(petId, updates);
+    } catch {
+      toast.error('Erro ao atualizar status. Tente novamente.');
+    }
   };
 
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
@@ -304,7 +315,7 @@ export default function App() {
     }
   };
 
-  // ✅ handleCheckout agora usa encerrarPet com tipo 'entregue'
+  // ✅ handleCheckout para o KanbanBoard — sempre 'entregue'
   const handleCheckout = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
@@ -316,58 +327,85 @@ export default function App() {
     }
   };
 
+  // ✅ handleCheckoutWithType para o SlotGrid — separa 'avisado' de 'entregue'
+  const handleCheckoutWithType = async (petId: string, tipo: 'entregue' | 'avisado') => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) return;
+    try {
+      if (tipo === 'avisado') {
+        await marcarComoAvisado(pet);
+        toast.success(`${pet.nomePet} marcado como avisado! 📞`);
+      } else {
+        await encerrarPet(pet, 'entregue');
+        toast.success(`${pet.nomePet} entregue ao tutor! 🐾`);
+      }
+    } catch {
+      toast.error('Erro ao atualizar pet. Tente novamente.');
+    }
+  };
+
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
     try {
       await updatePet(petId, updatedData);
-      setPets((prev) =>
-        prev.map((p) => (p.id === petId ? { ...p, ...updatedData } : p)),
-      );
+      // ✅ sem setPets — onSnapshot já atualiza
     } catch {
       toast.error('Erro ao editar pet. Tente novamente.');
     }
   };
 
-  // ✅ handleDeletePet agora usa encerrarPet com tipo 'removido'
+  // ✅ handleDeletePet usa encerrarPet com tipo 'removido'
   const handleDeletePet = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
     try {
       await encerrarPet(pet, 'removido');
       toast.success(`${pet.nomePet} removido da fila.`);
-    } catch (err) { // ← adiciona o (err) aqui
+    } catch (err) {
       console.error('[handleDeletePet] Erro ao remover pet:', err);
       toast.error('Erro ao remover o pet. Tente novamente.');
     }
   };
 
-  const handleAssignProfessional = (petId: string, pB?: string, pT?: string, pE?: string) => {
-    setPets((prev) =>
-      prev.map((p) =>
-        p.id === petId
-          ? {
-              ...p,
-              profissionalBanho: pB,
-              profissionalTosa: pT,
-              profissionalEscovar: pE,
-              status: p.status === 'espera' ? ('banho' as SlotStatus) : p.status,
-              atendimentoIniciado: true,
-            }
-          : p,
-      ),
-    );
+  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
+  const handleAssignProfessional = async (
+    petId: string,
+    pB?: string,
+    pT?: string,
+    pE?: string,
+  ) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) return;
+
+    const updates: Partial<Pet> = {
+      profissionalBanho:   pB,
+      profissionalTosa:    pT,
+      profissionalEscovar: pE,
+      status: pet.status === 'espera' ? ('banho' as SlotStatus) : pet.status,
+      atendimentoIniciado: true,
+    };
+
+    try {
+      await updatePet(petId, updates);
+    } catch {
+      toast.error('Erro ao atribuir profissional. Tente novamente.');
+    }
   };
 
-  const handleMarkServiceComplete = (petId: string, type: 'banho' | 'escovar' | 'tosa') => {
-    setPets((prev) =>
-      prev.map((p) => {
-        if (p.id !== petId) return p;
-        const updated = { ...p };
-        if (type === 'banho')   updated.banhoCompleto   = true;
-        if (type === 'escovar') updated.escovarCompleto = true;
-        if (type === 'tosa')    updated.tosaCompleta    = true;
-        return updated;
-      }),
-    );
+  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
+  const handleMarkServiceComplete = async (
+    petId: string,
+    type: 'banho' | 'escovar' | 'tosa',
+  ) => {
+    const updates: Partial<Pet> = {};
+    if (type === 'banho')   updates.banhoCompleto   = true;
+    if (type === 'escovar') updates.escovarCompleto = true;
+    if (type === 'tosa')    updates.tosaCompleta    = true;
+
+    try {
+      await updatePet(petId, updates);
+    } catch {
+      toast.error('Erro ao marcar serviço. Tente novamente.');
+    }
   };
 
   const handleLogoutConfirm = async () => {
@@ -473,6 +511,7 @@ export default function App() {
               onAddPet={handleAddPet}
               onEditPet={handleEditPet}
               onDeletePet={handleDeletePet}
+              onCheckout={handleCheckoutWithType}
               filter={filter}
             />
           </TabsContent>

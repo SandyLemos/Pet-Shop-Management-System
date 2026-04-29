@@ -1,7 +1,10 @@
 import { useState, useMemo, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
 import { Badge } from './ui/badge';
-import { Dog, Clock, Droplet, Wind, Scissors, CheckCircle2, ChevronDown, ChevronUp, Minus, MinusCircle } from 'lucide-react';
+import {
+  Dog, Clock, Droplet, Wind, Scissors,
+  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall,
+} from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
 import { Button } from './ui/button';
 import { PetDetailModal } from './PetDetailModal';
@@ -12,19 +15,20 @@ interface SlotGridProps {
   onAddPet: (pet: Omit<Pet, 'id' | 'checkInTime'>) => void;
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void;
   onDeletePet: (petId: string) => void;
+  onCheckout: (petId: string, tipo: 'entregue' | 'avisado') => void;
   filter: 'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao';
 }
 
-export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: SlotGridProps) {
+export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, filter }: SlotGridProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [visibleSlots, setVisibleSlots] = useState(10);
 
-  // ── Novo: estados do modal de detalhes ──
+  // ── estados do modal de detalhes ──
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  const totalSlots = 100;
+  const totalSlots      = 100;
   const SLOTS_PER_BATCH = 10;
   const MIN_VISIBLE_SLOTS = 10;
 
@@ -40,13 +44,20 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
     }
   }, [freeSlotsInVisibleRange, visibleSlots, totalSlots]);
 
+  // ── helpers de slot ──────────────────────────────────────────────────────────
+
   const getSlotStatus = (slotNumber: number): { status: SlotStatus; pet?: Pet } => {
     const pet = pets.find(p => p.slotNumber === slotNumber);
     if (!pet) return { status: 'livre' };
     return { status: pet.status, pet };
   };
 
-  const getStatusColor = (status: SlotStatus) => {
+  // ── NOVO: cor separada para slot "avisado" ───────────────────────────────────
+  const getStatusColor = (status: SlotStatus, avisado?: boolean) => {
+    // Finalizado + avisado → azul (aguardando retirada)
+    if (status === 'finalizado' && avisado) {
+      return 'bg-blue-100 hover:bg-blue-200 border-blue-400 text-blue-700';
+    }
     switch (status) {
       case 'livre':
         return 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-700';
@@ -61,7 +72,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
     }
   };
 
-  const getStatusIcon = (status: SlotStatus) => {
+  // ── NOVO: ícone separado para slot "avisado" ─────────────────────────────────
+  const getStatusIcon = (status: SlotStatus, avisado?: boolean) => {
+    if (status === 'finalizado' && avisado) {
+      return <PhoneCall className="w-4 h-4" />;
+    }
     switch (status) {
       case 'livre':
         return <Dog className="w-4 h-4" />;
@@ -78,16 +93,14 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
     }
   };
 
-  // ── Atualizado: distingue slot livre de slot ocupado ──
+  // ── handlers ─────────────────────────────────────────────────────────────────
+
   const handleSlotClick = (slotNumber: number) => {
     const { status, pet } = getSlotStatus(slotNumber);
-
     if (status === 'livre') {
-      // Abre formulário de cadastro
       setSelectedSlot(slotNumber);
       setIsDialogOpen(true);
     } else if (pet) {
-      // Abre modal de detalhes do pet
       setSelectedPet(pet);
       setIsDetailOpen(true);
     }
@@ -105,23 +118,15 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
     }
   };
 
-  const shouldShowSlot = (pet?: Pet) => {
-    if (filter === 'all') return true;
-    if (!pet) return true;
-    return pet.servico === filter;
-  };
-
   const handleExpandSlots = () => {
     setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
   };
 
   const handleRemoveOneSlot = () => {
     setVisibleSlots(prev => {
-      const newValue = prev - 1;
-      const lastSlotOccupied = pets.some(p => p.slotNumber === prev);
-      if (newValue < MIN_VISIBLE_SLOTS || lastSlotOccupied) {
-        return prev;
-      }
+      const newValue          = prev - 1;
+      const lastSlotOccupied  = pets.some(p => p.slotNumber === prev);
+      if (newValue < MIN_VISIBLE_SLOTS || lastSlotOccupied) return prev;
       return newValue;
     });
   };
@@ -129,39 +134,29 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
   const handleRemoveBatchSlots = () => {
     setVisibleSlots(prev => {
       const newValue = prev - SLOTS_PER_BATCH;
-      if (newValue < MIN_VISIBLE_SLOTS) {
-        return prev;
-      }
-      const slotsToRemove = Array.from(
-        { length: SLOTS_PER_BATCH },
-        (_, i) => prev - i
-      );
-      const hasOccupiedSlot = slotsToRemove.some(slotNum =>
-        pets.some(p => p.slotNumber === slotNum)
-      );
-      if (hasOccupiedSlot) {
-        return prev;
-      }
+      if (newValue < MIN_VISIBLE_SLOTS) return prev;
+      const slotsToRemove = Array.from({ length: SLOTS_PER_BATCH }, (_, i) => prev - i);
+      const hasOccupied   = slotsToRemove.some(n => pets.some(p => p.slotNumber === n));
+      if (hasOccupied) return prev;
       return newValue;
     });
   };
 
-  const canRemoveSlots = visibleSlots > MIN_VISIBLE_SLOTS && !pets.some(p => p.slotNumber === visibleSlots);
+  const canRemoveSlots = visibleSlots > MIN_VISIBLE_SLOTS &&
+    !pets.some(p => p.slotNumber === visibleSlots);
 
   const canRemoveBatch = useMemo(() => {
     if (visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS) return false;
-    const slotsToRemove = Array.from(
-      { length: SLOTS_PER_BATCH },
-      (_, i) => visibleSlots - i
-    );
-    return !slotsToRemove.some(slotNum =>
-      pets.some(p => p.slotNumber === slotNum)
-    );
+    const slotsToRemove = Array.from({ length: SLOTS_PER_BATCH }, (_, i) => visibleSlots - i);
+    return !slotsToRemove.some(n => pets.some(p => p.slotNumber === n));
   }, [visibleSlots, pets]);
+
+  // ── render ───────────────────────────────────────────────────────────────────
 
   return (
     <div>
-      {/* Indicador de slots visíveis */}
+
+      {/* ── Indicador de slots visíveis ── */}
       <div className="px-4 pt-4 pb-2">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
           <div className="flex items-center justify-between mb-3">
@@ -175,13 +170,12 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
             </div>
           </div>
 
-          {/* Controles de Expansão e Remoção */}
+          {/* Controles */}
           <div className="flex items-center gap-2">
-            {/* Botões de Remoção */}
+
+            {/* Remoção */}
             <div className="flex items-center gap-1 mr-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Remover:</span>
-
-              {/* Remover 1 slot */}
               <Button
                 onClick={handleRemoveOneSlot}
                 disabled={!canRemoveSlots}
@@ -199,8 +193,6 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
                 <Minus className="w-3 h-3" />
                 <span className="text-xs font-semibold">1</span>
               </Button>
-
-              {/* Remover 10 slots */}
               <Button
                 onClick={handleRemoveBatchSlots}
                 disabled={!canRemoveBatch}
@@ -220,14 +212,13 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
               </Button>
             </div>
 
-            {/* Separador visual */}
-            <div className="h-6 w-px bg-slate-300"></div>
+            {/* Separador */}
+            <div className="h-6 w-px bg-slate-300" />
 
-            {/* Botões de Adição */}
+            {/* Adição */}
             <div className="flex items-center gap-1 ml-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Adicionar:</span>
-
-              {visibleSlots < totalSlots && (
+              {visibleSlots < totalSlots ? (
                 <Button
                   onClick={handleExpandSlots}
                   variant="outline"
@@ -238,9 +229,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
                   <ChevronDown className="w-3 h-3" />
                   <span className="text-xs font-semibold">+10</span>
                 </Button>
-              )}
-
-              {visibleSlots >= totalSlots && (
+              ) : (
                 <div className="text-xs text-slate-500 italic px-2">
                   Limite máximo atingido
                 </div>
@@ -250,11 +239,12 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
         </div>
       </div>
 
-      {/* Grade de slots */}
+      {/* ── Grade de slots ── */}
       <div className="grid grid-cols-10 gap-2 p-4">
         {Array.from({ length: visibleSlots }, (_, i) => {
           const slotNumber = i + 1;
           const { status, pet } = getSlotStatus(slotNumber);
+          const avisado    = !!pet?.avisado;                              // ← NOVO
           const isFiltered = filter !== 'all' && pet && pet.servico !== filter;
 
           return (
@@ -275,12 +265,16 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
                     aspect-square rounded-lg border-2 transition-all
                     flex flex-col items-center justify-center gap-1
                     cursor-pointer
-                    ${isFiltered ? 'opacity-30' : getStatusColor(status)}
+                    ${isFiltered ? 'opacity-30' : getStatusColor(status, avisado)}
                     ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
                   `}
-                  title={pet ? `${pet.nomePet} - ${pet.nomeTutor} (clique para detalhes)` : `Slot ${slotNumber} - Livre`}
+                  title={
+                    pet
+                      ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''} (clique para detalhes)`
+                      : `Slot ${slotNumber} - Livre`
+                  }
                 >
-                  {getStatusIcon(status)}
+                  {getStatusIcon(status, avisado)}
                   <span className="text-xs font-semibold">{slotNumber}</span>
                   {pet && (
                     <span className="text-[8px] font-medium truncate w-full px-1 text-center">
@@ -304,7 +298,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
         })}
       </div>
 
-      {/* Modal de detalhes do pet */}
+      {/* ── Modal de detalhes do pet ── */}
       <PetDetailModal
         pet={selectedPet}
         open={isDetailOpen}
@@ -321,9 +315,17 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
           setIsDetailOpen(false);
           setSelectedPet(null);
         }}
+        onCheckout={(petId, tipo) => {
+          onCheckout(petId, tipo);
+          // ✅ Só fecha o modal se for 'entregue' — 'avisado' mantém o pet na fila
+          if (tipo === 'entregue') {
+            setIsDetailOpen(false);
+            setSelectedPet(null);
+          }
+        }}
       />
 
-      {/* Legenda */}
+      {/* ── Legenda ── */}
       <div className="flex gap-4 px-4 pb-4 flex-wrap">
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-emerald-100 border-2 border-emerald-300" />
@@ -341,7 +343,15 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, filter }: Slo
           <div className="w-4 h-4 rounded bg-purple-100 border-2 border-purple-300" />
           <span className="text-sm text-gray-600">Finalizado</span>
         </div>
+        {/* ── NOVO: legenda Avisado ── */}
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-400 flex items-center justify-center">
+            <PhoneCall className="w-2.5 h-2.5 text-blue-600" />
+          </div>
+          <span className="text-sm text-gray-600">Tutor Avisado</span>
+        </div>
       </div>
+
     </div>
   );
 }

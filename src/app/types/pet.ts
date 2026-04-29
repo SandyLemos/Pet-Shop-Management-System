@@ -29,12 +29,11 @@ export interface Pet {
   profissionalBanho?: string
   profissionalTosa?: string
   profissionalEscovar?: string
-  atendimentoIniciado?: boolean // Nova Flag
+  atendimentoIniciado?: boolean
   historicoReversoes?: {
     etapa: string
     motivo: string
     data: string
-    // usuario?: string // opcional, caso tenha login no futuro
   }[]
   banhoCompleto?: boolean
   escovarCompleto?: boolean
@@ -42,4 +41,6 @@ export interface Pet {
   observacoes?: string
   checkInTime: string
   status: SlotStatus
+  avisado?: boolean        // ← NOVO: tutor foi avisado que o pet está pronto
+  avisadoEm?: string       // ← NOVO: timestamp ISO de quando foi avisado
 }

@@ -19,6 +19,8 @@ import {
   Pencil,
   Trash2,
   CheckCircle2,
+  PackageCheck,
+  PhoneCall,
 } from 'lucide-react';
 import type { Pet } from '../types/pet';
 
@@ -28,6 +30,7 @@ interface PetDetailModalProps {
   onClose: () => void;
   onEdit: (pet: Pet) => void;
   onDelete: (petId: string) => void;
+  onCheckout?: (petId: string, tipo: 'entregue' | 'avisado') => void;
 }
 
 export function PetDetailModal({
@@ -36,16 +39,17 @@ export function PetDetailModal({
   onClose,
   onEdit,
   onDelete,
+  onCheckout,
 }: PetDetailModalProps) {
   if (!pet) return null;
 
   const getServiceLabel = (servico: string) => {
     const labels: Record<string, string> = {
-      banho: 'Banho',
-      tosa: 'Tosa',
+      banho:      'Banho',
+      tosa:       'Tosa',
       banho_tosa: 'Banho + Tosa',
-      higienica: 'Higiênica',
-      ozonio: 'Ozônio',
+      higienica:  'Higiênica',
+      ozonio:     'Ozônio',
       hidratacao: 'Hidratação',
     };
     return labels[servico] || servico;
@@ -53,13 +57,13 @@ export function PetDetailModal({
 
   const getServiceColor = (servico: string) => {
     switch (servico) {
-      case 'banho':       return 'bg-blue-100 text-blue-800';
-      case 'tosa':        return 'bg-purple-100 text-purple-800';
-      case 'banho_tosa':  return 'bg-pink-100 text-pink-800';
-      case 'higienica':   return 'bg-green-100 text-green-800';
-      case 'ozonio':      return 'bg-cyan-100 text-cyan-800';
-      case 'hidratacao':  return 'bg-indigo-100 text-indigo-800';
-      default:            return 'bg-gray-100 text-gray-800';
+      case 'banho':      return 'bg-blue-100 text-blue-800';
+      case 'tosa':       return 'bg-purple-100 text-purple-800';
+      case 'banho_tosa': return 'bg-pink-100 text-pink-800';
+      case 'higienica':  return 'bg-green-100 text-green-800';
+      case 'ozonio':     return 'bg-cyan-100 text-cyan-800';
+      case 'hidratacao': return 'bg-indigo-100 text-indigo-800';
+      default:           return 'bg-gray-100 text-gray-800';
     }
   };
 
@@ -76,19 +80,19 @@ export function PetDetailModal({
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case 'espera':      return 'bg-amber-100 text-amber-800';
-      case 'banho':       return 'bg-sky-100 text-sky-800';
-      case 'escovar':     return 'bg-sky-100 text-sky-800';
-      case 'tosa':        return 'bg-sky-100 text-sky-800';
-      case 'finalizado':  return 'bg-purple-100 text-purple-800';
-      default:            return 'bg-gray-100 text-gray-800';
+      case 'espera':     return 'bg-amber-100 text-amber-800';
+      case 'banho':      return 'bg-sky-100 text-sky-800';
+      case 'escovar':    return 'bg-sky-100 text-sky-800';
+      case 'tosa':       return 'bg-sky-100 text-sky-800';
+      case 'finalizado': return 'bg-purple-100 text-purple-800';
+      default:           return 'bg-gray-100 text-gray-800';
     }
   };
 
   const formatTime = (iso: string) => {
     try {
       return new Date(iso).toLocaleTimeString('pt-BR', {
-        hour: '2-digit',
+        hour:   '2-digit',
         minute: '2-digit',
       });
     } catch {
@@ -96,7 +100,9 @@ export function PetDetailModal({
     }
   };
 
-  const canDelete = pet.status === 'espera';
+  const canDelete    = pet.status === 'espera';
+  const isFinalizado = pet.status === 'finalizado';
+  const jaAvisado    = !!pet.avisado; // ← NOVO
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
@@ -131,7 +137,6 @@ export function PetDetailModal({
                 )}
               </div>
             )}
-
             <div className="flex-1 min-w-0">
               <h2 className="text-2xl font-bold text-gray-800 break-words">
                 {pet.nomePet}
@@ -155,14 +160,33 @@ export function PetDetailModal({
               <Hash className="w-3 h-3" />
               Slot {pet.slotNumber}
             </Badge>
+
+            {/* ── NOVO: badge "Tutor Avisado" ── */}
+            {jaAvisado && (
+              <Badge className="bg-blue-100 text-blue-700 flex items-center gap-1 border border-blue-200">
+                <PhoneCall className="w-3 h-3" />
+                Tutor Avisado
+              </Badge>
+            )}
           </div>
+
+          {/* ── NOVO: banner informativo quando já avisado ── */}
+          {jaAvisado && pet.avisadoEm && (
+            <div className="flex items-center gap-2 bg-blue-50 border border-blue-200 rounded-xl px-3 py-2">
+              <PhoneCall className="w-4 h-4 text-blue-500 flex-shrink-0" />
+              <p className="text-sm text-blue-700">
+                Tutor avisado às{' '}
+                <span className="font-semibold">{formatTime(pet.avisadoEm)}</span>
+                . Aguardando retirada.
+              </p>
+            </div>
+          )}
 
           {/* ── Informações do pet ── */}
           <div className="bg-gray-50 rounded-xl p-4 space-y-2">
             <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">
               Informações
             </h3>
-
             {pet.especie && (
               <InfoRow
                 icon={pet.especie === 'cao' ? '🐕' : '🐈'}
@@ -231,7 +255,7 @@ export function PetDetailModal({
           {/* ── Progresso ── */}
           {pet.status !== 'espera' && pet.status !== 'finalizado' && (
             <div className="flex gap-2 flex-wrap">
-              <ProgressBadge label="Banho" done={!!pet.banhoCompleto} />
+              <ProgressBadge label="Banho"   done={!!pet.banhoCompleto} />
               <ProgressBadge label="Escovar" done={!!pet.escovarCompleto} />
               {['tosa', 'banho_tosa', 'higienica'].includes(pet.servico) && (
                 <ProgressBadge label="Tosa" done={!!pet.tosaCompleta} />
@@ -239,15 +263,69 @@ export function PetDetailModal({
             </div>
           )}
 
-          {/* ── Ações ── */}
+          {/* ── Ações para pet FINALIZADO ── */}
+          {isFinalizado && onCheckout && (
+            <div className="rounded-xl border border-purple-100 bg-purple-50 p-4 space-y-3">
+              <p className="text-xs font-semibold text-purple-500 uppercase tracking-wider">
+                Encerrar Atendimento
+              </p>
+              <div className="flex gap-2">
+
+                {/* Botão Entregue — sempre disponível */}
+                <Button
+                  className="flex-1 bg-green-500 hover:bg-green-600 text-white"
+                  onClick={() => {
+                    onCheckout(pet.id, 'entregue');
+                    onClose();
+                  }}
+                >
+                  <PackageCheck className="w-4 h-4 mr-2" />
+                  Entregue
+                </Button>
+
+                {/* ── NOVO: Botão Avisado ──
+                    • Se já avisado → mostra desabilitado com feedback visual
+                    • Se não avisado → marca e NÃO fecha o modal             */}
+                <Button
+                  className={
+                    jaAvisado
+                      ? 'flex-1 bg-blue-200 text-blue-500 cursor-not-allowed'
+                      : 'flex-1 bg-blue-500 hover:bg-blue-600 text-white'
+                  }
+                  disabled={jaAvisado}
+                  onClick={() => {
+                    if (!jaAvisado) {
+                      onCheckout(pet.id, 'avisado');
+                      // ✅ NÃO chama onClose() — pet permanece no slot
+                    }
+                  }}
+                >
+                  <PhoneCall className="w-4 h-4 mr-2" />
+                  {jaAvisado ? 'Já Avisado' : 'Avisar'}
+                </Button>
+
+              </div>
+
+              {/* ── NOVO: dica contextual ── */}
+              {jaAvisado && (
+                <p className="text-xs text-blue-500 text-center">
+                  📞 Tutor já foi avisado. Clique em <strong>Entregue</strong> quando retirar o pet.
+                </p>
+              )}
+            </div>
+          )}
+
+          {/* ── Ações padrão ── */}
           <div className="flex gap-2 pt-2">
-            <Button
-              className="flex-1 bg-blue-500 hover:bg-blue-600"
-              onClick={() => onEdit(pet)}
-            >
-              <Pencil className="w-4 h-4 mr-2" />
-              Editar
-            </Button>
+            {!isFinalizado && (
+              <Button
+                className="flex-1 bg-blue-500 hover:bg-blue-600"
+                onClick={() => onEdit(pet)}
+              >
+                <Pencil className="w-4 h-4 mr-2" />
+                Editar
+              </Button>
+            )}
 
             {canDelete && (
               <Button
@@ -267,13 +345,14 @@ export function PetDetailModal({
               Fechar
             </Button>
           </div>
+
         </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-// ── Sub-componentes internos ─────────────────────────────────
+// ── Sub-componentes internos ──────────────────────────────────────
 
 function InfoRow({
   icon,

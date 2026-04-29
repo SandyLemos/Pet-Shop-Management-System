@@ -160,12 +160,13 @@ export async function deleteProfissional(id: string): Promise<void> {
 }
 
 // ─── Encerramento (entregue / removido / cancelado) ───────────────────────
+// ⚠️  'avisado' NÃO passa mais por aqui — usa marcarComoAvisado()
 
-export type TipoEncerramento = 'entregue' | 'removido' | 'cancelado';
+export type TipoEncerramento = 'entregue' | 'avisado' | 'removido' | 'cancelado';
 
 export async function encerrarPet(
   pet: Pet,
-  tipo: TipoEncerramento,
+  tipo: Exclude<TipoEncerramento, 'avisado'>,
 ): Promise<void> {
   const auth = getAuth();
   const user = auth.currentUser;
@@ -187,6 +188,7 @@ export async function encerrarPet(
     (checkOut.getTime() - checkIn.getTime()) / 60_000,
   );
 
+  // 1️⃣ Grava log
   await addDoc(logsCollection(), {
     tipo,
     petId:               pet.id,
@@ -209,8 +211,61 @@ export async function encerrarPet(
     atendimentoIniciado: pet.atendimentoIniciado ?? false,
     observacoes:         pet.observacoes         ?? null,
     historicoReversoes:  pet.historicoReversoes  ?? [],
+    avisado:             pet.avisado             ?? false,
+    avisadoEm:           pet.avisadoEm           ?? null,
   });
 
+  // 2️⃣ Deleta o pet da fila ativa
   const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
   await deleteDoc(petRef);
+}
+
+// ─── Marcar como Avisado (NÃO remove da fila) ─────────────────────────────
+
+export async function marcarComoAvisado(pet: Pet): Promise<void> {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  let registradoPorId: string | null = null;
+  let registradoPorNome: string | null = null;
+
+  if (user) {
+    registradoPorId = user.uid;
+    const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+    if (userDoc.exists()) {
+      registradoPorNome = userDoc.data().nome ?? 'Desconhecido';
+    }
+  }
+
+  const avisadoEm = new Date().toISOString();
+
+  // 1️⃣ Grava log do aviso
+  await addDoc(logsCollection(), {
+    tipo:                'avisado',
+    petId:               pet.id,
+    nomePet:             pet.nomePet,
+    nomeTutor:           pet.nomeTutor,
+    especie:             pet.especie             ?? null,
+    raca:                pet.raca                ?? null,
+    porte:               pet.porte               ?? null,
+    servico:             pet.servico,
+    slotNumber:          pet.slotNumber,
+    statusFinal:         pet.status,
+    checkInTime:         pet.checkInTime,
+    avisadoEm:           serverTimestamp(),
+    registradoPorId,
+    registradoPorNome,
+    profissionalBanho:   pet.profissionalBanho   ?? null,
+    profissionalTosa:    pet.profissionalTosa     ?? null,
+    profissionalEscovar: pet.profissionalEscovar ?? null,
+    observacoes:         pet.observacoes         ?? null,
+    historicoReversoes:  pet.historicoReversoes  ?? [],
+  });
+
+  // 2️⃣ Atualiza o pet com avisado: true — pet permanece no slot ✅
+  const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
+  await updateDoc(petRef, {
+    avisado:   true,
+    avisadoEm: avisadoEm,
+  });
 }
