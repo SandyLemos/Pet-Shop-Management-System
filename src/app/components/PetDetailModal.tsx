@@ -286,23 +286,24 @@ export function PetDetailModal({
                 {/* ── NOVO: Botão Avisado ──
                     • Se já avisado → mostra desabilitado com feedback visual
                     • Se não avisado → marca e NÃO fecha o modal             */}
-                <Button
-                  className={
-                    jaAvisado
-                      ? 'flex-1 bg-blue-200 text-blue-500 cursor-not-allowed'
-                      : 'flex-1 bg-blue-500 hover:bg-blue-600 text-white'
+              <Button
+                className={`flex-1 transition-all duration-200 ${
+                  jaAvisado
+                    ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60'
+                    : 'bg-blue-500 hover:bg-blue-600 text-white'
+                }`}
+                disabled={jaAvisado}
+                onClick={() => {
+                  if (!jaAvisado) {
+                    onCheckout(pet.id, 'avisado')
+                    // ✅ NÃO fecha o modal — pet permanece na fila
                   }
-                  disabled={jaAvisado}
-                  onClick={() => {
-                    if (!jaAvisado) {
-                      onCheckout(pet.id, 'avisado');
-                      // ✅ NÃO chama onClose() — pet permanece no slot
-                    }
-                  }}
-                >
-                  <PhoneCall className="w-4 h-4 mr-2" />
-                  {jaAvisado ? 'Já Avisado' : 'Avisar'}
-                </Button>
+                }}
+              >
+                <PhoneCall className="w-4 h-4 mr-2" />
+                {jaAvisado ? '✓ Já Avisado' : 'Avisar'}
+              </Button>
+
 
               </div>
 

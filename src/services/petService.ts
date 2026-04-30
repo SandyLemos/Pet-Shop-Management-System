@@ -11,6 +11,7 @@ import {
   getDoc,
   getDocs,
   setDoc,
+  Timestamp,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
@@ -109,10 +110,26 @@ export function subscribeToProfissionais(
 export async function addPet(
   petData: Omit<Pet, 'id' | 'checkInTime'>,
 ): Promise<string> {
+  const auth = getAuth();
+  const user = auth.currentUser;
+
+  let cadastradoPorId: string | null = null;
+  let cadastradoPorNome: string | null = null;
+
+  if (user) {
+    cadastradoPorId = user.uid;
+    const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+    if (userDoc.exists()) {
+      cadastradoPorNome = userDoc.data().nome ?? 'Desconhecido';
+    }
+  }
+
   const ref = await addDoc(petsCollection(), {
     ...petData,
-    checkInTime: serverTimestamp(),
+    checkInTime:        serverTimestamp(),
     historicoReversoes: [],
+    cadastradoPorId,
+    cadastradoPorNome,
   });
   return ref.id;
 }
@@ -160,7 +177,6 @@ export async function deleteProfissional(id: string): Promise<void> {
 }
 
 // ─── Encerramento (entregue / removido / cancelado) ───────────────────────
-// ⚠️  'avisado' NÃO passa mais por aqui — usa marcarComoAvisado()
 
 export type TipoEncerramento = 'entregue' | 'avisado' | 'removido' | 'cancelado';
 
@@ -171,14 +187,14 @@ export async function encerrarPet(
   const auth = getAuth();
   const user = auth.currentUser;
 
-  let removidoPorId: string | null = null;
-  let removidoPorNome: string | null = null;
+  let encerradoPorId: string | null = null;
+  let encerradoPorNome: string | null = null;
 
   if (user) {
-    removidoPorId = user.uid;
+    encerradoPorId = user.uid;
     const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
     if (userDoc.exists()) {
-      removidoPorNome = userDoc.data().nome ?? 'Desconhecido';
+      encerradoPorNome = userDoc.data().nome ?? 'Desconhecido';
     }
   }
 
@@ -187,6 +203,11 @@ export async function encerrarPet(
   const duracaoMinutos = Math.round(
     (checkOut.getTime() - checkIn.getTime()) / 60_000,
   );
+
+  // ✅ Converte checkInTime (string ISO) para Timestamp do Firestore
+  const checkInTimestamp = pet.checkInTime
+    ? Timestamp.fromDate(new Date(pet.checkInTime))
+    : serverTimestamp();
 
   // 1️⃣ Grava log
   await addDoc(logsCollection(), {
@@ -200,13 +221,23 @@ export async function encerrarPet(
     servico:             pet.servico,
     slotNumber:          pet.slotNumber,
     statusFinal:         pet.status,
-    checkInTime:         pet.checkInTime,
+    checkInTime:         checkInTimestamp,        // ✅ Timestamp
     checkOutTime:        serverTimestamp(),
     duracaoMinutos,
-    removidoPorId,
-    removidoPorNome,
+    // ✅ Quem cadastrou o pet
+    cadastradoPorId:     pet.cadastradoPorId     ?? null,
+    cadastradoPorNome:   pet.cadastradoPorNome   ?? null,
+    // ✅ Quem avisou o tutor
+    avisadoPorId:        pet.avisadoPorId        ?? null,
+    avisadoPorNome:      pet.avisadoPorNome      ?? null,
+    // ✅ Quem encerrou
+    encerradoPorId,
+    encerradoPorNome,
+    // legado (compatibilidade com logs antigos)
+    removidoPorId:       encerradoPorId,
+    removidoPorNome:     encerradoPorNome,
     profissionalBanho:   pet.profissionalBanho   ?? null,
-    profissionalTosa:    pet.profissionalTosa     ?? null,
+    profissionalTosa:    pet.profissionalTosa    ?? null,
     profissionalEscovar: pet.profissionalEscovar ?? null,
     atendimentoIniciado: pet.atendimentoIniciado ?? false,
     observacoes:         pet.observacoes         ?? null,
@@ -226,18 +257,21 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
   const auth = getAuth();
   const user = auth.currentUser;
 
-  let registradoPorId: string | null = null;
-  let registradoPorNome: string | null = null;
+  let avisadoPorId: string | null = null;
+  let avisadoPorNome: string | null = null;
 
   if (user) {
-    registradoPorId = user.uid;
+    avisadoPorId = user.uid;
     const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
     if (userDoc.exists()) {
-      registradoPorNome = userDoc.data().nome ?? 'Desconhecido';
+      avisadoPorNome = userDoc.data().nome ?? 'Desconhecido';
     }
   }
 
-  const avisadoEm = new Date().toISOString();
+  // ✅ Converte checkInTime (string ISO) para Timestamp do Firestore
+  const checkInTimestamp = pet.checkInTime
+    ? Timestamp.fromDate(new Date(pet.checkInTime))
+    : serverTimestamp();
 
   // 1️⃣ Grava log do aviso
   await addDoc(logsCollection(), {
@@ -251,21 +285,123 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     servico:             pet.servico,
     slotNumber:          pet.slotNumber,
     statusFinal:         pet.status,
-    checkInTime:         pet.checkInTime,
+    checkInTime:         checkInTimestamp,        // ✅ Timestamp
     avisadoEm:           serverTimestamp(),
-    registradoPorId,
-    registradoPorNome,
+    // ✅ Quem cadastrou
+    cadastradoPorId:     pet.cadastradoPorId     ?? null,
+    cadastradoPorNome:   pet.cadastradoPorNome   ?? null,
+    // ✅ Quem avisou
+    avisadoPorId,
+    avisadoPorNome,
+    // legado
+    registradoPorId:     avisadoPorId,
+    registradoPorNome:   avisadoPorNome,
     profissionalBanho:   pet.profissionalBanho   ?? null,
-    profissionalTosa:    pet.profissionalTosa     ?? null,
+    profissionalTosa:    pet.profissionalTosa    ?? null,
     profissionalEscovar: pet.profissionalEscovar ?? null,
     observacoes:         pet.observacoes         ?? null,
     historicoReversoes:  pet.historicoReversoes  ?? [],
   });
 
-  // 2️⃣ Atualiza o pet com avisado: true — pet permanece no slot ✅
+  // 2️⃣ Atualiza o pet — salva quem avisou direto no documento do pet
   const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
   await updateDoc(petRef, {
-    avisado:   true,
-    avisadoEm: avisadoEm,
+    avisado:       true,
+    avisadoEm:     new Date().toISOString(),
+    avisadoPorId,
+    avisadoPorNome,
   });
+}
+
+// ─── Tipos para Relatório ─────────────────────────────────────────────────────
+
+export interface LogEntry {
+  id: string;
+  tipo: 'entregue' | 'avisado' | 'removido' | 'cancelado';
+  petId: string;
+  nomePet: string;
+  nomeTutor: string;
+  especie: string | null;
+  raca: string | null;
+  porte: string | null;
+  servico: string;
+  slotNumber: number;
+  statusFinal: string;
+  checkInTime: string;
+  checkOutTime?: string;
+  avisadoEm?: string;
+  duracaoMinutos?: number;
+  // ✅ Os 3 campos principais
+  cadastradoPorNome?: string | null;
+  avisadoPorNome?:    string | null;
+  encerradoPorNome?:  string | null;
+  // legados (compatibilidade com logs antigos)
+  removidoPorNome?:   string | null;
+  registradoPorNome?: string | null;
+  profissionalBanho: string | null;
+  profissionalTosa: string | null;
+  profissionalEscovar: string | null;
+  observacoes: string | null;
+  historicoReversoes: any[];
+  avisado?: boolean;
+}
+
+// ─── Conversor Firestore → LogEntry ──────────────────────────────────────────
+
+function logFromFirestore(id: string, data: any): LogEntry {
+  const toISO = (val: any): string | undefined => {
+    if (!val) return undefined;
+    if (typeof val === 'string') return val;
+    if (val?.toDate) return val.toDate().toISOString();
+    return undefined;
+  };
+
+  return {
+    id,
+    tipo:                data.tipo                ?? 'entregue',
+    petId:               data.petId               ?? '',
+    nomePet:             data.nomePet             ?? '',
+    nomeTutor:           data.nomeTutor           ?? '',
+    especie:             data.especie             ?? null,
+    raca:                data.raca                ?? null,
+    porte:               data.porte               ?? null,
+    servico:             data.servico             ?? '',
+    slotNumber:          data.slotNumber          ?? 0,
+    statusFinal:         data.statusFinal         ?? '',
+    checkInTime:         toISO(data.checkInTime)  ?? '',
+    checkOutTime:        toISO(data.checkOutTime),
+    avisadoEm:           toISO(data.avisadoEm),
+    duracaoMinutos:      data.duracaoMinutos      ?? undefined,
+    // ✅ novos
+    cadastradoPorNome:   data.cadastradoPorNome   ?? null,
+    avisadoPorNome:      data.avisadoPorNome      ?? null,
+    encerradoPorNome:    data.encerradoPorNome    ?? null,
+    // legados
+    removidoPorNome:     data.removidoPorNome     ?? null,
+    registradoPorNome:   data.registradoPorNome   ?? null,
+    profissionalBanho:   data.profissionalBanho   ?? null,
+    profissionalTosa:    data.profissionalTosa    ?? null,
+    profissionalEscovar: data.profissionalEscovar ?? null,
+    observacoes:         data.observacoes         ?? null,
+    historicoReversoes:  data.historicoReversoes  ?? [],
+    avisado:             data.avisado             ?? false,
+  };
+}
+
+// ─── Buscar logs de um dia específico ────────────────────────────────────────
+
+export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
+  const col  = collection(db, 'dias', dateKey, 'logs');
+  const q    = query(col, orderBy('checkInTime', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => logFromFirestore(d.id, d.data()));
+}
+
+// ─── Buscar pets ativos de um dia específico ──────────────────────────────────
+
+export async function getPetsByDate(dateKey: string): Promise<Pet[]> {
+  const col  = collection(db, 'dias', dateKey, 'pets');
+  const q    = query(col, orderBy('checkInTime', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => fromFirestore(d.id, d.data()));
 }

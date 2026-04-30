@@ -44,6 +44,15 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     }
   }, [freeSlotsInVisibleRange, visibleSlots, totalSlots]);
 
+  useEffect(() => {
+  if (selectedPet) {
+    const petAtualizado = pets.find((p) => p.id === selectedPet.id)
+    if (petAtualizado) {
+      setSelectedPet(petAtualizado) // ✅ sincroniza com o Firestore em tempo real
+    }
+  }
+  }, [pets, selectedPet?.id])
+
   // ── helpers de slot ──────────────────────────────────────────────────────────
 
   const getSlotStatus = (slotNumber: number): { status: SlotStatus; pet?: Pet } => {

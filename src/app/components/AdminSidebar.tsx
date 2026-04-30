@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Users, Plus, Pencil, Trash2, AlertTriangle,
-  UserCircle2, ShieldCheck, User, ChevronRight, Briefcase,
+  UserCircle2, ShieldCheck, User, Briefcase,
 } from 'lucide-react';
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp,
@@ -18,6 +18,11 @@ import {
   deleteProfissional,
 } from '../../services/petService';
 import type { Profissional } from '../types/pet';
+import { FileText, Download, Calendar, PackageCheck, PhoneCall } from 'lucide-react';
+import { getLogsByDate } from '../../services/petService';
+import type { LogEntry } from '../../services/petService';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface UsuarioFirestore {
@@ -30,30 +35,365 @@ interface UsuarioFirestore {
   criadoEm?: any;
 }
 
-// ─── Modal de Confirmação de Exclusão (Usuário) ───────────────────────────────
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+function getTodayKeyLocal(): string {
+  const d = new Date();
+  return d.toISOString().split('T')[0];
+}
+
+function formatDateBR(dateKey: string): string {
+  const [y, m, d] = dateKey.split('-');
+  return `${d}/${m}/${y}`;
+}
+
+function formatTimestamp(value: any): string {
+  if (!value) return '—';
+  if (value?.toDate) return value.toDate().toLocaleString('pt-BR');
+  if (typeof value === 'string') return new Date(value).toLocaleString('pt-BR');
+  return '—';
+}
+
+function labelServico(s: string) {
+  const map: Record<string, string> = {
+    banho: 'Banho',
+    tosa: 'Tosa',
+    banho_tosa: 'Banho + Tosa',
+    hidratacao: 'Hidratação',
+    higienica: 'Higiênica',
+    ozonio: 'Ozônio',
+    escovacao: 'Escovação',
+  };
+  return map[s] ?? s;
+}
+
+function labelPorte(p: string) {
+  const map: Record<string, string> = {
+    pequeno: 'Pequeno',
+    medio: 'Médio',
+    grande: 'Grande',
+    gigante: 'Gigante',
+  };
+  return map[p] ?? p;
+}
+
+function labelEspecie(e: string) {
+  const map: Record<string, string> = {
+    cao: 'Cão',
+    gato: 'Gato',
+  };
+  return map[e] ?? e;
+}
+
+function labelTipo(t: string) {
+  const map: Record<string, string> = {
+    entregue: 'Entregue',
+    avisado: 'Avisado',
+    removido: 'Removido',
+    cancelado: 'Cancelado',
+  };
+  return map[t] ?? t;
+}
+
+// ─── Gerador de PDF ───────────────────────────────────────────────────────────
+function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
+  const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+  const pageW = pdf.internal.pageSize.getWidth();
+
+  // Cabeçalho
+  pdf.setFillColor(88, 28, 135);
+  pdf.rect(0, 0, pageW, 28, 'F');
+  pdf.setTextColor(255, 255, 255);
+  pdf.setFontSize(16);
+  pdf.setFont('helvetica', 'bold');
+  pdf.text('ELITE PET SHOP', pageW / 2, 12, { align: 'center' });
+  pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text('Relatório de Atendimentos', pageW / 2, 19, { align: 'center' });
+  pdf.text(`Período: ${labelPeriodo}`, pageW / 2, 24, { align: 'center' });
+
+  // Resumo
+  const encerrados = logs.filter(l => ['entregue', 'removido', 'cancelado'].includes(l.tipo));
+  const avisados   = logs.filter(l => l.tipo === 'avisado');
+  pdf.setTextColor(60, 60, 60);
+  pdf.setFontSize(9);
+  pdf.setFont('helvetica', 'normal');
+  pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 35);
+  pdf.text(
+    `Total de registros: ${logs.length}   |   Atendidos: ${encerrados.length}   |   Avisos: ${avisados.length}`,
+    14, 41,
+  );
+
+  // Tabela
+  autoTable(pdf, {
+    startY: 47,
+    head: [[
+      'Slot', 'Pet', 'Raça', 'Esp.', 'Porte',
+      'Tutor', 'Serviço', 'Status', 'Tipo',
+      'Prof. Banho', 'Prof. Tosa', 'Prof. Escova',
+      'Check-in', 'Aviso em',
+      'Cadastrado por', 'Avisado por', 'Encerrado por',
+      'Obs.',
+    ]],
+    body: logs.map(l => [
+      l.slotNumber ?? '—',
+      l.nomePet    ?? '—',
+      l.raca       ?? '—',
+      labelEspecie(l.especie  ?? ''),
+      labelPorte(l.porte      ?? ''),
+      l.nomeTutor  ?? '—',
+      labelServico(l.servico  ?? ''),
+      l.statusFinal ?? '—',
+      labelTipo(l.tipo),
+      l.profissionalBanho   ?? '—',
+      l.profissionalTosa    ?? '—',
+      l.profissionalEscovar ?? '—',
+      formatTimestamp(l.checkInTime),
+      formatTimestamp(l.avisadoEm),
+      l.cadastradoPorNome ?? '—',
+      l.avisadoPorNome    ?? l.registradoPorNome ?? '—',
+      l.encerradoPorNome  ?? l.removidoPorNome   ?? '—',
+      l.observacoes || '—',
+    ]),
+    styles: {
+      fontSize: 6,
+      cellPadding: 1.5,
+      overflow: 'linebreak',
+      valign: 'middle',
+    },
+    headStyles: {
+      fillColor: [88, 28, 135],
+      textColor: 255,
+      fontStyle: 'bold',
+      fontSize: 6,
+    },
+    alternateRowStyles: {
+      fillColor: [245, 243, 255],
+    },
+    columnStyles: {
+      0:  { cellWidth: 8  },
+      1:  { cellWidth: 14 },
+      2:  { cellWidth: 16 },
+      3:  { cellWidth: 8  },
+      4:  { cellWidth: 12 },
+      5:  { cellWidth: 16 },
+      6:  { cellWidth: 14 },
+      7:  { cellWidth: 14 },
+      8:  { cellWidth: 14 },
+      9:  { cellWidth: 16 },
+      10: { cellWidth: 16 },
+      11: { cellWidth: 16 },
+      12: { cellWidth: 22 },
+      13: { cellWidth: 22 },
+      14: { cellWidth: 18 },
+      15: { cellWidth: 18 },
+      16: { cellWidth: 18 },
+      17: { cellWidth: 'auto' },
+    },
+    margin: { left: 5, right: 5 },
+    tableWidth: 'wrap',
+  });
+
+  // Rodapé
+  const pageCount = (pdf as any).internal.getNumberOfPages();
+  for (let i = 1; i <= pageCount; i++) {
+    pdf.setPage(i);
+    pdf.setFontSize(7);
+    pdf.setTextColor(150);
+    pdf.text(
+      `Elite Pet Shop — Página ${i} de ${pageCount}`,
+      pageW / 2,
+      pdf.internal.pageSize.getHeight() - 5,
+      { align: 'center' },
+    );
+  }
+
+  pdf.save(`relatorio-elite-pet-shop-${labelPeriodo.replace(/\//g, '-')}.pdf`);
+}
+
+// ─── Modal de Relatórios ──────────────────────────────────────────────────────
+function ModalRelatorios({ onClose }: { onClose: () => void }) {
+  const today = getTodayKeyLocal();
+
+  const [modo, setModo]               = useState<'dia' | 'periodo'>('dia');
+  const [dataDia, setDataDia]         = useState(today);
+  const [dataInicio, setDataInicio]   = useState(today);
+  const [dataFim, setDataFim]         = useState(today);
+  const [downloading, setDownloading] = useState(false);
+  const [erro, setErro]               = useState<string | null>(null);
+
+  const handleDownload = async () => {
+    setErro(null);
+    if (modo === 'periodo' && dataInicio > dataFim) {
+      setErro('A data de início não pode ser maior que a data fim.');
+      return;
+    }
+    setDownloading(true);
+    try {
+      let logs: LogEntry[] = [];
+      let labelPeriodo = '';
+
+      if (modo === 'dia') {
+        logs = await getLogsByDate(dataDia);
+        labelPeriodo = formatDateBR(dataDia);
+      } else {
+        const datas: string[] = [];
+        const cur = new Date(dataInicio + 'T00:00:00');
+        const fin = new Date(dataFim    + 'T00:00:00');
+        while (cur <= fin) {
+          datas.push(cur.toISOString().split('T')[0]);
+          cur.setDate(cur.getDate() + 1);
+        }
+        if (datas.length > 31) {
+          setErro('Período máximo: 31 dias.');
+          setDownloading(false);
+          return;
+        }
+        const resultados = await Promise.all(datas.map(d => getLogsByDate(d)));
+        logs = resultados.flat();
+        labelPeriodo = dataInicio === dataFim
+          ? formatDateBR(dataInicio)
+          : `${formatDateBR(dataInicio)} até ${formatDateBR(dataFim)}`;
+      }
+
+      if (logs.length === 0) {
+        setErro('Nenhum registro encontrado para o período selecionado.');
+        setDownloading(false);
+        return;
+      }
+
+      gerarPDF(logs, labelPeriodo);
+      toast.success('PDF gerado com sucesso! 📄');
+    } catch {
+      toast.error('Erro ao gerar PDF.');
+    } finally {
+      setDownloading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm animate-in fade-in zoom-in-95 duration-200 overflow-hidden">
+
+        {/* Header */}
+        <div className="bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="bg-white/20 p-2 rounded-lg">
+              <FileText className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h2 className="text-white font-bold text-base">Relatórios</h2>
+              <p className="text-indigo-200 text-xs">Elite Pet Shop</p>
+            </div>
+          </div>
+          <button onClick={onClose} className="text-white/70 hover:text-white transition p-1">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-4">
+
+          {/* Toggle Dia / Período */}
+          <div className="grid grid-cols-2 gap-2">
+            <button
+              onClick={() => { setModo('dia'); setErro(null); }}
+              className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all flex items-center justify-center gap-2 ${
+                modo === 'dia'
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 bg-white text-gray-500 hover:border-slate-300'
+              }`}
+            >
+              <Calendar size={14} /> Dia
+            </button>
+            <button
+              onClick={() => { setModo('periodo'); setErro(null); }}
+              className={`py-2.5 rounded-xl text-sm font-semibold border-2 transition-all flex items-center justify-center gap-2 ${
+                modo === 'periodo'
+                  ? 'border-indigo-500 bg-indigo-50 text-indigo-700'
+                  : 'border-slate-200 bg-white text-gray-500 hover:border-slate-300'
+              }`}
+            >
+              <FileText size={14} /> Período
+            </button>
+          </div>
+
+          {/* Inputs de data */}
+          {modo === 'dia' ? (
+            <div className="space-y-1">
+              <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Data</label>
+              <input
+                type="date"
+                value={dataDia}
+                max={today}
+                onChange={e => { setDataDia(e.target.value); setErro(null); }}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+              />
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">De</label>
+                <input
+                  type="date"
+                  value={dataInicio}
+                  max={today}
+                  onChange={e => { setDataInicio(e.target.value); setErro(null); }}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Até</label>
+                <input
+                  type="date"
+                  value={dataFim}
+                  max={today}
+                  min={dataInicio}
+                  onChange={e => { setDataFim(e.target.value); setErro(null); }}
+                  className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-indigo-400 transition"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Erro */}
+          {erro && (
+            <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-red-600 text-xs font-medium">
+              ⚠️ {erro}
+            </div>
+          )}
+
+          {/* Botão Download */}
+          <button
+            onClick={handleDownload}
+            disabled={downloading}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2 disabled:opacity-70"
+          >
+            {downloading
+              ? <><span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Gerando PDF...</>
+              : <><Download size={16} /> Baixar PDF</>
+            }
+          </button>
+
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Modal Confirmar Exclusão (Usuário) ───────────────────────────────────────
 function ModalConfirmDelete({
-  usuario,
-  onConfirm,
-  onCancel,
-}: {
-  usuario: UsuarioFirestore;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
+  usuario, onConfirm, onCancel,
+}: { usuario: UsuarioFirestore; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-red-100 p-4 rounded-2xl">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
-        </div>
+        <div className="bg-red-100 p-4 rounded-2xl"><AlertTriangle className="w-8 h-8 text-red-500" /></div>
         <div className="text-center space-y-2">
           <h2 className="text-lg font-bold text-gray-900">Excluir usuário?</h2>
           <p className="text-sm text-gray-500">
             Você está prestes a excluir{' '}
-            <span className="font-semibold text-gray-800">
-              {usuario.nome} {usuario.sobrenome}
-            </span>.
+            <span className="font-semibold text-gray-800">{usuario.nome} {usuario.sobrenome}</span>.
           </p>
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 mt-1">
             <p className="text-xs text-red-600 font-medium">
@@ -62,18 +402,11 @@ function ModalConfirmDelete({
           </div>
         </div>
         <div className="flex gap-3 w-full">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition"
-          >
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
             Cancelar
           </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2"
-          >
-            <Trash2 size={15} />
-            Excluir
+          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2">
+            <Trash2 size={15} /> Excluir
           </button>
         </div>
       </div>
@@ -81,50 +414,31 @@ function ModalConfirmDelete({
   );
 }
 
-// ─── Modal de Confirmação de Exclusão (Profissional) ─────────────────────────
+// ─── Modal Confirmar Exclusão (Profissional) ──────────────────────────────────
 function ModalConfirmDeleteProfissional({
-  profissional,
-  onConfirm,
-  onCancel,
-}: {
-  profissional: Profissional;
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
+  profissional, onConfirm, onCancel,
+}: { profissional: Profissional; onConfirm: () => void; onCancel: () => void }) {
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-sm p-8 flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-red-100 p-4 rounded-2xl">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
-        </div>
+        <div className="bg-red-100 p-4 rounded-2xl"><AlertTriangle className="w-8 h-8 text-red-500" /></div>
         <div className="text-center space-y-2">
           <h2 className="text-lg font-bold text-gray-900">Excluir profissional?</h2>
           <p className="text-sm text-gray-500">
             Você está prestes a excluir{' '}
-            <span className="font-semibold text-gray-800">
-              {profissional.nome} {profissional.sobrenome}
-            </span>.
+            <span className="font-semibold text-gray-800">{profissional.nome} {profissional.sobrenome}</span>.
           </p>
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 mt-1">
-            <p className="text-xs text-red-600 font-medium">
-              ⚠️ Esta ação é permanente. Não poderá ser desfeita.
-            </p>
+            <p className="text-xs text-red-600 font-medium">⚠️ Esta ação é permanente. Não poderá ser desfeita.</p>
           </div>
         </div>
         <div className="flex gap-3 w-full">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition"
-          >
+          <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
             Cancelar
           </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2"
-          >
-            <Trash2 size={15} />
-            Excluir
+          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2">
+            <Trash2 size={15} /> Excluir
           </button>
         </div>
       </div>
@@ -133,13 +447,7 @@ function ModalConfirmDeleteProfissional({
 }
 
 // ─── Card Criar Usuário ───────────────────────────────────────────────────────
-function CardCriarUsuario({
-  onClose,
-  onSuccess,
-}: {
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+function CardCriarUsuario({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [nome, setNome]           = useState('');
   const [sobrenome, setSobrenome] = useState('');
   const [funcao, setFuncao]       = useState('');
@@ -150,47 +458,23 @@ function CardCriarUsuario({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
-    if (!nome || !sobrenome || !funcao || !email || !senha) {
-      toast.error('Preencha todos os campos.');
-      return;
-    }
-
-    if (senha.length < 6) {
-      toast.error('A senha deve ter no mínimo 6 caracteres.');
-      return;
-    }
-
+    if (!nome || !sobrenome || !funcao || !email || !senha) { toast.error('Preencha todos os campos.'); return; }
+    if (senha.length < 6) { toast.error('A senha deve ter no mínimo 6 caracteres.'); return; }
     setLoading(true);
-
     const appSecundario = initializeApp(firebaseConfig, 'appSecundario');
     const authSecundario = getAuth(appSecundario);
-
     try {
       const cred = await createUserWithEmailAndPassword(authSecundario, email, senha);
-
       await setDoc(doc(db, 'usuarios', cred.user.uid), {
-        id: cred.user.uid,
-        nome,
-        sobrenome,
-        funcao,
-        role,
-        email,
-        criadoEm: Timestamp.now(),
+        id: cred.user.uid, nome, sobrenome, funcao, role, email, criadoEm: Timestamp.now(),
       });
-
       toast.success(`Usuário ${nome} criado com sucesso! 🎉`);
       onSuccess();
       onClose();
     } catch (err: any) {
-      console.error(err);
-      if (err.code === 'auth/email-already-in-use') {
-        toast.error('Este e-mail já está em uso.');
-      } else if (err.code === 'auth/weak-password') {
-        toast.error('A senha deve ter no mínimo 6 caracteres.');
-      } else {
-        toast.error('Erro ao criar usuário. Tente novamente.');
-      }
+      if (err.code === 'auth/email-already-in-use') toast.error('Este e-mail já está em uso.');
+      else if (err.code === 'auth/weak-password') toast.error('A senha deve ter no mínimo 6 caracteres.');
+      else toast.error('Erro ao criar usuário. Tente novamente.');
     } finally {
       await deleteApp(appSecundario);
       setLoading(false);
@@ -203,53 +487,44 @@ function CardCriarUsuario({
       <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in fade-in zoom-in-95 duration-200">
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-2">
-            <div className="bg-green-100 p-2 rounded-lg">
-              <Plus className="w-5 h-5 text-green-600" />
-            </div>
+            <div className="bg-green-100 p-2 rounded-lg"><Plus className="w-5 h-5 text-green-600" /></div>
             <h2 className="text-lg font-bold text-gray-900">Novo Usuário</h2>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition">
-            <X size={20} />
-          </button>
+          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={20} /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nome</label>
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João" autoComplete="given-name"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="João" autoComplete="given-name"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sobrenome</label>
-              <input type="text" value={sobrenome} onChange={(e) => setSobrenome(e.target.value)} placeholder="Silva" autoComplete="family-name"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={sobrenome} onChange={e => setSobrenome(e.target.value)} placeholder="Silva" autoComplete="family-name"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Função</label>
-            <input type="text" value={funcao} onChange={(e) => setFuncao(e.target.value)} placeholder="Ex: Tosador, Banhista..." autoComplete="organization-title"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+            <input type="text" value={funcao} onChange={e => setFuncao(e.target.value)} placeholder="Ex: Tosador, Banhista..." autoComplete="organization-title"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">E-mail</label>
-            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="usuario@email.com" autoComplete="email"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+            <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@email.com" autoComplete="email"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Senha</label>
-            <input type="password" value={senha} onChange={(e) => setSenha(e.target.value)} placeholder="Mínimo 6 caracteres" minLength={6} autoComplete="new-password"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Mínimo 6 caracteres" minLength={6} autoComplete="new-password"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             {senha.length > 0 && (
               <p className={`text-xs font-medium mt-1 ${senha.length < 6 ? 'text-red-500' : 'text-green-500'}`}>
                 {senha.length < 6 ? `⚠️ Senha muito curta (${senha.length}/6 caracteres)` : '✅ Senha válida'}
               </p>
             )}
           </div>
-
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nível de Acesso</label>
             <div className="grid grid-cols-2 gap-3">
@@ -263,14 +538,11 @@ function CardCriarUsuario({
               </button>
             </div>
           </div>
-
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
               Cancelar
             </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Plus size={15} /> Criar Usuário</>}
             </button>
           </div>
@@ -281,15 +553,7 @@ function CardCriarUsuario({
 }
 
 // ─── Card Editar Usuário ──────────────────────────────────────────────────────
-function CardEditarUsuario({
-  usuario,
-  onClose,
-  onSuccess,
-}: {
-  usuario: UsuarioFirestore;
-  onClose: () => void;
-  onSuccess: () => void;
-}) {
+function CardEditarUsuario({ usuario, onClose, onSuccess }: { usuario: UsuarioFirestore; onClose: () => void; onSuccess: () => void }) {
   const [nome, setNome]           = useState(usuario.nome);
   const [sobrenome, setSobrenome] = useState(usuario.sobrenome);
   const [funcao, setFuncao]       = useState(usuario.funcao);
@@ -305,7 +569,7 @@ function CardEditarUsuario({
       toast.success(`Usuário ${nome} atualizado com sucesso!`);
       onSuccess();
       onClose();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao atualizar usuário. Tente novamente.');
     } finally {
       setLoading(false);
@@ -323,34 +587,30 @@ function CardEditarUsuario({
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={20} /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nome</label>
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} autoComplete="given-name"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={nome} onChange={e => setNome(e.target.value)} autoComplete="given-name"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sobrenome</label>
-              <input type="text" value={sobrenome} onChange={(e) => setSobrenome(e.target.value)} autoComplete="family-name"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={sobrenome} onChange={e => setSobrenome(e.target.value)} autoComplete="family-name"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Função</label>
-            <input type="text" value={funcao} onChange={(e) => setFuncao(e.target.value)} autoComplete="organization-title"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+            <input type="text" value={funcao} onChange={e => setFuncao(e.target.value)} autoComplete="organization-title"
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">E-mail</label>
             <input type="email" value={usuario.email} disabled
               className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-100 text-sm text-gray-400 cursor-not-allowed" />
             <p className="text-xs text-gray-400">O e-mail não pode ser alterado aqui.</p>
           </div>
-
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nível de Acesso</label>
             <div className="grid grid-cols-2 gap-3">
@@ -364,14 +624,11 @@ function CardEditarUsuario({
               </button>
             </div>
           </div>
-
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
               Cancelar
             </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Pencil size={15} /> Salvar Alterações</>}
             </button>
           </div>
@@ -382,11 +639,7 @@ function CardEditarUsuario({
 }
 
 // ─── Card Criar Profissional ──────────────────────────────────────────────────
-function CardCriarProfissional({
-  onClose,
-}: {
-  onClose: () => void;
-}) {
+function CardCriarProfissional({ onClose }: { onClose: () => void }) {
   const [nome, setNome]           = useState('');
   const [sobrenome, setSobrenome] = useState('');
   const [funcao, setFuncao]       = useState('');
@@ -400,7 +653,7 @@ function CardCriarProfissional({
       await addProfissional({ nome, sobrenome, funcao, ativo: true });
       toast.success(`Profissional ${nome} cadastrado com sucesso! 🎉`);
       onClose();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao cadastrar profissional.');
     } finally {
       setLoading(false);
@@ -418,34 +671,29 @@ function CardCriarProfissional({
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={20} /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nome</label>
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)} placeholder="João"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition" />
+              <input type="text" value={nome} onChange={e => setNome(e.target.value)} placeholder="João"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sobrenome</label>
-              <input type="text" value={sobrenome} onChange={(e) => setSobrenome(e.target.value)} placeholder="Silva"
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition" />
+              <input type="text" value={sobrenome} onChange={e => setSobrenome(e.target.value)} placeholder="Silva"
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition" />
             </div>
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Função</label>
-            <input type="text" value={funcao} onChange={(e) => setFuncao(e.target.value)} placeholder="Ex: Tosador, Banhista..."
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 focus:border-transparent transition" />
+            <input type="text" value={funcao} onChange={e => setFuncao(e.target.value)} placeholder="Ex: Tosador, Banhista..."
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-orange-400 transition" />
           </div>
-
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
               Cancelar
             </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-orange-500 to-amber-500 hover:from-orange-600 hover:to-amber-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Plus size={15} /> Cadastrar</>}
             </button>
           </div>
@@ -456,13 +704,7 @@ function CardCriarProfissional({
 }
 
 // ─── Card Editar Profissional ─────────────────────────────────────────────────
-function CardEditarProfissional({
-  profissional,
-  onClose,
-}: {
-  profissional: Profissional;
-  onClose: () => void;
-}) {
+function CardEditarProfissional({ profissional, onClose }: { profissional: Profissional; onClose: () => void }) {
   const [nome, setNome]           = useState(profissional.nome);
   const [sobrenome, setSobrenome] = useState(profissional.sobrenome);
   const [funcao, setFuncao]       = useState(profissional.funcao);
@@ -477,7 +719,7 @@ function CardEditarProfissional({
       await updateProfissional(profissional.id, { nome, sobrenome, funcao, ativo });
       toast.success(`Profissional ${nome} atualizado com sucesso!`);
       onClose();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao atualizar profissional.');
     } finally {
       setLoading(false);
@@ -495,28 +737,24 @@ function CardEditarProfissional({
           </div>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition"><X size={20} /></button>
         </div>
-
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nome</label>
-              <input type="text" value={nome} onChange={(e) => setNome(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={nome} onChange={e => setNome(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
             <div className="space-y-1">
               <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Sobrenome</label>
-              <input type="text" value={sobrenome} onChange={(e) => setSobrenome(e.target.value)}
-                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+              <input type="text" value={sobrenome} onChange={e => setSobrenome(e.target.value)}
+                className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
             </div>
           </div>
-
           <div className="space-y-1">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Função</label>
-            <input type="text" value={funcao} onChange={(e) => setFuncao(e.target.value)}
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition" />
+            <input type="text" value={funcao} onChange={e => setFuncao(e.target.value)}
+              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
           </div>
-
-          {/* Toggle Ativo/Inativo */}
           <div className="flex items-center justify-between px-4 py-3 rounded-xl border border-slate-200 bg-slate-50">
             <div>
               <p className="text-sm font-semibold text-gray-700">Status</p>
@@ -524,20 +762,17 @@ function CardEditarProfissional({
             </div>
             <button
               type="button"
-              onClick={() => setAtivo((prev) => !prev)}
+              onClick={() => setAtivo(prev => !prev)}
               className={`relative w-11 h-6 rounded-full transition-colors duration-200 focus:outline-none ${ativo ? 'bg-green-500' : 'bg-slate-300'}`}
             >
               <span className={`absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform duration-200 ${ativo ? 'translate-x-5' : 'translate-x-0'}`} />
             </button>
           </div>
-
           <div className="flex gap-3 pt-2">
-            <button type="button" onClick={onClose}
-              className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
+            <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
               Cancelar
             </button>
-            <button type="submit" disabled={loading}
-              className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
+            <button type="submit" disabled={loading} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-70">
               {loading ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> : <><Pencil size={15} /> Salvar</>}
             </button>
           </div>
@@ -547,7 +782,7 @@ function CardEditarProfissional({
   );
 }
 
-// ─── Seção de Usuários ────────────────────────────────────────────────────────
+// ─── Seção Usuários ───────────────────────────────────────────────────────────
 function SecaoUsuarios() {
   const [usuarios, setUsuarios]   = useState<UsuarioFirestore[]>([]);
   const [loading, setLoading]     = useState(true);
@@ -559,9 +794,8 @@ function SecaoUsuarios() {
     setLoading(true);
     try {
       const snapshot = await getDocs(collection(db, 'usuarios'));
-      const lista = snapshot.docs.map((d) => ({ id: d.id, ...d.data() })) as UsuarioFirestore[];
-      setUsuarios(lista);
-    } catch (err) {
+      setUsuarios(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as UsuarioFirestore[]);
+    } catch {
       toast.error('Erro ao carregar usuários.');
     } finally {
       setLoading(false);
@@ -577,7 +811,7 @@ function SecaoUsuarios() {
       toast.success(`Usuário ${deletando.nome} excluído com sucesso.`);
       setDeletando(null);
       carregarUsuarios();
-    } catch (err) {
+    } catch {
       toast.error('Erro ao excluir usuário.');
     }
   };
@@ -585,7 +819,7 @@ function SecaoUsuarios() {
   return (
     <>
       {showCriar && <CardCriarUsuario onClose={() => setShowCriar(false)} onSuccess={carregarUsuarios} />}
-      {editando && <CardEditarUsuario usuario={editando} onClose={() => setEditando(null)} onSuccess={carregarUsuarios} />}
+      {editando  && <CardEditarUsuario usuario={editando} onClose={() => setEditando(null)} onSuccess={carregarUsuarios} />}
       {deletando && <ModalConfirmDelete usuario={deletando} onConfirm={handleDelete} onCancel={() => setDeletando(null)} />}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
@@ -595,12 +829,10 @@ function SecaoUsuarios() {
             <span className="font-semibold text-gray-800">Usuários do Sistema</span>
             <span className="bg-purple-100 text-purple-600 text-xs font-bold px-2 py-0.5 rounded-full">{usuarios.length}</span>
           </div>
-          <button onClick={() => setShowCriar(true)}
-            className="bg-green-500 hover:bg-green-600 text-white p-1.5 rounded-lg transition shadow-sm hover:shadow-md" title="Criar novo usuário">
+          <button onClick={() => setShowCriar(true)} className="bg-green-500 hover:bg-green-600 text-white p-1.5 rounded-lg transition shadow-sm hover:shadow-md" title="Criar novo usuário">
             <Plus size={18} />
           </button>
         </div>
-
         <div className="divide-y divide-slate-50">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -612,36 +844,30 @@ function SecaoUsuarios() {
               <p className="text-sm font-semibold text-gray-500">Nenhum usuário criado</p>
               <p className="text-xs text-gray-400">Clique no <span className="text-green-500 font-bold">+</span> para adicionar.</p>
             </div>
-          ) : (
-            usuarios.map((u) => (
-              <div key={u.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition">
-                <div className="flex items-center gap-3">
-                  <div className={`p-2 rounded-full ${u.role === 'admin' ? 'bg-purple-100' : 'bg-blue-100'}`}>
-                    {u.role === 'admin' ? <ShieldCheck size={16} className="text-purple-500" /> : <User size={16} className="text-blue-500" />}
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">{u.nome} {u.sobrenome}</p>
-                    <p className="text-xs text-gray-400">{u.funcao} · {u.email}</p>
-                  </div>
+          ) : usuarios.map(u => (
+            <div key={u.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${u.role === 'admin' ? 'bg-purple-100' : 'bg-blue-100'}`}>
+                  {u.role === 'admin' ? <ShieldCheck size={16} className="text-purple-500" /> : <User size={16} className="text-blue-500" />}
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setEditando(u)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition" title="Editar">
-                    <Pencil size={15} />
-                  </button>
-                  <button onClick={() => setDeletando(u)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition" title="Excluir">
-                    <Trash2 size={15} />
-                  </button>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{u.nome} {u.sobrenome}</p>
+                  <p className="text-xs text-gray-400">{u.funcao} · {u.email}</p>
                 </div>
               </div>
-            ))
-          )}
+              <div className="flex items-center gap-1">
+                <button onClick={() => setEditando(u)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition"><Pencil size={15} /></button>
+                <button onClick={() => setDeletando(u)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </>
   );
 }
 
-// ─── Seção de Profissionais ───────────────────────────────────────────────────
+// ─── Seção Profissionais ──────────────────────────────────────────────────────
 function SecaoProfissionais() {
   const [profissionais, setProfissionais] = useState<Profissional[]>([]);
   const [loading, setLoading]             = useState(true);
@@ -651,8 +877,8 @@ function SecaoProfissionais() {
 
   useEffect(() => {
     const unsub = subscribeToProfissionais(
-      (lista) => { setProfissionais(lista); setLoading(false); },
-      ()      => { toast.error('Erro ao carregar profissionais.'); setLoading(false); },
+      lista => { setProfissionais(lista); setLoading(false); },
+      ()    => { toast.error('Erro ao carregar profissionais.'); setLoading(false); },
     );
     return () => unsub();
   }, []);
@@ -663,7 +889,7 @@ function SecaoProfissionais() {
       await deleteProfissional(deletando.id);
       toast.success(`Profissional ${deletando.nome} excluído com sucesso.`);
       setDeletando(null);
-    } catch (err) {
+    } catch {
       toast.error('Erro ao excluir profissional.');
     }
   };
@@ -672,13 +898,7 @@ function SecaoProfissionais() {
     <>
       {showCriar && <CardCriarProfissional onClose={() => setShowCriar(false)} />}
       {editando  && <CardEditarProfissional profissional={editando} onClose={() => setEditando(null)} />}
-      {deletando && (
-        <ModalConfirmDeleteProfissional
-          profissional={deletando}
-          onConfirm={handleDelete}
-          onCancel={() => setDeletando(null)}
-        />
-      )}
+      {deletando && <ModalConfirmDeleteProfissional profissional={deletando} onConfirm={handleDelete} onCancel={() => setDeletando(null)} />}
 
       <div className="bg-white rounded-2xl shadow-sm border border-slate-100 overflow-hidden">
         <div className="flex items-center justify-between px-5 py-4 border-b border-slate-100">
@@ -687,12 +907,10 @@ function SecaoProfissionais() {
             <span className="font-semibold text-gray-800">Profissionais</span>
             <span className="bg-orange-100 text-orange-600 text-xs font-bold px-2 py-0.5 rounded-full">{profissionais.length}</span>
           </div>
-          <button onClick={() => setShowCriar(true)}
-            className="bg-orange-500 hover:bg-orange-600 text-white p-1.5 rounded-lg transition shadow-sm hover:shadow-md" title="Novo profissional">
+          <button onClick={() => setShowCriar(true)} className="bg-orange-500 hover:bg-orange-600 text-white p-1.5 rounded-lg transition shadow-sm hover:shadow-md" title="Novo profissional">
             <Plus size={18} />
           </button>
         </div>
-
         <div className="divide-y divide-slate-50">
           {loading ? (
             <div className="flex items-center justify-center py-12">
@@ -704,108 +922,138 @@ function SecaoProfissionais() {
               <p className="text-sm font-semibold text-gray-500">Nenhum profissional cadastrado</p>
               <p className="text-xs text-gray-400">Clique no <span className="text-orange-500 font-bold">+</span> para adicionar.</p>
             </div>
-          ) : (
-            profissionais.map((p) => (
-              <div key={p.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition">
-                <div className="flex items-center gap-3">
-                  <div className="p-2 rounded-full bg-orange-100">
-                    <Briefcase size={16} className="text-orange-500" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold text-gray-800">{p.nome} {p.sobrenome}</p>
-                    <div className="flex items-center gap-2">
-                      <p className="text-xs text-gray-400">{p.funcao}</p>
-                      <span className={`text-xs font-semibold px-1.5 py-0.5 rounded-full ${p.ativo ? 'bg-green-100 text-green-600' : 'bg-slate-100 text-slate-400'}`}>
-                        {p.ativo ? 'Ativo' : 'Inativo'}
-                      </span>
-                    </div>
-                  </div>
+          ) : profissionais.map(p => (
+            <div key={p.id} className="flex items-center justify-between px-5 py-3.5 hover:bg-slate-50 transition">
+              <div className="flex items-center gap-3">
+                <div className={`p-2 rounded-full ${p.ativo ? 'bg-orange-100' : 'bg-slate-100'}`}>
+                  <Briefcase size={16} className={p.ativo ? 'text-orange-500' : 'text-slate-400'} />
                 </div>
-                <div className="flex items-center gap-1">
-                  <button onClick={() => setEditando(p)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition" title="Editar">
-                    <Pencil size={15} />
-                  </button>
-                  <button onClick={() => setDeletando(p)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition" title="Excluir">
-                    <Trash2 size={15} />
-                  </button>
+                <div>
+                  <p className="text-sm font-semibold text-gray-800">{p.nome} {p.sobrenome}</p>
+                  <p className="text-xs text-gray-400">
+                    {p.funcao}
+                    <span className={`ml-2 text-[10px] font-bold px-1.5 py-0.5 rounded-full ${p.ativo ? 'bg-green-100 text-green-600' : 'bg-slate-200 text-slate-500'}`}>
+                      {p.ativo ? 'Ativo' : 'Inativo'}
+                    </span>
+                  </p>
                 </div>
               </div>
-            ))
-          )}
+              <div className="flex items-center gap-1">
+                <button onClick={() => setEditando(p)} className="p-2 rounded-lg text-slate-400 hover:text-blue-500 hover:bg-blue-50 transition"><Pencil size={15} /></button>
+                <button onClick={() => setDeletando(p)} className="p-2 rounded-lg text-slate-400 hover:text-red-500 hover:bg-red-50 transition"><Trash2 size={15} /></button>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </>
   );
 }
 
-// ─── AdminSidebar Principal ───────────────────────────────────────────────────
-interface AdminSidebarProps {
-  userName: string;
-  userEmail: string;
-  isAdmin: boolean;
+// ─── AdminSidebar — Componente Principal (export default) ─────────────────────
+export default function AdminSidebar({
+  onClose,
+  currentUserRole,
+}: {
   onClose: () => void;
-  onNavigate: (page: 'criar' | 'deletar' | 'editar' | null) => void;
-  activePage: 'criar' | 'deletar' | 'editar' | null;
-}
-
-export function AdminSidebar({ userName, userEmail, onClose }: AdminSidebarProps) {
-  const [activeSection, setActiveSection] = useState<'usuarios' | 'profissionais' | null>(null);
-
-  const toggle = (section: 'usuarios' | 'profissionais') =>
-    setActiveSection((prev) => (prev === section ? null : section));
+  currentUserRole?: 'admin' | 'user';
+}) {
+  const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'relatorios'>('usuarios');
+  const [showRelatorios, setShowRelatorios] = useState(false);
 
   return (
     <>
-      {/* Overlay */}
-      <div className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm" onClick={onClose} />
+      {showRelatorios && <ModalRelatorios onClose={() => setShowRelatorios(false)} />}
 
-      {/* Painel */}
-      <div className="fixed left-0 top-0 h-full w-80 z-50 bg-white shadow-2xl flex flex-col animate-in slide-in-from-left duration-300">
+      <div className="fixed inset-0 z-50 flex">
+        {/* Overlay */}
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
 
-        {/* Header */}
-        <div className="bg-gradient-to-br from-purple-600 to-blue-600 px-6 py-6 flex items-center justify-between">
-          <div>
-            <p className="text-white font-bold text-base">{userName}</p>
-            <p className="text-purple-200 text-xs">{userEmail}</p>
-            <span className="mt-1 inline-flex items-center gap-1 bg-white/20 text-white text-xs font-semibold px-2 py-0.5 rounded-full">
-              <ShieldCheck size={11} /> Administrador
-            </span>
+        {/* Painel lateral direito */}
+        <div className="relative ml-auto w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
+
+          {/* Header */}
+          <div className="bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-5 flex items-center justify-between flex-shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="bg-white/20 p-2 rounded-xl">
+                <ShieldCheck className="w-5 h-5 text-white" />
+              </div>
+              <div>
+                <h2 className="text-white font-bold text-base">Painel Admin</h2>
+                <p className="text-purple-200 text-xs">Elite Pet Shop</p>
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10"
+            >
+              <X size={20} />
+            </button>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white transition p-1">
-            <X size={20} />
-          </button>
-        </div>
 
-        {/* Menu */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-2">
-          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest px-2 mb-3">
-            Gerenciamento
-          </p>
+          {/* Abas */}
+          <div className="flex border-b border-slate-100 bg-slate-50 flex-shrink-0">
+            <button
+              onClick={() => setAbaAtiva('usuarios')}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                abaAtiva === 'usuarios'
+                  ? 'border-purple-500 text-purple-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Users size={14} /> Usuários
+            </button>
+            <button
+              onClick={() => setAbaAtiva('profissionais')}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                abaAtiva === 'profissionais'
+                  ? 'border-orange-500 text-orange-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Briefcase size={14} /> Profissionais
+            </button>
+            <button
+              onClick={() => setAbaAtiva('relatorios')}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                abaAtiva === 'relatorios'
+                  ? 'border-indigo-500 text-indigo-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <FileText size={14} /> Relatórios
+            </button>
+          </div>
 
-          {/* Item: Usuários */}
-          <button onClick={() => toggle('usuarios')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeSection === 'usuarios' ? 'bg-purple-50 text-purple-700' : 'text-gray-600 hover:bg-slate-100'}`}>
-            <div className="flex items-center gap-3"><Users size={18} /> Usuários</div>
-            <ChevronRight size={16} className={`transition-transform duration-200 ${activeSection === 'usuarios' ? 'rotate-90' : ''}`} />
-          </button>
-          {activeSection === 'usuarios' && (
-            <div className="px-1 pt-1"><SecaoUsuarios /></div>
-          )}
+          {/* Conteúdo */}
+          <div className="flex-1 overflow-y-auto p-5 space-y-4">
 
-          {/* Item: Profissionais */}
-          <button onClick={() => toggle('profissionais')}
-            className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-sm font-semibold transition-all ${activeSection === 'profissionais' ? 'bg-orange-50 text-orange-700' : 'text-gray-600 hover:bg-slate-100'}`}>
-            <div className="flex items-center gap-3"><Briefcase size={18} /> Profissionais</div>
-            <ChevronRight size={16} className={`transition-transform duration-200 ${activeSection === 'profissionais' ? 'rotate-90' : ''}`} />
-          </button>
-          {activeSection === 'profissionais' && (
-            <div className="px-1 pt-1"><SecaoProfissionais /></div>
-          )}
-        </div>
+            {abaAtiva === 'usuarios'      && <SecaoUsuarios />}
+            {abaAtiva === 'profissionais' && <SecaoProfissionais />}
+            {abaAtiva === 'relatorios'    && (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
+                  <div className="bg-indigo-100 p-4 rounded-2xl">
+                    <FileText className="w-8 h-8 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-800 text-base">Relatório de Atendimentos</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Gere relatórios em PDF por dia ou período com todos os detalhes dos atendimentos,
+                      incluindo <strong>quem cadastrou</strong>, <strong>quem avisou</strong> e <strong>quem encerrou</strong>.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowRelatorios(true)}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-sm font-bold shadow transition-all flex items-center justify-center gap-2"
+                  >
+                    <Download size={16} /> Gerar Relatório PDF
+                  </button>
+                </div>
+              </div>
+            )}
 
-        {/* Footer */}
-        <div className="px-6 py-4 border-t border-slate-100">
-          <p className="text-xs text-gray-400 text-center">© {new Date().getFullYear()} Studio3D Criativo</p>
+          </div>
         </div>
       </div>
     </>

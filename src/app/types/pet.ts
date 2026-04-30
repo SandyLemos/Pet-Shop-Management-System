@@ -41,6 +41,14 @@ export interface Pet {
   observacoes?: string
   checkInTime: string
   status: SlotStatus
-  avisado?: boolean        // ← NOVO: tutor foi avisado que o pet está pronto
-  avisadoEm?: string       // ← NOVO: timestamp ISO de quando foi avisado
+  avisado?: boolean
+  avisadoEm?: string
+
+  // ✅ Quem cadastrou o pet
+  cadastradoPorId?:   string | null
+  cadastradoPorNome?: string | null
+
+  // ✅ Quem marcou como avisado
+  avisadoPorId?:   string | null
+  avisadoPorNome?: string | null
 }

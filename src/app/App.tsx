@@ -3,7 +3,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
-import { AdminSidebar } from './components/AdminSidebar';
+import AdminSidebar from './components/AdminSidebar';
 import {
   LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
@@ -367,29 +367,30 @@ export default function App() {
   };
 
   // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
-  const handleAssignProfessional = async (
-    petId: string,
-    pB?: string,
-    pT?: string,
-    pE?: string,
-  ) => {
-    const pet = pets.find((p) => p.id === petId);
-    if (!pet) return;
+    const handleAssignProfessional = async (
+      petId: string,
+      pB?: string,
+      pT?: string,
+      pE?: string,
+    ) => {
+      const pet = pets.find((p) => p.id === petId);
+      if (!pet) return;
 
-    const updates: Partial<Pet> = {
-      profissionalBanho:   pB,
-      profissionalTosa:    pT,
-      profissionalEscovar: pE,
-      status: pet.status === 'espera' ? ('banho' as SlotStatus) : pet.status,
-      atendimentoIniciado: true,
+      const updates: Partial<Pet> = {
+        // ✅ Só sobrescreve se vier um valor definido
+        ...(pB !== undefined && { profissionalBanho: pB }),
+        ...(pT !== undefined && { profissionalTosa: pT }),
+        ...(pE !== undefined && { profissionalEscovar: pE }),
+        status: pet.status === 'espera' ? ('banho' as SlotStatus) : pet.status,
+        atendimentoIniciado: true,
+      };
+
+      try {
+        await updatePet(petId, updates);
+      } catch {
+        toast.error('Erro ao atribuir profissional. Tente novamente.');
+      }
     };
-
-    try {
-      await updatePet(petId, updates);
-    } catch {
-      toast.error('Erro ao atribuir profissional. Tente novamente.');
-    }
-  };
 
   // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleMarkServiceComplete = async (
@@ -432,12 +433,8 @@ export default function App() {
       {/* Sidebar Admin */}
       {showAdminSidebar && (
         <AdminSidebar
-          userName={user?.displayName ?? user?.email ?? 'Usuário'}
-          userEmail={user?.email ?? ''}
-          isAdmin={isAdmin}
           onClose={() => setShowAdminSidebar(false)}
-          onNavigate={(page) => setAdminActivePage(page)}
-          activePage={adminActivePage}
+          currentUserRole={isAdmin ? 'admin' : 'user'}
         />
       )}
 

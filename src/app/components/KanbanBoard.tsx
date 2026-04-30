@@ -385,14 +385,15 @@ export function PetCard({
                   onAssignProfessional={onAssignProfessional}
                   onSubmit={(profissional) => {
                     if (pet.status === "espera") {
-                      onAssignProfessional(pet.id, profissional)
+                      onAssignProfessional(pet.id, profissional, undefined, undefined)
                       onUpdateStatus(pet.id, "banho")
                     } else {
-                      const pBanho   = etapaDestino === "banho"   ? profissional : undefined
-                      const pEscovar = etapaDestino === "escovar" ? profissional : undefined
-                      const pTosa    = etapaDestino === "tosa"    ? profissional : undefined
+                      // ✅ CORREÇÃO: preserva os profissionais já atribuídos
+                      const pBanho   = etapaDestino === "banho"   ? profissional : pet.profissionalBanho
+                      const pEscovar = etapaDestino === "escovar" ? profissional : pet.profissionalEscovar
+                      const pTosa    = etapaDestino === "tosa"    ? profissional : pet.profissionalTosa
                       onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
-                      onUpdateStatus(pet.id, etapaDestino as any)
+                      onUpdateStatus(pet.id, etapaDestino as SlotStatus)
                     }
                     setIsProfessionalDialogOpen(false)
                     setEtapaDestino("")
@@ -527,12 +528,13 @@ export function PetCard({
             onAssignProfessional={onAssignProfessional}
             onSubmit={(profissionalEscolhido) => {
               if (pet.status === "espera") {
-                onAssignProfessional(pet.id, profissionalEscolhido)
+                onAssignProfessional(pet.id, profissionalEscolhido, undefined, undefined)
                 onUpdateStatus(pet.id, "banho")
               } else if (etapaDestino) {
-                const pBanho   = etapaDestino === "banho"   ? profissionalEscolhido : undefined
-                const pEscovar = etapaDestino === "escovar" ? profissionalEscolhido : undefined
-                const pTosa    = etapaDestino === "tosa"    ? profissionalEscolhido : undefined
+                // ✅ CORREÇÃO: preserva os profissionais já atribuídos
+                const pBanho   = etapaDestino === "banho"   ? profissionalEscolhido : pet.profissionalBanho
+                const pEscovar = etapaDestino === "escovar" ? profissionalEscolhido : pet.profissionalEscovar
+                const pTosa    = etapaDestino === "tosa"    ? profissionalEscolhido : pet.profissionalTosa
                 onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
                 onUpdateStatus(pet.id, etapaDestino as SlotStatus)
               } else {
