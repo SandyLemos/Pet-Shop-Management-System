@@ -94,10 +94,104 @@ function labelTipo(t: string) {
   return map[t] ?? t;
 }
 
+// ─── Mesclagem de logs (1 linha por pet) ──────────────────────────────────────
+interface LogMesclado {
+  slotNumber: number;
+  nomePet: string;
+  raca: string | null;
+  especie: string | null;
+  porte: string | null;
+  nomeTutor: string;
+  servico: string;
+  statusFinal: string;
+  tipo: string; // tipo do encerramento (entregue/removido/cancelado)
+  profissionalBanho: string | null;
+  profissionalTosa: string | null;
+  profissionalEscovar: string | null;
+  checkInTime: string;
+  avisadoEm?: string;
+  checkOutTime?: string;
+  cadastradoPorNome?: string | null;
+  avisadoPorNome?: string | null;
+  entregueporNome?: string | null;
+  observacoes: string | null;
+}
+
+function mesclarLogs(logs: LogEntry[]): LogMesclado[] {
+  // Agrupa por petId
+  const grupos = new Map<string, LogEntry[]>();
+
+  for (const log of logs) {
+    const chave = log.petId || `${log.nomePet}-${log.slotNumber}`;
+    if (!grupos.has(chave)) grupos.set(chave, []);
+    grupos.get(chave)!.push(log);
+  }
+
+  const resultado: LogMesclado[] = [];
+
+  grupos.forEach((entries) => {
+    const encerrado = entries.find(e =>
+      ['entregue', 'removido', 'cancelado'].includes(e.tipo),
+    );
+    const avisado = entries.find(e => e.tipo === 'avisado');
+
+    // Base: usa o log de encerramento se existir, senão o de aviso
+    const base = encerrado ?? avisado ?? entries[0];
+
+    resultado.push({
+      slotNumber:       base.slotNumber,
+      nomePet:          base.nomePet,
+      raca:             base.raca,
+      especie:          base.especie,
+      porte:            base.porte,
+      nomeTutor:        base.nomeTutor,
+      servico:          base.servico,
+      statusFinal:      base.statusFinal,
+      tipo:             encerrado?.tipo ?? avisado?.tipo ?? base.tipo,
+      profissionalBanho:   base.profissionalBanho,
+      profissionalTosa:    base.profissionalTosa,
+      profissionalEscovar: base.profissionalEscovar,
+      checkInTime:      base.checkInTime,
+      // avisadoEm vem do log de aviso
+      avisadoEm:        avisado?.avisadoEm ?? encerrado?.avisadoEm,
+      checkOutTime:     encerrado?.checkOutTime,
+      // cadastradoPorNome: qualquer um dos logs tem
+      cadastradoPorNome:
+        base.cadastradoPorNome ?? avisado?.cadastradoPorNome ?? encerrado?.cadastradoPorNome ?? null,
+      // avisadoPorNome: vem do log de aviso
+      avisadoPorNome:
+        avisado?.avisadoPorNome  ??
+        avisado?.registradoPorNome ??
+        encerrado?.avisadoPorNome  ??
+        null,
+      // entregue/removido/cancelado por: vem do log de encerramento
+      entregueporNome:
+        encerrado?.encerradoPorNome ?? encerrado?.removidoPorNome ?? null,
+      observacoes: base.observacoes,
+    });
+  });
+
+  // Ordena por checkInTime
+  resultado.sort((a, b) =>
+    new Date(a.checkInTime).getTime() - new Date(b.checkInTime).getTime(),
+  );
+
+  return resultado;
+}
+
 // ─── Gerador de PDF ───────────────────────────────────────────────────────────
 function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
   const pdf = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
   const pageW = pdf.internal.pageSize.getWidth();
+
+  // Mescla os logs em 1 linha por pet
+  const linhas = mesclarLogs(logs);
+
+  // Contadores baseados nas linhas mescladas
+  const totalAtendidos = linhas.filter(l =>
+    ['entregue', 'removido', 'cancelado'].includes(l.tipo),
+  ).length;
+  const totalAvisados = linhas.filter(l => l.tipo === 'avisado').length;
 
   // Cabeçalho
   pdf.setFillColor(88, 28, 135);
@@ -112,14 +206,12 @@ function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
   pdf.text(`Período: ${labelPeriodo}`, pageW / 2, 24, { align: 'center' });
 
   // Resumo
-  const encerrados = logs.filter(l => ['entregue', 'removido', 'cancelado'].includes(l.tipo));
-  const avisados   = logs.filter(l => l.tipo === 'avisado');
   pdf.setTextColor(60, 60, 60);
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
   pdf.text(`Gerado em: ${new Date().toLocaleString('pt-BR')}`, 14, 35);
   pdf.text(
-    `Total de registros: ${logs.length}   |   Atendidos: ${encerrados.length}   |   Avisos: ${avisados.length}`,
+    `Total de registros: ${linhas.length}   |   Atendidos: ${totalAtendidos}   |   Avisos pendentes: ${totalAvisados}`,
     14, 41,
   );
 
@@ -130,18 +222,18 @@ function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
       'Slot', 'Pet', 'Raça', 'Esp.', 'Porte',
       'Tutor', 'Serviço', 'Status', 'Tipo',
       'Prof. Banho', 'Prof. Tosa', 'Prof. Escova',
-      'Check-in', 'Aviso em',
-      'Cadastrado por', 'Avisado por', 'Encerrado por',
+      'Check-in', 'Aviso em', 'Check-out',
+      'Cadastrado por', 'Avisado por', 'Entregue por',
       'Obs.',
     ]],
-    body: logs.map(l => [
+    body: linhas.map(l => [
       l.slotNumber ?? '—',
       l.nomePet    ?? '—',
       l.raca       ?? '—',
-      labelEspecie(l.especie  ?? ''),
-      labelPorte(l.porte      ?? ''),
+      labelEspecie(l.especie ?? ''),
+      labelPorte(l.porte     ?? ''),
       l.nomeTutor  ?? '—',
-      labelServico(l.servico  ?? ''),
+      labelServico(l.servico ?? ''),
       l.statusFinal ?? '—',
       labelTipo(l.tipo),
       l.profissionalBanho   ?? '—',
@@ -149,9 +241,10 @@ function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
       l.profissionalEscovar ?? '—',
       formatTimestamp(l.checkInTime),
       formatTimestamp(l.avisadoEm),
+      formatTimestamp(l.checkOutTime),
       l.cadastradoPorNome ?? '—',
-      l.avisadoPorNome    ?? l.registradoPorNome ?? '—',
-      l.encerradoPorNome  ?? l.removidoPorNome   ?? '—',
+      l.avisadoPorNome    ?? '—',
+      l.entregueporNome   ?? '—',
       l.observacoes || '—',
     ]),
     styles: {
@@ -184,10 +277,11 @@ function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
       11: { cellWidth: 16 },
       12: { cellWidth: 22 },
       13: { cellWidth: 22 },
-      14: { cellWidth: 18 },
+      14: { cellWidth: 22 },
       15: { cellWidth: 18 },
       16: { cellWidth: 18 },
-      17: { cellWidth: 'auto' },
+      17: { cellWidth: 18 },
+      18: { cellWidth: 'auto' },
     },
     margin: { left: 5, right: 5 },
     tableWidth: 'wrap',
@@ -1027,7 +1121,6 @@ export default function AdminSidebar({
 
           {/* Conteúdo */}
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
-
             {abaAtiva === 'usuarios'      && <SecaoUsuarios />}
             {abaAtiva === 'profissionais' && <SecaoProfissionais />}
             {abaAtiva === 'relatorios'    && (
@@ -1039,20 +1132,32 @@ export default function AdminSidebar({
                   <div>
                     <h3 className="font-bold text-gray-800 text-base">Relatório de Atendimentos</h3>
                     <p className="text-xs text-gray-500 mt-1">
-                      Gere relatórios em PDF por dia ou período com todos os detalhes dos atendimentos,
-                      incluindo <strong>quem cadastrou</strong>, <strong>quem avisou</strong> e <strong>quem encerrou</strong>.
+                      Gere relatórios em PDF por dia ou por período. Cada pet aparece em uma única linha com todas as informações consolidadas.
                     </p>
+                  </div>
+                  <div className="w-full grid grid-cols-3 gap-2 text-center">
+                    <div className="bg-white rounded-xl p-3 border border-indigo-100">
+                      <PackageCheck className="w-4 h-4 text-green-500 mx-auto mb-1" />
+                      <p className="text-[10px] text-gray-500 font-medium">Entregues</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-indigo-100">
+                      <PhoneCall className="w-4 h-4 text-blue-500 mx-auto mb-1" />
+                      <p className="text-[10px] text-gray-500 font-medium">Avisados</p>
+                    </div>
+                    <div className="bg-white rounded-xl p-3 border border-indigo-100">
+                      <Download className="w-4 h-4 text-purple-500 mx-auto mb-1" />
+                      <p className="text-[10px] text-gray-500 font-medium">PDF</p>
+                    </div>
                   </div>
                   <button
                     onClick={() => setShowRelatorios(true)}
-                    className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-500 hover:from-indigo-600 hover:to-purple-600 text-white text-sm font-bold shadow transition-all flex items-center justify-center gap-2"
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
                   >
-                    <Download size={16} /> Gerar Relatório PDF
+                    <FileText size={16} /> Gerar Relatório
                   </button>
                 </div>
               </div>
             )}
-
           </div>
         </div>
       </div>
