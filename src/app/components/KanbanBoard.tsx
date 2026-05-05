@@ -14,10 +14,18 @@ import {
   ArrowLeft,
   Trash2,
   RotateCcw,
+  PackageCheck,
 } from "lucide-react"
 import type { Pet, SlotStatus } from '../types/pet';
-import { motion } from 'motion/react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { motion, AnimatePresence } from 'motion/react';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from './ui/dialog';
 import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog"
@@ -75,17 +83,19 @@ export function PetCard({
   allPets,
 }: PetCardProps) {
   const [isProfessionalDialogOpen, setIsProfessionalDialogOpen] = useState(false)
-  const [isEditPetOpen, setIsEditPetOpen] = useState(false)
-  const [isEditProfessionalOpen, setIsEditProfessionalOpen] = useState(false)
-  const [isReversionDialogOpen, setIsReversionDialogOpen] = useState(false)
-  const [etapaDestino, setEtapaDestino] = useState<string>("")
+  const [isEditPetOpen, setIsEditPetOpen]                       = useState(false)
+  const [isEditProfessionalOpen, setIsEditProfessionalOpen]     = useState(false)
+  const [isReversionDialogOpen, setIsReversionDialogOpen]       = useState(false)
+  const [isFinalizarDialogOpen, setIsFinalizarDialogOpen]       = useState(false)
+  const [showSuccessFeedback, setShowSuccessFeedback]           = useState(false) // ← NOVO
+  const [etapaDestino, setEtapaDestino]                         = useState<string>("")
 
   const handleEditClick = (e: React.MouseEvent) => {
     e.stopPropagation()
     const servicoConcluido =
-      (pet.status === "banho" && pet.banhoCompleto) ||
+      (pet.status === "banho"   && pet.banhoCompleto)   ||
       (pet.status === "escovar" && pet.escovarCompleto) ||
-      (pet.status === "tosa" && pet.tosaCompleta)
+      (pet.status === "tosa"    && pet.tosaCompleta)
 
     if (servicoConcluido) {
       alert("Este serviço já foi marcado como completo e não pode mais ser editado.")
@@ -138,21 +148,32 @@ export function PetCard({
 
   const handleMarkAsReady = () => {
     if (isReadyForPickup()) {
-      onUpdateStatus(pet.id, "finalizado")
+      setIsFinalizarDialogOpen(true)
     } else {
       alert("Conclua a escovação antes de finalizar!")
     }
   }
 
-  const temFoto = !!pet.foto
-  const nomeLongo = pet.nomePet && pet.nomePet.length > 12
+  // ── ALTERADO: exibe feedback de sucesso antes do pet sumir ──
+  const handleConfirmarFinalizacao = () => {
+    setIsFinalizarDialogOpen(false)
+    setShowSuccessFeedback(true) // mostra overlay de sucesso
+
+    // aguarda 1.8s para o usuário ver o feedback, depois finaliza
+    setTimeout(() => {
+      onUpdateStatus(pet.id, "finalizado")
+    }, 1800)
+  }
+
+  const temFoto             = !!pet.foto
+  const nomeLongo           = pet.nomePet && pet.nomePet.length > 12
   const usarLayoutExpandido = temFoto || nomeLongo
   const estaProntoParaRetirada = pet.status === "finalizado"
 
   const podeEditar = !(
-    (pet.status === "banho" && pet.banhoCompleto) ||
+    (pet.status === "banho"   && pet.banhoCompleto)   ||
     (pet.status === "escovar" && pet.escovarCompleto) ||
-    (pet.status === "tosa" && pet.tosaCompleta) ||
+    (pet.status === "tosa"    && pet.tosaCompleta)    ||
     estaProntoParaRetirada
   )
 
@@ -163,9 +184,9 @@ export function PetCard({
   }
 
   const handleQuickEditProfessional = (novoProfissional: string) => {
-    let pBanho = pet.profissionalBanho
+    let pBanho   = pet.profissionalBanho
     let pEscovar = pet.profissionalEscovar
-    let pTosa = pet.profissionalTosa
+    let pTosa    = pet.profissionalTosa
 
     switch (pet.status) {
       case "banho":   pBanho   = novoProfissional; break
@@ -179,7 +200,37 @@ export function PetCard({
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
-      <Card className="mb-3 relative">
+      <Card className={`mb-3 relative overflow-hidden ${estaProntoParaRetirada ? 'border-green-300 shadow-green-100 shadow-md' : ''}`}>
+
+        {/* ── NOVO: Overlay de sucesso animado ── */}
+        <AnimatePresence>
+          {showSuccessFeedback && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.25 }}
+              className="absolute inset-0 z-50 bg-green-500 flex flex-col items-center justify-center gap-3 rounded-lg"
+            >
+              <motion.div
+                initial={{ scale: 0 }}
+                animate={{ scale: 1 }}
+                transition={{ type: "spring", stiffness: 260, damping: 18, delay: 0.1 }}
+              >
+                <CheckCircle2 className="w-14 h-14 text-white drop-shadow" />
+              </motion.div>
+              <div className="text-center px-4">
+                <p className="text-white font-bold text-base leading-tight">
+                  {pet.nomePet} está pronto!
+                </p>
+                <p className="text-green-100 text-xs mt-1">
+                  Disponibilizado para retirada 🐾
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {usarLayoutExpandido ? (
           <CardHeader className="pb-3">
             <div className="absolute -top-2 -right-2 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-10 h-10 flex items-center justify-center font-bold shadow-lg z-10">
@@ -374,7 +425,41 @@ export function PetCard({
           )}
 
           <div className="pt-2 space-y-2">
-            {/* Modal de seleção de profissional */}
+
+            {/* ── Modal de confirmação de finalização ── */}
+            <Dialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
+              <DialogContent className="max-w-sm">
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2 text-green-700">
+                    <PackageCheck className="w-5 h-5" />
+                    Disponibilizar para Retirada
+                  </DialogTitle>
+                  <DialogDescription className="pt-1">
+                    Tem certeza que deseja finalizar o serviço de{' '}
+                    <strong className="text-gray-800">{pet.nomePet}</strong> e
+                    disponibilizá-lo para retirada pelo tutor?
+                  </DialogDescription>
+                </DialogHeader>
+                <DialogFooter className="flex gap-2 pt-2 sm:gap-2">
+                  <Button
+                    variant="outline"
+                    className="flex-1"
+                    onClick={() => setIsFinalizarDialogOpen(false)}
+                  >
+                    Cancelar
+                  </Button>
+                  <Button
+                    className="flex-1 bg-green-500 hover:bg-green-600 text-white"
+                    onClick={handleConfirmarFinalizacao}
+                  >
+                    <PackageCheck className="w-4 h-4 mr-2" />
+                    Sim, Disponibilizar
+                  </Button>
+                </DialogFooter>
+              </DialogContent>
+            </Dialog>
+
+            {/* ── Modal de seleção de profissional ── */}
             <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -388,7 +473,6 @@ export function PetCard({
                       onAssignProfessional(pet.id, profissional, undefined, undefined)
                       onUpdateStatus(pet.id, "banho")
                     } else {
-                      // ✅ CORREÇÃO: preserva os profissionais já atribuídos
                       const pBanho   = etapaDestino === "banho"   ? profissional : pet.profissionalBanho
                       const pEscovar = etapaDestino === "escovar" ? profissional : pet.profissionalEscovar
                       const pTosa    = etapaDestino === "tosa"    ? profissional : pet.profissionalTosa
@@ -406,7 +490,7 @@ export function PetCard({
               </DialogContent>
             </Dialog>
 
-            {/* Botões por status */}
+            {/* ── Botões por status ── */}
             {pet.status === "espera" && (
               <Button className="w-full bg-blue-500 hover:bg-blue-600" onClick={(e) => prepararAvanco(e, "banho")}>
                 <Droplet className="w-4 h-4 mr-2" /> Iniciar Atendimento
@@ -448,8 +532,8 @@ export function PetCard({
                     <Scissors className="w-4 h-4 mr-2" /> Avançar para Tosa
                   </Button>
                 ) : (
-                  <Button onClick={handleMarkAsReady} className="w-full bg-green-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Enviar para Retirada
+                  <Button onClick={handleMarkAsReady} className="w-full bg-green-500 hover:bg-green-600">
+                    <PackageCheck className="w-4 h-4 mr-2" /> Disponibilizar para Retirada
                   </Button>
                 )}
                 <Button onClick={handlePreviousStatus} variant="outline" className="w-full">
@@ -465,8 +549,8 @@ export function PetCard({
                     <CheckCircle2 className="w-4 h-4 mr-2" /> Marcar Tosa Completa
                   </Button>
                 ) : (
-                  <Button onClick={handleMarkAsReady} className="w-full bg-green-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2" /> Enviar para Retirada
+                  <Button onClick={handleMarkAsReady} className="w-full bg-green-500 hover:bg-green-600">
+                    <PackageCheck className="w-4 h-4 mr-2" /> Disponibilizar para Retirada
                   </Button>
                 )}
                 <Button onClick={handlePreviousStatus} variant="outline" className="w-full">
@@ -476,10 +560,22 @@ export function PetCard({
             )}
 
             {pet.status === "finalizado" && (
-              <Button onClick={() => onCheckout(pet.id)} className="w-full bg-green-600">
-                <CheckCircle2 className="w-4 h-4 mr-2" /> Retirar Pet
-              </Button>
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-3 py-2">
+                  <PackageCheck className="w-4 h-4 text-green-600 flex-shrink-0" />
+                  <p className="text-xs font-semibold text-green-700">
+                    Serviço finalizado — aguardando retirada
+                  </p>
+                </div>
+                <Button
+                  onClick={() => onCheckout(pet.id)}
+                  className="w-full bg-green-600 hover:bg-green-700 text-white"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" /> Retirar Pet
+                </Button>
+              </div>
             )}
+
           </div>
         </CardContent>
       </Card>
@@ -531,7 +627,6 @@ export function PetCard({
                 onAssignProfessional(pet.id, profissionalEscolhido, undefined, undefined)
                 onUpdateStatus(pet.id, "banho")
               } else if (etapaDestino) {
-                // ✅ CORREÇÃO: preserva os profissionais já atribuídos
                 const pBanho   = etapaDestino === "banho"   ? profissionalEscolhido : pet.profissionalBanho
                 const pEscovar = etapaDestino === "escovar" ? profissionalEscolhido : pet.profissionalEscovar
                 const pTosa    = etapaDestino === "tosa"    ? profissionalEscolhido : pet.profissionalTosa
