@@ -49,6 +49,13 @@ interface KanbanBoardProps {
     petId: string,
     serviceType: "banho" | "escovar" | "tosa",
   ) => void
+  // ✅ NOVO: avanço de etapa atômico (status + profissional + problemas em 1 write)
+  onAdvanceStage: (
+    petId: string,
+    newStatus: SlotStatus,
+    profissionais: { pB?: string; pT?: string; pE?: string },
+    problemasField?: { campo: string; delta: string[] },
+  ) => void
 }
 
 interface PetCardProps {
@@ -68,6 +75,12 @@ interface PetCardProps {
     petId: string,
     serviceType: "banho" | "escovar" | "tosa",
   ) => void
+  onAdvanceStage: (
+    petId: string,
+    newStatus: SlotStatus,
+    profissionais: { pB?: string; pT?: string; pE?: string },
+    problemasField?: { campo: string; delta: string[] },
+  ) => void
   allPets: Pet[]
 }
 
@@ -80,6 +93,7 @@ export function PetCard({
   onDeletePet,
   onAssignProfessional,
   onMarkServiceComplete,
+  onAdvanceStage,
   allPets,
 }: PetCardProps) {
   const [isProfessionalDialogOpen, setIsProfessionalDialogOpen] = useState(false)
@@ -87,7 +101,7 @@ export function PetCard({
   const [isEditProfessionalOpen, setIsEditProfessionalOpen]     = useState(false)
   const [isReversionDialogOpen, setIsReversionDialogOpen]       = useState(false)
   const [isFinalizarDialogOpen, setIsFinalizarDialogOpen]       = useState(false)
-  const [showSuccessFeedback, setShowSuccessFeedback]           = useState(false) // ← NOVO
+  const [showSuccessFeedback, setShowSuccessFeedback]           = useState(false)
   const [etapaDestino, setEtapaDestino]                         = useState<string>("")
 
   const handleEditClick = (e: React.MouseEvent) => {
@@ -154,12 +168,11 @@ export function PetCard({
     }
   }
 
-  // ── ALTERADO: exibe feedback de sucesso antes do pet sumir ──
+  // ── Exibe feedback de sucesso antes do pet sumir ──
   const handleConfirmarFinalizacao = () => {
     setIsFinalizarDialogOpen(false)
-    setShowSuccessFeedback(true) // mostra overlay de sucesso
+    setShowSuccessFeedback(true)
 
-    // aguarda 1.8s para o usuário ver o feedback, depois finaliza
     setTimeout(() => {
       onUpdateStatus(pet.id, "finalizado")
     }, 1800)
@@ -198,11 +211,42 @@ export function PetCard({
     onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
   }
 
+  // ── Calcula APENAS o delta da etapa (não escreve no banco) ──
+  // O selector devolve o array acumulado (banho ∪ escovar ∪ tosa).
+  // Aqui removemos o que já pertence às etapas anteriores, devolvendo
+  // { campo, delta } para ser gravado dentro do write atômico.
+  const calcularDeltaProblemas = (etapa: string, problemasAcumulados: string[]) => {
+    const campo =
+      etapa === "banho"   ? "problemasSaudeBanho"   :
+      etapa === "escovar" ? "problemasSaudeEscovar" :
+      etapa === "tosa"    ? "problemasSaudeTosa"    : null
+
+    if (!campo) return undefined
+
+    const anteriores: string[] =
+      etapa === "escovar"
+        ? (pet.problemasSaudeBanho ?? [])
+        : etapa === "tosa"
+          ? [...(pet.problemasSaudeBanho ?? []), ...(pet.problemasSaudeEscovar ?? [])]
+          : []
+
+    const setAnteriores = new Set(anteriores)
+    const delta = problemasAcumulados.filter((id) => !setAnteriores.has(id))
+    return { campo, delta }
+  }
+
+  // ── Para edição rápida (sem avançar etapa): grava só o delta da etapa ──
+  const salvarProblemasSaude = (etapa: string, problemasAcumulados: string[]) => {
+    const resultado = calcularDeltaProblemas(etapa, problemasAcumulados)
+    if (!resultado) return
+    onEditPet(pet.id, { [resultado.campo]: resultado.delta } as Partial<Pet>)
+  }
+
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Card className={`mb-3 relative overflow-hidden ${estaProntoParaRetirada ? 'border-green-300 shadow-green-100 shadow-md' : ''}`}>
 
-        {/* ── NOVO: Overlay de sucesso animado ── */}
+        {/* ── Overlay de sucesso animado ── */}
         <AnimatePresence>
           {showSuccessFeedback && (
             <motion.div
@@ -459,30 +503,52 @@ export function PetCard({
               </DialogContent>
             </Dialog>
 
-            {/* ── Modal de seleção de profissional ── */}
+            {/* ── Modal de seleção de profissional (avanço de etapa) ── */}
             <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
               <DialogContent>
                 <DialogHeader>
                   <DialogTitle>Selecionar Profissional</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Escolha o profissional responsável e marque os problemas de saúde do pet.
+                  </DialogDescription>
                 </DialogHeader>
                 <ProfessionalSelector
-                  pet={{ ...pet, proximaEtapa: etapaDestino }}
+                  pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
+                  onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
                   onAssignProfessional={onAssignProfessional}
-                  onSubmit={(profissional) => {
+                  onSubmit={(profissionalEscolhido, problemasSaude) => {
+                    // etapa de referência: destino se existir, senão status atual
+                    const etapaRef = etapaDestino || (pet.status === "espera" ? "banho" : pet.status)
+                    const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
+
                     if (pet.status === "espera") {
-                      onAssignProfessional(pet.id, profissional, undefined, undefined)
-                      onUpdateStatus(pet.id, "banho")
+                      // espera → banho (write atômico)
+                      onAdvanceStage(
+                        pet.id,
+                        "banho",
+                        { pB: profissionalEscolhido },
+                        problemasField,
+                      )
+                    } else if (etapaDestino) {
+                      // avanço normal entre etapas (write atômico)
+                      // undefined preserva profissionais que não mudam
+                      const profissionais = {
+                        pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
+                        pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
+                        pT: etapaDestino === "tosa"    ? profissionalEscolhido : undefined,
+                      }
+                      onAdvanceStage(
+                        pet.id,
+                        etapaDestino as SlotStatus,
+                        profissionais,
+                        problemasField,
+                      )
                     } else {
-                      const pBanho   = etapaDestino === "banho"   ? profissional : pet.profissionalBanho
-                      const pEscovar = etapaDestino === "escovar" ? profissional : pet.profissionalEscovar
-                      const pTosa    = etapaDestino === "tosa"    ? profissional : pet.profissionalTosa
-                      onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
-                      onUpdateStatus(pet.id, etapaDestino as SlotStatus)
+                      // fallback: edição rápida sem mudar etapa
+                      handleQuickEditProfessional(profissionalEscolhido)
+                      salvarProblemasSaude(etapaRef, problemasSaude)
                     }
-                    setIsProfessionalDialogOpen(false)
-                    setEtapaDestino("")
-                  }}
-                  onCancel={() => {
+
                     setIsProfessionalDialogOpen(false)
                     setEtapaDestino("")
                   }}
@@ -595,6 +661,9 @@ export function PetCard({
         <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Editar Perfil do Pet</DialogTitle>
+            <DialogDescription className="sr-only">
+              Edite as informações cadastrais do pet.
+            </DialogDescription>
           </DialogHeader>
           <PetRegistration
             isEditing={true}
@@ -607,7 +676,7 @@ export function PetCard({
         </DialogContent>
       </Dialog>
 
-      {/* Modal 2: Editar profissional */}
+      {/* Modal 2: Editar profissional (edição rápida — sem avançar etapa) */}
       <Dialog open={isEditProfessionalOpen} onOpenChange={setIsEditProfessionalOpen}>
         <DialogContent>
           <DialogHeader>
@@ -617,26 +686,32 @@ export function PetCard({
               {pet.status === "escovar" && "Alterar Responsável pela Escovação"}
               {pet.status === "tosa"    && "Alterar Tosador"}
             </DialogTitle>
+            <DialogDescription className="sr-only">
+              Altere o profissional responsável por esta etapa.
+            </DialogDescription>
           </DialogHeader>
           <ProfessionalSelector
-            pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
-            onCancel={() => { setIsEditProfessionalOpen(false); setEtapaDestino("") }}
+            pet={{ ...pet, proximaEtapa: pet.status }}
+            onCancel={() => setIsEditProfessionalOpen(false)}
             onAssignProfessional={onAssignProfessional}
-            onSubmit={(profissionalEscolhido) => {
+            onSubmit={(profissionalEscolhido, problemasSaude) => {
+              // Edição rápida: mantém status, só altera profissional + problemas da etapa atual
+              const etapaRef = pet.status === "espera" ? "banho" : pet.status
+
               if (pet.status === "espera") {
-                onAssignProfessional(pet.id, profissionalEscolhido, undefined, undefined)
-                onUpdateStatus(pet.id, "banho")
-              } else if (etapaDestino) {
-                const pBanho   = etapaDestino === "banho"   ? profissionalEscolhido : pet.profissionalBanho
-                const pEscovar = etapaDestino === "escovar" ? profissionalEscolhido : pet.profissionalEscovar
-                const pTosa    = etapaDestino === "tosa"    ? profissionalEscolhido : pet.profissionalTosa
-                onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
-                onUpdateStatus(pet.id, etapaDestino as SlotStatus)
+                // espera → banho (write atômico)
+                onAdvanceStage(
+                  pet.id,
+                  "banho",
+                  { pB: profissionalEscolhido },
+                  calcularDeltaProblemas("banho", problemasSaude),
+                )
               } else {
                 handleQuickEditProfessional(profissionalEscolhido)
+                salvarProblemasSaude(etapaRef, problemasSaude)
               }
+
               setIsEditProfessionalOpen(false)
-              setEtapaDestino("")
             }}
           />
         </DialogContent>
@@ -666,6 +741,12 @@ interface KanbanColumnProps {
     profissionalEscovar?: string,
   ) => void
   onMarkServiceComplete: (petId: string, serviceType: "banho" | "escovar" | "tosa") => void
+  onAdvanceStage: (
+    petId: string,
+    newStatus: SlotStatus,
+    profissionais: { pB?: string; pT?: string; pE?: string },
+    problemasField?: { campo: string; delta: string[] },
+  ) => void
   color: string
   onAddPet?: (pet: Omit<Pet, "id" | "checkInTime">) => void
   allPets?: Pet[]
@@ -683,6 +764,7 @@ function KanbanColumn({
   onDeletePet,
   onAssignProfessional,
   onMarkServiceComplete,
+  onAdvanceStage,
   color,
   onAddPet,
   allPets = [],
@@ -736,6 +818,7 @@ function KanbanColumn({
             onDeletePet={onDeletePet}
             onAssignProfessional={onAssignProfessional}
             onMarkServiceComplete={onMarkServiceComplete}
+            onAdvanceStage={onAdvanceStage}
             allPets={allPets}
           />
         ))}
@@ -790,6 +873,7 @@ export function KanbanBoard({
   onDeletePet,
   onAssignProfessional,
   onMarkServiceComplete,
+  onAdvanceStage,
 }: KanbanBoardProps) {
   return (
     <div className="flex gap-6">
@@ -808,6 +892,7 @@ export function KanbanBoard({
             onDeletePet={onDeletePet}
             onAssignProfessional={onAssignProfessional}
             onMarkServiceComplete={onMarkServiceComplete}
+            onAdvanceStage={onAdvanceStage}
             color="bg-amber-400"
             onAddPet={onAddPet}
             allPets={pets}
@@ -824,6 +909,7 @@ export function KanbanBoard({
             onDeletePet={onDeletePet}
             onAssignProfessional={onAssignProfessional}
             onMarkServiceComplete={onMarkServiceComplete}
+            onAdvanceStage={onAdvanceStage}
             color="bg-sky-400"
             allPets={pets}
           />
@@ -839,6 +925,7 @@ export function KanbanBoard({
             onDeletePet={onDeletePet}
             onAssignProfessional={onAssignProfessional}
             onMarkServiceComplete={onMarkServiceComplete}
+            onAdvanceStage={onAdvanceStage}
             color="bg-sky-400"
             allPets={pets}
           />
@@ -854,6 +941,7 @@ export function KanbanBoard({
             onDeletePet={onDeletePet}
             onAssignProfessional={onAssignProfessional}
             onMarkServiceComplete={onMarkServiceComplete}
+            onAdvanceStage={onAdvanceStage}
             color="bg-sky-400"
             allPets={pets}
           />

@@ -391,7 +391,41 @@ export default function App() {
         toast.error('Erro ao atribuir profissional. Tente novamente.');
       }
     };
+  
+  // ✅ Avanço de etapa ATÔMICO — consolida status + profissional + problemas de saúde
+  // em um ÚNICO updateDoc, eliminando a race condition de writes paralelos.
+  const handleAdvanceStage = async (
+    petId: string,
+    newStatus: SlotStatus,
+    profissionais: { pB?: string; pT?: string; pE?: string },
+    problemasField?: { campo: string; delta: string[] },
+  ) => {
+    const updates: Partial<Pet> = {
+      status: newStatus,
+      atendimentoIniciado: true,
+      // ✅ Só sobrescreve profissional se vier valor definido
+      ...(profissionais.pB !== undefined && { profissionalBanho: profissionais.pB }),
+      ...(profissionais.pT !== undefined && { profissionalTosa: profissionais.pT }),
+      ...(profissionais.pE !== undefined && { profissionalEscovar: profissionais.pE }),
+    };
 
+    // ✅ Reset de flags conforme a etapa de destino
+    if (newStatus === 'banho')   { updates.banhoCompleto = false; updates.escovarCompleto = false; }
+    if (newStatus === 'escovar') { updates.escovarCompleto = false; updates.tosaCompleta = false; }
+    if (newStatus === 'tosa')    { updates.tosaCompleta = false; }
+
+    // ✅ Delta dos problemas de saúde (apenas o que é da etapa)
+    if (problemasField) {
+      (updates as any)[problemasField.campo] = problemasField.delta;
+    }
+
+    try {
+      await updatePet(petId, updates);
+    } catch {
+      toast.error('Erro ao avançar etapa. Tente novamente.');
+    }
+  };
+  
   // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleMarkServiceComplete = async (
     petId: string,
@@ -524,6 +558,7 @@ export default function App() {
               onAssignProfessional={handleAssignProfessional}
               onMarkServiceComplete={handleMarkServiceComplete}
               onRevertService={handleRevertService}
+              onAdvanceStage={handleAdvanceStage}
             />
           </TabsContent>
         </Tabs>

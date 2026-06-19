@@ -244,6 +244,10 @@ export async function encerrarPet(
     historicoReversoes:  pet.historicoReversoes  ?? [],
     avisado:             pet.avisado             ?? false,
     avisadoEm:           pet.avisadoEm           ?? null,
+    // ✅ NOVO: problemas de saúde detectados em cada etapa
+    problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
+    problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
+    problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
   });
 
   // 2️⃣ Deleta o pet da fila ativa
@@ -301,6 +305,10 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     profissionalEscovar: pet.profissionalEscovar ?? null,
     observacoes:         pet.observacoes         ?? null,
     historicoReversoes:  pet.historicoReversoes  ?? [],
+    // ✅ NOVO: problemas de saúde detectados em cada etapa
+    problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
+    problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
+    problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
   });
 
   // 2️⃣ Atualiza o pet — salva quem avisou direto no documento do pet
@@ -344,6 +352,10 @@ export interface LogEntry {
   observacoes: string | null;
   historicoReversoes: any[];
   avisado?: boolean;
+  // ✅ NOVO: problemas de saúde
+  problemasSaudeBanho?:   string[];
+  problemasSaudeEscovar?: string[];
+  problemasSaudeTosa?:    string[];
 }
 
 // ─── Conversor Firestore → LogEntry ──────────────────────────────────────────
@@ -385,6 +397,10 @@ function logFromFirestore(id: string, data: any): LogEntry {
     observacoes:         data.observacoes         ?? null,
     historicoReversoes:  data.historicoReversoes  ?? [],
     avisado:             data.avisado             ?? false,
+    // ✅ NOVO: problemas de saúde
+    problemasSaudeBanho:   data.problemasSaudeBanho   ?? [],
+    problemasSaudeEscovar: data.problemasSaudeEscovar ?? [],
+    problemasSaudeTosa:    data.problemasSaudeTosa    ?? [],
   };
 }
 

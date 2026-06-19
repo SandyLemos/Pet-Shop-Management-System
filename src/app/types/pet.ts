@@ -51,4 +51,9 @@ export interface Pet {
   // ✅ Quem marcou como avisado
   avisadoPorId?:   string | null
   avisadoPorNome?: string | null
+
+  // ── NOVO: Problemas de saúde registrados por etapa ──
+  problemasSaudeBanho?: string[];
+  problemasSaudeEscovar?: string[];
+  problemasSaudeTosa?: string[];
 }

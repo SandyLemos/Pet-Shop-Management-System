@@ -5,6 +5,9 @@ import { ChevronDown, Briefcase, Loader2 } from 'lucide-react';
 import { subscribeToProfissionais } from '../../services/petService';
 import type { Profissional, Pet } from '../types/pet';
 import { Button } from './ui/button';
+import { HealthIssuesSelector } from './HealthIssuesSelector';
+import { NO_ISSUES_ID } from '../constants/healthIssues';
+
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
 
@@ -24,7 +27,8 @@ interface ProfissionalSelectorSimpleProps {
 /** Modo modal: usado dentro de Dialog no KanbanBoard */
 interface ProfissionalSelectorModalProps {
   pet: Pet & { proximaEtapa: string };
-  onSubmit: (profissionalNome: string) => void;
+  // ── ALTERADO: agora também devolve os problemas de saúde ──
+  onSubmit: (profissionalNome: string, problemasSaude: string[]) => void;
   onCancel: () => void;
   onAssignProfessional: (
     petId: string,
@@ -32,7 +36,6 @@ interface ProfissionalSelectorModalProps {
     profissionalTosa?: string,
     profissionalEscovar?: string,
   ) => void;
-  // props do modo simples NÃO presentes
   etapa?: undefined;
   value?: undefined;
   onChange?: undefined;
@@ -54,6 +57,49 @@ const ETAPA_LABEL: Record<string, string> = {
   hidratacao: 'Responsável pela Hidratação',
 };
 
+// ── Lógica de herança de problemas (pura e testável) ──────────────────────────
+
+interface ProblemasPorEtapa {
+  banho: string[];
+  escovar: string[];
+  tosa: string[];
+}
+
+/**
+ * Retorna os problemas de saúde de uma etapa (Opção B: acumula com herança).
+ *
+ * - banho   → apenas os do banho
+ * - escovar → banho ∪ escovar (sem duplicados)
+ * - tosa    → banho ∪ escovar ∪ tosa (sem duplicados)
+ *
+ * Ordem de acúmulo: banho → escovar → tosa
+ */
+export function getProblemasHerdados(
+  etapa: string,
+  { banho, escovar, tosa }: ProblemasPorEtapa,
+): string[] {
+  // Helper: une arrays removendo duplicados, preservando ordem de inserção
+  const merge = (...arrays: string[][]): string[] =>
+    Array.from(new Set(arrays.flat()));
+
+  switch (etapa) {
+    case 'banho':
+      return merge(banho);
+
+    case 'escovar':
+      // acumula: banho + escovar
+      return merge(banho, escovar);
+
+    case 'tosa':
+      // acumula: banho + escovar + tosa
+      return merge(banho, escovar, tosa);
+
+    default:
+      // etapas sem herança (higienica, ozonio, hidratacao)
+      return [];
+  }
+}
+
 // ── Componente ────────────────────────────────────────────────────────────────
 
 export function ProfessionalSelector(props: ProfissionalSelectorProps) {
@@ -62,7 +108,53 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
   const [open, setOpen]                   = useState(false);
   const [selecionadoNome, setSelecionadoNome] = useState<string>('');
   const [selecionadoId, setSelecionadoId]     = useState<string>('');
+  const [problemasSaude, setProblemasSaude]   = useState<string[]>([]);
   const ref = useRef<HTMLDivElement>(null);
+
+  // ── NOVO: flag de "usuário já interagiu manualmente com os problemas" ──
+  // Evita que o useEffect (re)hidrate e sobrescreva o que o usuário marcou,
+  // especialmente quando os dados do Firestore chegam atrasados.
+  const userTouchedRef = useRef(false);
+
+  // ── Detecta modo de uso (antes dos effects, resolve ts2448/ts2454) ──
+  const isModalMode = props.pet !== undefined;
+
+  // ── petKey: chave estável que muda apenas quando o conteúdo relevante muda ──
+  const petKey = isModalMode
+    ? JSON.stringify({
+        etapa:   props.pet.proximaEtapa || props.pet.status,
+        banho:   props.pet.problemasSaudeBanho   ?? [],
+        escovar: props.pet.problemasSaudeEscovar ?? [],
+        tosa:    props.pet.problemasSaudeTosa    ?? [],
+      })
+    : '';
+
+  // ── NOVO: reseta a flag de "tocado" apenas quando troca de PET ──
+  // (trocar de etapa do mesmo pet NÃO reseta — a rehidratação por petKey cuida disso)
+  const petId = isModalMode ? props.pet.id : undefined;
+  useEffect(() => {
+    userTouchedRef.current = false;
+  }, [petId]);
+
+  // ── Pré-carrega problemas: acumula etapa atual + anteriores (Opção B) ──
+  useEffect(() => {
+    if (!isModalMode) return;
+
+    // Se o usuário já mexeu manualmente, NÃO sobrescreve a seleção dele
+    if (userTouchedRef.current) return;
+
+    const etapa = props.pet.proximaEtapa || props.pet.status;
+
+    const existentes = getProblemasHerdados(etapa, {
+      banho:   props.pet.problemasSaudeBanho   ?? [],
+      escovar: props.pet.problemasSaudeEscovar ?? [],
+      tosa:    props.pet.problemasSaudeTosa    ?? [],
+    });
+
+    setProblemasSaude(existentes);
+    // ✅ depende só de petKey — estável e sem ruído de referência
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [petKey]);
 
   // ── Carrega profissionais ativos do Firestore em tempo real ────────────────
   useEffect(() => {
@@ -87,8 +179,11 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // ── Detecta modo de uso ────────────────────────────────────────────────────
-  const isModalMode = props.pet !== undefined;
+  // ── NOVO: handler que marca o "toque" do usuário antes de atualizar ──
+  const handleProblemasChange = (novos: string[]) => {
+    userTouchedRef.current = true;
+    setProblemasSaude(novos);
+  };
 
   // Modo simples: valor controlado externamente
   const valueSimple   = !isModalMode ? props.value   : undefined;
@@ -127,6 +222,10 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
 
   // ── Valor atual para highlight ─────────────────────────────────────────────
   const currentId = isModalMode ? selecionadoId : (valueSimple ?? '');
+
+  // ── Obrigatório marcar ao menos 1 item (pode ser "Nenhuma") ──
+  const problemasSaudeValido = problemasSaude.length > 0;
+  const podeConfirmar = !!selecionadoNome && problemasSaudeValido;
 
   // ── Render ─────────────────────────────────────────────────────────────────
   return (
@@ -227,28 +326,43 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
         )}
       </div>
 
-      {/* Botões de ação — apenas no modo modal */}
+      {/* ── Seletor de problemas de saúde + Botões — apenas no modo modal ── */}
       {isModalMode && (
-        <div className="flex gap-2 pt-2">
-          <Button
-            variant="outline"
-            className="flex-1"
-            onClick={props.onCancel}
-          >
-            Cancelar
-          </Button>
-          <Button
-            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-            disabled={!selecionadoNome}
-            onClick={() => {
-              if (selecionadoNome) {
-                props.onSubmit(selecionadoNome);
-              }
-            }}
-          >
-            Confirmar
-          </Button>
-        </div>
+        <>
+          {/* ── Problemas de saúde (obrigatório) ── */}
+          <div className="pt-2 border-t border-slate-100">
+            <HealthIssuesSelector
+              selectedIds={problemasSaude}
+              onChange={handleProblemasChange}
+            />
+            {!problemasSaudeValido && (
+              <p className="text-xs text-red-500 mt-2">
+                Selecione ao menos um item (marque "Nenhuma" se não houver problemas).
+              </p>
+            )}
+          </div>
+
+          <div className="flex gap-2 pt-2">
+            <Button
+              variant="outline"
+              className="flex-1"
+              onClick={props.onCancel}
+            >
+              Cancelar
+            </Button>
+            <Button
+              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+              disabled={!podeConfirmar}
+              onClick={() => {
+                if (podeConfirmar) {
+                  props.onSubmit(selecionadoNome, problemasSaude);
+                }
+              }}
+            >
+              Confirmar
+            </Button>
+          </div>
+        </>
       )}
     </div>
   );
