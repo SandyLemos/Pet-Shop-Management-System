@@ -1,5 +1,12 @@
 import { useState, useMemo, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from './ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription, // 🔧 adicionado
+} from './ui/dialog';
 import { Badge } from './ui/badge';
 import {
   Dog, Clock, Droplet, Wind, Scissors,
@@ -28,6 +35,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
+  // 🆕 estados do modal de EDIÇÃO
+  const [petParaEditar, setPetParaEditar] = useState<Pet | null>(null);
+  const [isEditOpen, setIsEditOpen] = useState(false);
+
   const totalSlots      = 100;
   const SLOTS_PER_BATCH = 10;
   const MIN_VISIBLE_SLOTS = 10;
@@ -45,13 +56,13 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   }, [freeSlotsInVisibleRange, visibleSlots, totalSlots]);
 
   useEffect(() => {
-  if (selectedPet) {
-    const petAtualizado = pets.find((p) => p.id === selectedPet.id)
-    if (petAtualizado) {
-      setSelectedPet(petAtualizado) // ✅ sincroniza com o Firestore em tempo real
+    if (selectedPet) {
+      const petAtualizado = pets.find((p) => p.id === selectedPet.id);
+      if (petAtualizado) {
+        setSelectedPet(petAtualizado); // ✅ sincroniza com o Firestore em tempo real
+      }
     }
-  }
-  }, [pets, selectedPet?.id])
+  }, [pets, selectedPet?.id]);
 
   // ── helpers de slot ──────────────────────────────────────────────────────────
 
@@ -61,9 +72,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     return { status: pet.status, pet };
   };
 
-  // ── NOVO: cor separada para slot "avisado" ───────────────────────────────────
+  // ── cor separada para slot "avisado" ───────────────────────────────────
   const getStatusColor = (status: SlotStatus, avisado?: boolean) => {
-    // Finalizado + avisado → azul (aguardando retirada)
     if (status === 'finalizado' && avisado) {
       return 'bg-blue-100 hover:bg-blue-200 border-blue-400 text-blue-700';
     }
@@ -81,7 +91,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     }
   };
 
-  // ── NOVO: ícone separado para slot "avisado" ─────────────────────────────────
+  // ── ícone separado para slot "avisado" ─────────────────────────────────
   const getStatusIcon = (status: SlotStatus, avisado?: boolean) => {
     if (status === 'finalizado' && avisado) {
       return <PhoneCall className="w-4 h-4" />;
@@ -253,7 +263,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         {Array.from({ length: visibleSlots }, (_, i) => {
           const slotNumber = i + 1;
           const { status, pet } = getSlotStatus(slotNumber);
-          const avisado    = !!pet?.avisado;                              // ← NOVO
+          const avisado    = !!pet?.avisado;
           const isFiltered = filter !== 'all' && pet && pet.servico !== filter;
 
           return (
@@ -298,6 +308,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 <DialogContent className="max-w-2xl">
                   <DialogHeader>
                     <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
+                    {/* 🔧 descrição acessível adicionada */}
+                    <DialogDescription className="sr-only">
+                      Preencha os dados do pet para reservar o slot {selectedSlot}.
+                    </DialogDescription>
                   </DialogHeader>
                   <PetRegistration onSubmit={handleRegister} />
                 </DialogContent>
@@ -316,8 +330,12 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           setSelectedPet(null);
         }}
         onEdit={(pet) => {
+          // 🆕 fecha os detalhes e abre o modal de EDIÇÃO
           setIsDetailOpen(false);
-          onEditPet(pet.id, pet);
+          setTimeout(() => {
+            setPetParaEditar(pet);
+            setIsEditOpen(true);
+          }, 120); // espera a animação de saída do detalhe
         }}
         onDelete={(petId) => {
           onDeletePet(petId);
@@ -333,6 +351,38 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           }
         }}
       />
+
+      {/* 🆕 Modal de EDIÇÃO do pet */}
+      <Dialog
+        open={isEditOpen}
+        onOpenChange={(open) => {
+          if (!open) {
+            setIsEditOpen(false);
+            setPetParaEditar(null);
+          }
+        }}
+      >
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Editar Perfil do Pet</DialogTitle>
+            {/* 🔧 descrição acessível adicionada */}
+            <DialogDescription className="sr-only">
+              Atualize as informações do pet selecionado.
+            </DialogDescription>
+          </DialogHeader>
+          {petParaEditar && (
+            <PetRegistration
+              isEditing={true}
+              initialData={petParaEditar}
+              onSubmit={(updatedData) => {
+                onEditPet(petParaEditar.id, updatedData as Partial<Pet>);
+                setIsEditOpen(false);
+                setPetParaEditar(null);
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* ── Legenda ── */}
       <div className="flex gap-4 px-4 pb-4 flex-wrap">
@@ -352,7 +402,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           <div className="w-4 h-4 rounded bg-purple-100 border-2 border-purple-300" />
           <span className="text-sm text-gray-600">Finalizado</span>
         </div>
-        {/* ── NOVO: legenda Avisado ── */}
+        {/* ── legenda Avisado ── */}
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-400 flex items-center justify-center">
             <PhoneCall className="w-2.5 h-2.5 text-blue-600" />

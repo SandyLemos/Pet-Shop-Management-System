@@ -3,6 +3,7 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription, // 🔧 adicionado
 } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -137,6 +138,11 @@ export function PetDetailModal({
               </p>
             </div>
           </div>
+
+          {/* 🔧 descrição acessível adicionada */}
+          <DialogDescription className="sr-only">
+            Detalhes do pet {pet.nomePet}, tutor {pet.nomeTutor}, no slot {pet.slotNumber}.
+          </DialogDescription>
         </DialogHeader>
 
         {/* ── Badges ── */}

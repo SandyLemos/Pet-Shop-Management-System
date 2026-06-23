@@ -2,6 +2,9 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+// no final do firebase.ts, temporariamente:
+export * as firestore from 'firebase/firestore';
+
 
 export const firebaseConfig = {  // ← mantém o export! (usado no AdminSidebar)
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY,

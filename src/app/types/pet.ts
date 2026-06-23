@@ -11,9 +11,11 @@ export interface Profissional {
 
 export interface Pet {
   id: string
+  petNumber?: string;
   slotNumber: number
   nomePet: string
   nomeTutor: string
+  telefone?: string;
   especie?: "cao" | "gato"
   raca?: string
   porte?: "pequeno" | "medio" | "grande"
@@ -26,9 +28,9 @@ export interface Pet {
     | "ozonio"
     | "hidratacao"
   proximaEtapa?: string
-  profissionalBanho?: string
-  profissionalTosa?: string
-  profissionalEscovar?: string
+  profissionalBanho?: string | null      // ✅ aceita null (usado em encerrarPet)
+  profissionalTosa?: string | null       // ✅ aceita null
+  profissionalEscovar?: string | null    // ✅ aceita null
   atendimentoIniciado?: boolean
   historicoReversoes?: {
     etapa: string
@@ -38,11 +40,11 @@ export interface Pet {
   banhoCompleto?: boolean
   escovarCompleto?: boolean
   tosaCompleta?: boolean
-  observacoes?: string
+  observacoes?: string | null            // ✅ aceita null
   checkInTime: string
   status: SlotStatus
   avisado?: boolean
-  avisadoEm?: string
+  avisadoEm?: string | null              // ✅ aceita null
 
   // ✅ Quem cadastrou o pet
   cadastradoPorId?:   string | null
@@ -56,4 +58,19 @@ export interface Pet {
   problemasSaudeBanho?: string[];
   problemasSaudeEscovar?: string[];
   problemasSaudeTosa?: string[];
+}
+
+// ─── Ficha permanente do pet (coleção petsCadastro) ───────────────────────
+// ✅ Centralizado aqui para reuso entre petService e componentes
+export interface PetCadastro {
+  petNumber: string;          // Ex: "PET-000123"
+  nomePet: string;
+  nomeTutor: string;
+  telefone: string;
+  especie?: "cao" | "gato";
+  raca?: string;
+  porte?: "pequeno" | "medio" | "grande";
+  foto?: string;
+  criadoEm?: any;
+  atualizadoEm?: any;
 }

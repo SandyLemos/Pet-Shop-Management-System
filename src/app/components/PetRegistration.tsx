@@ -1,13 +1,14 @@
 "use client"
 
-import React, { useState, useMemo } from "react"
+import React, { useState, useMemo, useEffect } from "react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
-import { Upload, Save, CheckCircle2 } from "lucide-react"
+import { Upload, Save, CheckCircle2, Search, X, Loader2 } from "lucide-react"
 import type { Pet } from "../types/pet"
 import { useCloudinaryUpload } from "../../hooks/useCloudinaryUpload"
+import { buscarPetsCadastro, type PetCadastro } from "../../services/petService"
 
 const RACAS_CAO = [
   "SRD (Sem Raça Definida)",
@@ -124,6 +125,8 @@ export function PetRegistration({
 }: PetRegistrationProps) {
   const [nomePet, setNomePet] = useState(initialData?.nomePet || "")
   const [nomeTutor, setNomeTutor] = useState(initialData?.nomeTutor || "")
+  const [telefone, setTelefone] = useState((initialData as any)?.telefone || "")
+  const [petNumber, setPetNumber] = useState((initialData as any)?.petNumber || "")
   const [especie, setEspecie] = useState<"cao" | "gato" | "">(
     initialData?.especie || "",
   )
@@ -143,7 +146,14 @@ export function PetRegistration({
     initialData?.slotNumber || defaultSlot || 1,
   )
 
-  // ✅ Hook do Cloudinary
+  // Estados de busca de cadastro permanente
+  const [termoBusca, setTermoBusca] = useState("")
+  const [resultados, setResultados] = useState<PetCadastro[]>([])
+  const [buscando, setBuscando] = useState(false)
+  const [jaBuscou, setJaBuscou] = useState(false)
+  const [petVinculado, setPetVinculado] = useState(!!(initialData as any)?.petNumber)
+
+  // Hook do Cloudinary
   const { uploadImage, uploading, error } = useCloudinaryUpload()
 
   const availableSlots = useMemo(() => {
@@ -158,12 +168,89 @@ export function PetRegistration({
     return slots
   }, [allPets, isEditing, initialData])
 
+  // Executa busca no cadastro permanente (aceita termo do debounce)
+  const handleBuscar = async (termo: string = termoBusca) => {
+    const t = termo.trim()
+    if (!t) {
+      setResultados([])
+      setJaBuscou(false)
+      return
+    }
+    setBuscando(true)
+    setJaBuscou(false)
+    try {
+      const achados = await buscarPetsCadastro(t)
+      setResultados(achados)
+    } catch (err) {
+      console.error("[buscarPetsCadastro]", err)
+    } finally {
+      setBuscando(false)
+      setJaBuscou(true)
+    }
+  }
+
+  // ✅ Busca automática com debounce (350ms)
+  useEffect(() => {
+    if (petVinculado || isEditing) return
+    const t = termoBusca.trim()
+
+    // ✅ Se for só dígitos (busca por número), basta 1 caractere; senão, 2
+    const apenasNumero = /^\d+$/.test(t)
+    const minimo = apenasNumero ? 1 : 2
+
+    if (t.length < minimo) {
+      setResultados([])
+      setJaBuscou(false)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      handleBuscar(t)
+    }, 350)
+
+    return () => clearTimeout(timer)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [termoBusca, petVinculado, isEditing])
+
+  // ✅ Limpa o campo de busca
+  const limparBusca = () => {
+    setTermoBusca("")
+    setResultados([])
+    setJaBuscou(false)
+    setBuscando(false)
+  }
+
+  // Preenche o formulário com um pet encontrado
+  const selecionarPet = (p: PetCadastro) => {
+    setNomePet(p.nomePet)
+    setNomeTutor(p.nomeTutor)
+    setTelefone(p.telefone || "")
+    setEspecie(p.especie || "")
+    setRaca(p.raca || "")
+    setPorte(p.porte || "")
+    setFoto(p.foto || "")
+    setPetNumber(p.petNumber)
+    setPetVinculado(true)
+    setResultados([])
+    setTermoBusca("")
+    setJaBuscou(false)
+  }
+
+  // Desvincula (volta a ser cadastro novo)
+  const limparVinculo = () => {
+    setPetVinculado(false)
+    setPetNumber("")
+    setJaBuscou(false)
+  }
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (!nomePet || !nomeTutor || !servico) return
     onSubmit({
       nomePet,
       nomeTutor,
+      telefone: telefone || undefined,
+      petNumber: petNumber || undefined,
       especie: especie || undefined,
       raca: raca || undefined,
       porte: porte || undefined,
@@ -171,10 +258,10 @@ export function PetRegistration({
       servico: servico as any,
       observacoes,
       slotNumber: selectedSlot || defaultSlot,
-    })
+    } as any)
   }
 
-  // ✅ Upload para o Cloudinary
+  // Upload para o Cloudinary
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -193,6 +280,114 @@ export function PetRegistration({
     >
       {/* ÁREA DE CAMPOS COM SCROLL */}
       <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 space-y-6 scrollbar-hide">
+
+        {/* BARRA DE BUSCA DE PET CADASTRADO (só em cadastro novo) */}
+        {!isEditing && (
+          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+            {petVinculado ? (
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2 text-sm text-indigo-700 font-semibold">
+                  <CheckCircle2 className="w-4 h-4" />
+                  Pet vinculado:{" "}
+                  <span className="font-mono">{petNumber}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={limparVinculo}
+                  className="text-indigo-400 hover:text-indigo-600 transition-colors"
+                  title="Desvincular e cadastrar como novo"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+            ) : (
+              <>
+                <Label className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                  Buscar pet já cadastrado
+                </Label>
+
+                {/* Campo de busca com ícone, spinner e botão limpar */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+                  <Input
+                    placeholder="Nº, nome ou telefone..."
+                    value={termoBusca}
+                    onChange={(e) => setTermoBusca(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleBuscar()
+                      }
+                    }}
+                    className="h-10 rounded-lg border-none bg-white text-slate-800 font-medium pl-9 pr-9"
+                  />
+                  {/* Spinner enquanto busca / botão limpar quando há texto */}
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
+                    {buscando ? (
+                      <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
+                    ) : (
+                      termoBusca && (
+                        <button
+                          type="button"
+                          onClick={limparBusca}
+                          className="text-slate-400 hover:text-slate-600 transition-colors"
+                          title="Limpar busca"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )
+                    )}
+                  </div>
+                </div>
+
+                {/* Feedback "buscando..." */}
+                {buscando && (
+                  <p className="flex items-center gap-1.5 text-xs text-indigo-500 font-medium px-1">
+                    <Loader2 className="w-3 h-3 animate-spin" />
+                    Buscando...
+                  </p>
+                )}
+
+                {/* Resultados */}
+                {!buscando && resultados.length > 0 && (
+                  <ul className="bg-white rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-100">
+                    {resultados.map((p) => (
+                      <li key={p.petNumber}>
+                        <button
+                          type="button"
+                          onClick={() => selecionarPet(p)}
+                          className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors flex items-center gap-2"
+                        >
+                          <span className="text-base shrink-0">
+                            {p.especie === "gato" ? "🐈" : "🐕"}
+                          </span>
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-slate-800 truncate">
+                              {p.nomePet}{" "}
+                              <span className="font-mono text-xs text-indigo-500">
+                                {p.petNumber}
+                              </span>
+                            </p>
+                            <p className="text-xs text-slate-400 truncate">
+                              {p.nomeTutor} · {p.telefone || "sem telefone"}
+                            </p>
+                          </div>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                {/* Nenhum resultado */}
+                {!buscando && jaBuscou && resultados.length === 0 && (
+                  <p className="text-xs text-slate-400 italic px-1">
+                    Nenhum pet encontrado — preencha abaixo para cadastrar novo.
+                  </p>
+                )}
+              </>
+            )}
+          </div>
+        )}
 
         {/* 1. SLOT (SE DISPONÍVEL) */}
         {showSlotSelector && (
@@ -285,6 +480,24 @@ export function PetRegistration({
             />
           </div>
 
+          {/* 4b. TELEFONE DO TUTOR */}
+          <div className="space-y-2">
+            <Label
+              htmlFor="telefone"
+              className="text-slate-700 font-bold text-base"
+            >
+              Telefone do Tutor
+            </Label>
+            <Input
+              id="telefone"
+              type="tel"
+              placeholder="Ex: (24) 99999-9999"
+              className={inputStyle}
+              value={telefone}
+              onChange={(e) => setTelefone(e.target.value)}
+            />
+          </div>
+
           {/* 5. SERVIÇO */}
           <div className="space-y-2">
             <Label
@@ -360,7 +573,7 @@ export function PetRegistration({
                   )}
                 </Label>
 
-                {/* ✅ Erro de upload */}
+                {/* Erro de upload */}
                 {error && (
                   <p className="text-[11px] text-red-500 font-medium mt-1 px-1">
                     ⚠️ {error}

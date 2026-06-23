@@ -4,6 +4,7 @@ import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
 import AdminSidebar from './components/AdminSidebar';
+import { PetCodeModal } from './components/PetCodeModal'; // ✅ NOVO
 import {
   LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
@@ -229,6 +230,12 @@ export default function App() {
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [adminActivePage, setAdminActivePage]   = useState<'criar' | 'deletar' | 'editar' | null>(null);
 
+  // ✅ NOVO: estado para o modal do código do pet
+  const [codigoModal, setCodigoModal] = useState<{
+    petNumber: string;
+    nomePet: string;
+  } | null>(null);
+
   // 🔥 Escuta os pets do dia em tempo real
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -305,11 +312,16 @@ export default function App() {
     }
   };
 
+  // ✅ ATUALIZADO: trata o retorno de addPet e exibe o modal apenas se for pet novo
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
     try {
-      await addPet(petData);
+      const { petNumber, isNovo } = await addPet(petData);
       setDailyCounter((c) => c + 1);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
+      // Se for primeira visita, mostra o modal com o código do pet
+      if (isNovo) {
+        setCodigoModal({ petNumber, nomePet: petData.nomePet });
+      }
     } catch {
       toast.error('Erro ao cadastrar pet. Tente novamente.');
     }
@@ -348,7 +360,8 @@ export default function App() {
     try {
       await updatePet(petId, updatedData);
       // ✅ sem setPets — onSnapshot já atualiza
-    } catch {
+    } catch (err) {
+      console.error('[handleEditPet] Erro ao editar pet:', err);
       toast.error('Erro ao editar pet. Tente novamente.');
     }
   };
@@ -367,31 +380,31 @@ export default function App() {
   };
 
   // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
-    const handleAssignProfessional = async (
-      petId: string,
-      pB?: string,
-      pT?: string,
-      pE?: string,
-    ) => {
-      const pet = pets.find((p) => p.id === petId);
-      if (!pet) return;
+  const handleAssignProfessional = async (
+    petId: string,
+    pB?: string,
+    pT?: string,
+    pE?: string,
+  ) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (!pet) return;
 
-      const updates: Partial<Pet> = {
-        // ✅ Só sobrescreve se vier um valor definido
-        ...(pB !== undefined && { profissionalBanho: pB }),
-        ...(pT !== undefined && { profissionalTosa: pT }),
-        ...(pE !== undefined && { profissionalEscovar: pE }),
-        status: pet.status === 'espera' ? ('banho' as SlotStatus) : pet.status,
-        atendimentoIniciado: true,
-      };
-
-      try {
-        await updatePet(petId, updates);
-      } catch {
-        toast.error('Erro ao atribuir profissional. Tente novamente.');
-      }
+    const updates: Partial<Pet> = {
+      // ✅ Só sobrescreve se vier um valor definido
+      ...(pB !== undefined && { profissionalBanho: pB }),
+      ...(pT !== undefined && { profissionalTosa: pT }),
+      ...(pE !== undefined && { profissionalEscovar: pE }),
+      status: pet.status === 'espera' ? ('banho' as SlotStatus) : pet.status,
+      atendimentoIniciado: true,
     };
-  
+
+    try {
+      await updatePet(petId, updates);
+    } catch {
+      toast.error('Erro ao atribuir profissional. Tente novamente.');
+    }
+  };
+
   // ✅ Avanço de etapa ATÔMICO — consolida status + profissional + problemas de saúde
   // em um ÚNICO updateDoc, eliminando a race condition de writes paralelos.
   const handleAdvanceStage = async (
@@ -425,7 +438,7 @@ export default function App() {
       toast.error('Erro ao avançar etapa. Tente novamente.');
     }
   };
-  
+
   // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleMarkServiceComplete = async (
     petId: string,
@@ -455,6 +468,15 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50">
       <Toaster position="top-right" richColors />
+
+      {/* ✅ NOVO: Modal do código do pet (primeira visita) */}
+      {codigoModal && (
+        <PetCodeModal
+          petNumber={codigoModal.petNumber}
+          nomePet={codigoModal.nomePet}
+          onClose={() => setCodigoModal(null)}
+        />
+      )}
 
       {/* Modal de logout */}
       {showLogoutModal && (
