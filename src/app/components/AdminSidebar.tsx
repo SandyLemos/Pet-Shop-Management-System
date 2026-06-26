@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   X, Users, Plus, Pencil, Trash2, AlertTriangle,
-  UserCircle2, ShieldCheck, User, Briefcase,
+  UserCircle2, ShieldCheck, User, Briefcase, PawPrint,
 } from 'lucide-react';
 import {
   collection, getDocs, addDoc, updateDoc, deleteDoc, doc, Timestamp,
@@ -23,6 +23,7 @@ import { getLogsByDate } from '../../services/petService';
 import type { LogEntry } from '../../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
+import { SecaoPetsCadastro } from './PetsRegistrationSection';
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface UsuarioFirestore {
@@ -1052,7 +1053,7 @@ export default function AdminSidebar({
   onClose: () => void;
   currentUserRole?: 'admin' | 'user';
 }) {
-  const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'relatorios'>('usuarios');
+  const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios'>('usuarios');
   const [showRelatorios, setShowRelatorios] = useState(false);
 
   return (
@@ -1095,7 +1096,7 @@ export default function AdminSidebar({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Users size={14} /> Usuários
+              <Users size={14} /> <span className="hidden sm:inline">Usuários</span>
             </button>
             <button
               onClick={() => setAbaAtiva('profissionais')}
@@ -1105,7 +1106,17 @@ export default function AdminSidebar({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Briefcase size={14} /> Profissionais
+              <Briefcase size={14} /> <span className="hidden sm:inline">Profissionais</span>
+            </button>
+            <button
+              onClick={() => setAbaAtiva('pets')}
+              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+                abaAtiva === 'pets'
+                  ? 'border-pink-500 text-pink-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <PawPrint size={14} /> <span className="hidden sm:inline">Pets</span>
             </button>
             <button
               onClick={() => setAbaAtiva('relatorios')}
@@ -1115,7 +1126,7 @@ export default function AdminSidebar({
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <FileText size={14} /> Relatórios
+              <FileText size={14} /> <span className="hidden sm:inline">Relatórios</span>
             </button>
           </div>
 
@@ -1123,6 +1134,7 @@ export default function AdminSidebar({
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {abaAtiva === 'usuarios'      && <SecaoUsuarios />}
             {abaAtiva === 'profissionais' && <SecaoProfissionais />}
+            {abaAtiva === 'pets'          && <SecaoPetsCadastro />}
             {abaAtiva === 'relatorios'    && (
               <div className="space-y-4">
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">

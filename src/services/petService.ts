@@ -225,6 +225,36 @@ export async function buscarPetsCadastro(termo: string): Promise<PetCadastro[]> 
 }
 
 /**
+ * ✅ Lista TODOS os pets do cadastro permanente (coleção petsCadastro).
+ * Ordenados por nome (case-insensitive via nomePetLower).
+ */
+export async function getAllPetsCadastro(): Promise<PetCadastro[]> {
+  const q = query(petsCadastroCollection(), orderBy('nomePetLower', 'asc'));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => d.data() as PetCadastro);
+}
+
+/**
+ * ✅ Exclui a ficha permanente de um pet pelo petNumber.
+ * ⚠️ NÃO afeta os pets da fila do dia nem os logs históricos.
+ */
+export async function deletePetCadastro(petNumber: string): Promise<void> {
+  const ref = doc(petsCadastroCollection(), petNumber);
+  await deleteDoc(ref);
+}
+
+/**
+ * ✅ Atualiza a ficha permanente do pet (reusa salvarCadastroPet).
+ * Mantém o mesmo petNumber e regenera campos derivados (lower, telefoneReverso).
+ */
+export async function updatePetCadastro(
+  petNumber: string,
+  dados: Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>,
+): Promise<void> {
+  await salvarCadastroPet(dados, petNumber);
+}
+
+/**
  * ✅ Cria ou atualiza a ficha permanente do pet.
  * Se não houver petNumber, gera um novo (1ª visita).
  * Retorna o petNumber (novo ou existente).
