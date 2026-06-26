@@ -516,10 +516,17 @@ export default function App() {
                 <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-10 w-auto object-contain" />
               </div>
               <div className="hidden sm:block">
-                <p className="text-white/60 text-xs">
-                  {user?.email ?? 'Sistema de Gestão'}
+                <p className="text-white/60 text-xs capitalize">
+                  {user?.email?.split('@')[0] ?? 'Sistema de Gestão'}
                 </p>
               </div>
+            </div>
+
+            {/* 🆕 Nome do Pet Shop (centro) */}
+            <div className="flex-1 flex justify-center">
+              <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
+                <h1 className="...">Elite Pet Shop</h1>
+              </h1>
             </div>
 
             {/* Botões do header */}
