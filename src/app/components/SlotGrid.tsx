@@ -308,7 +308,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             </DialogTrigger>
 
             {status === 'livre' && (
-              <DialogContent className="max-w-2xl">
+              <DialogContent className="max-w-2xl"
+                onOpenAutoFocus={(e) => e.preventDefault()}
+              >
                 <DialogHeader>
                   <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
                   <DialogDescription className="sr-only">
@@ -364,7 +366,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           }
         }}
       >
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl"
+          onOpenAutoFocus={(e) => e.preventDefault()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Perfil do Pet</DialogTitle>
             {/* 🔧 descrição acessível adicionada */}

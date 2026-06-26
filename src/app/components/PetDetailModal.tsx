@@ -107,7 +107,9 @@ export function PetDetailModal({
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
-      <DialogContent className="max-w-sm w-full p-4 gap-3">
+      <DialogContent className="max-w-sm w-full p-4 gap-3"
+        onOpenAutoFocus={(e) => e.preventDefault()}
+      >
 
         {/* ── Header: foto + nome + tutor ── */}
         <DialogHeader className="pb-0">

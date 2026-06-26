@@ -412,7 +412,7 @@ export function PetRegistration({
             <Input
               id="nomePet"
               placeholder="Ex: Bob"
-              autoFocus
+              //autoFocus
               disabled={isEditing && initialData?.atendimentoIniciado}
               className={inputStyle}
               value={nomePet}
