@@ -5,6 +5,7 @@ import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
 import AdminSidebar from './components/AdminSidebar';
 import { PetCodeModal } from './components/PetCodeModal'; // ✅ NOVO
+import PawBackground from './components/PawBackground'; // 🐾 NOVO
 import {
   LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
@@ -466,7 +467,10 @@ export default function App() {
 
   // 3️⃣ Autenticado → renderiza app completo
   return (
-    <div className="min-h-screen bg-slate-50">
+    <div className="min-h-screen bg-pet-pattern relative">
+      {/* 🐾 NOVO: Fundo de patinhas */}
+      <PawBackground quantidade={25} imgSrc="/paw.png" espacamento={1.2} />
+
       <Toaster position="top-right" richColors />
 
       {/* ✅ NOVO: Modal do código do pet (primeira visita) */}
@@ -494,97 +498,104 @@ export default function App() {
         />
       )}
 
-      {/* ── Header ── */}
-      <div
-        className="shadow-md"
-        style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 50%, #E8192C 100%)' }}
-      >
-        <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+      {/* 🐾 NOVO: wrapper para o conteúdo ficar ACIMA das patinhas */}
+      <div className="relative z-10">
 
-          {/* Logo no header */}
-          <div className="flex items-center gap-4">
-            <div className="bg-white rounded-xl px-4 py-2 shadow-md">
-              <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-10 w-auto object-contain" />
-            </div>
-            <div className="hidden sm:block">
-              <p className="text-white/60 text-xs">
-                {user?.email ?? 'Sistema de Gestão'}
-              </p>
-            </div>
-          </div>
+        {/* ── Header ── */}
+        <div
+          className="shadow-md"
+          style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 50%, #E8192C 100%)' }}
+        >
+          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
 
-          {/* Botões do header */}
-          <div className="flex items-center gap-2">
-            {isAdmin && (
+            {/* Logo no header */}
+            <div className="flex items-center gap-4">
+              <div className="bg-white rounded-xl px-4 py-2 shadow-md">
+                <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-10 w-auto object-contain" />
+              </div>
+              <div className="hidden sm:block">
+                <p className="text-white/60 text-xs">
+                  {user?.email ?? 'Sistema de Gestão'}
+                </p>
+              </div>
+            </div>
+
+            {/* Botões do header */}
+            <div className="flex items-center gap-2">
+              {isAdmin && (
+                <button
+                  onClick={() => setShowAdminSidebar(true)}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
+                >
+                  <Settings size={16} />
+                  <span className="hidden sm:inline">Admin</span>
+                </button>
+              )}
               <button
-                onClick={() => setShowAdminSidebar(true)}
+                onClick={() => setShowLogoutModal(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
               >
-                <Settings size={16} />
-                <span className="hidden sm:inline">Admin</span>
+                <LogOut size={16} />
+                <span className="hidden sm:inline">Sair</span>
               </button>
-            )}
-            <button
-              onClick={() => setShowLogoutModal(true)}
-              className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
-            >
-              <LogOut size={16} />
-              <span className="hidden sm:inline">Sair</span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* ── Conteúdo ── */}
-      <div className="max-w-7xl mx-auto px-6 py-8">
-        <Tabs defaultValue="grid" className="space-y-6">
-          <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-            <TabsList className="bg-slate-100">
-              <TabsTrigger value="grid"   className="gap-2"><LayoutGrid size={18} /> Grade</TabsTrigger>
-              <TabsTrigger value="kanban" className="gap-2"><LayoutList size={18} /> Fluxo</TabsTrigger>
-            </TabsList>
-
-            <div className="flex items-center gap-2">
-              <Filter size={16} className="text-slate-400" />
-              <select
-                className="text-sm border-none bg-transparent font-medium focus:ring-0"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as any)}
-              >
-                <option value="all">Todos os Serviços</option>
-                <option value="banho">Banho</option>
-                <option value="tosa">Tosa</option>
-              </select>
             </div>
           </div>
+        </div>
 
-          <TabsContent value="grid">
-            <SlotGrid
-              pets={pets}
-              onAddPet={handleAddPet}
-              onEditPet={handleEditPet}
-              onDeletePet={handleDeletePet}
-              onCheckout={handleCheckoutWithType}
-              filter={filter}
-            />
-          </TabsContent>
+        {/* ── Conteúdo ── */}
+        <div className="max-w-7xl mx-auto px-6 py-8">
+          <Tabs defaultValue="grid" className="space-y-6">
+            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
+              <TabsList className="bg-slate-100">
+                <TabsTrigger value="grid"   className="gap-2"><LayoutGrid size={18} /> Grade</TabsTrigger>
+                <TabsTrigger value="kanban" className="gap-2"><LayoutList size={18} /> Fluxo</TabsTrigger>
+              </TabsList>
 
-          <TabsContent value="kanban">
-            <KanbanBoard
-              pets={pets}
-              onUpdateStatus={handleUpdateStatus}
-              onCheckout={handleCheckout}
-              onAddPet={handleAddPet}
-              onEditPet={handleEditPet}
-              onDeletePet={handleDeletePet}
-              onAssignProfessional={handleAssignProfessional}
-              onMarkServiceComplete={handleMarkServiceComplete}
-              onRevertService={handleRevertService}
-              onAdvanceStage={handleAdvanceStage}
-            />
-          </TabsContent>
-        </Tabs>
+              <div className="flex items-center gap-2">
+                <Filter size={16} className="text-slate-400" />
+                <select
+                  className="text-sm border-none bg-transparent font-medium focus:ring-0"
+                  value={filter}
+                  onChange={(e) => setFilter(e.target.value as any)}
+                >
+                  <option value="all">Todos os Serviços</option>
+                  <option value="banho">Banho</option>
+                  <option value="tosa">Tosa</option>
+                </select>
+              </div>
+            </div>
+
+            <TabsContent value="grid">
+              <SlotGrid
+                pets={pets}
+                onAddPet={handleAddPet}
+                onEditPet={handleEditPet}
+                onDeletePet={handleDeletePet}
+                onCheckout={handleCheckoutWithType}
+                filter={filter}
+              />
+            </TabsContent>
+
+            <TabsContent value="kanban">
+              <KanbanBoard
+                pets={pets}
+                onUpdateStatus={handleUpdateStatus}
+                onCheckout={handleCheckout}
+                onAddPet={handleAddPet}
+                onEditPet={handleEditPet}
+                onDeletePet={handleDeletePet}
+                onAssignProfessional={handleAssignProfessional}
+                onMarkServiceComplete={handleMarkServiceComplete}
+                onRevertService={handleRevertService}
+                onAdvanceStage={handleAdvanceStage}
+              />
+            </TabsContent>
+          </Tabs>
+        </div>
+
       </div>
+      {/* 🐾 fim do wrapper z-10 */}
+
     </div>
   );
 }
