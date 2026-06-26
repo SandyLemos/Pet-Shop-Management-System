@@ -260,65 +260,67 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
 
       {/* ── Grade de slots ── */}
       <div className="grid grid-cols-10 gap-2 p-4">
-        {Array.from({ length: visibleSlots }, (_, i) => {
-          const slotNumber = i + 1;
-          const { status, pet } = getSlotStatus(slotNumber);
-          const avisado    = !!pet?.avisado;
-          const isFiltered = filter !== 'all' && pet && pet.servico !== filter;
+      {Array.from({ length: visibleSlots }, (_, i) => {
+        const slotNumber = i + 1;
+        const { status, pet } = getSlotStatus(slotNumber);
+        const avisado = !!pet?.avisado;
 
-          return (
-            <Dialog
-              key={slotNumber}
-              open={isDialogOpen && selectedSlot === slotNumber}
-              onOpenChange={(open) => {
-                if (!open) {
-                  setIsDialogOpen(false);
-                  setSelectedSlot(null);
+        // 🆕 com filtro ativo, renderiza só os slots cujo serviço bate
+        if (filter !== 'all' && (!pet || pet.servico !== filter)) {
+          return null;
+        }
+
+        return (
+          <Dialog
+            key={slotNumber}
+            open={isDialogOpen && selectedSlot === slotNumber}
+            onOpenChange={(open) => {
+              if (!open) {
+                setIsDialogOpen(false);
+                setSelectedSlot(null);
+              }
+            }}
+          >
+            <DialogTrigger asChild>
+              <button
+                onClick={() => handleSlotClick(slotNumber)}
+                className={`
+                  aspect-square rounded-lg border-2 transition-all
+                  flex flex-col items-center justify-center gap-1
+                  cursor-pointer
+                  ${getStatusColor(status, avisado)}
+                  ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
+                `}
+                title={
+                  pet
+                    ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''} (clique para detalhes)`
+                    : `Slot ${slotNumber} - Livre`
                 }
-              }}
-            >
-              <DialogTrigger asChild>
-                <button
-                  onClick={() => handleSlotClick(slotNumber)}
-                  className={`
-                    aspect-square rounded-lg border-2 transition-all
-                    flex flex-col items-center justify-center gap-1
-                    cursor-pointer
-                    ${isFiltered ? 'opacity-30' : getStatusColor(status, avisado)}
-                    ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
-                  `}
-                  title={
-                    pet
-                      ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''} (clique para detalhes)`
-                      : `Slot ${slotNumber} - Livre`
-                  }
-                >
-                  {getStatusIcon(status, avisado)}
-                  <span className="text-xs font-semibold">{slotNumber}</span>
-                  {pet && (
-                    <span className="text-[8px] font-medium truncate w-full px-1 text-center">
-                      {pet.nomePet}
-                    </span>
-                  )}
-                </button>
-              </DialogTrigger>
+              >
+                {getStatusIcon(status, avisado)}
+                <span className="text-xs font-semibold">{slotNumber}</span>
+                {pet && (
+                  <span className="text-[8px] font-medium truncate w-full px-1 text-center">
+                    {pet.nomePet}
+                  </span>
+                )}
+              </button>
+            </DialogTrigger>
 
-              {/* Dialog de cadastro (apenas slots livres) */}
-              {status === 'livre' && (
-                <DialogContent className="max-w-2xl">
-                  <DialogHeader>
-                    <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
-                    {/* 🔧 descrição acessível adicionada */}
-                    <DialogDescription className="sr-only">
-                      Preencha os dados do pet para reservar o slot {selectedSlot}.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <PetRegistration onSubmit={handleRegister} />
-                </DialogContent>
-              )}
-            </Dialog>
-          );
-        })}
+            {status === 'livre' && (
+              <DialogContent className="max-w-2xl">
+                <DialogHeader>
+                  <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
+                  <DialogDescription className="sr-only">
+                    Preencha os dados do pet para reservar o slot {selectedSlot}.
+                  </DialogDescription>
+                </DialogHeader>
+                <PetRegistration onSubmit={handleRegister} />
+              </DialogContent>
+            )}
+          </Dialog>
+        );
+      })}
       </div>
 
       {/* ── Modal de detalhes do pet ── */}

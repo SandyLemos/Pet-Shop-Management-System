@@ -6,10 +6,6 @@ import { KanbanBoard } from './components/KanbanBoard';
 import AdminSidebar from './components/AdminSidebar';
 import { PetCodeModal } from './components/PetCodeModal'; // ✅ NOVO
 import PawBackground from './components/PawBackground'; // 🐾 NOVO
-import {
-  LayoutGrid, LayoutList, Filter,
-  LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
-} from 'lucide-react';
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import type { Pet, SlotStatus } from './types/pet';
@@ -20,6 +16,12 @@ import {
   updatePet,
   marcarComoAvisado,
 } from '../services/petService';
+import {
+  LayoutGrid, LayoutList, Filter,
+  LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
+  PackageCheck, // 🆕 ícone da aba Entregues
+} from 'lucide-react';
+import { EntreguesTab } from './components/EntreguesTab';
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -549,8 +551,8 @@ export default function App() {
               <TabsList className="bg-slate-100">
                 <TabsTrigger value="grid"   className="gap-2"><LayoutGrid size={18} /> Grade</TabsTrigger>
                 <TabsTrigger value="kanban" className="gap-2"><LayoutList size={18} /> Fluxo</TabsTrigger>
+                <TabsTrigger value="entregues" className="gap-2"><PackageCheck size={18} /> Entregues</TabsTrigger>
               </TabsList>
-
               <div className="flex items-center gap-2">
                 <Filter size={16} className="text-slate-400" />
                 <select
@@ -561,7 +563,11 @@ export default function App() {
                   <option value="all">Todos os Serviços</option>
                   <option value="banho">Banho</option>
                   <option value="tosa">Tosa</option>
-                </select>
+                  <option value="banho_tosa">Banho e Tosa</option>
+                  <option value="higienica">Tosa Higiênica</option>
+                  <option value="ozonio">Ozônio</option>
+                  <option value="hidratacao">Hidratação</option>
+              </select>
               </div>
             </div>
 
@@ -589,6 +595,10 @@ export default function App() {
                 onRevertService={handleRevertService}
                 onAdvanceStage={handleAdvanceStage}
               />
+            </TabsContent>
+
+            <TabsContent value="entregues">
+              <EntreguesTab />
             </TabsContent>
           </Tabs>
         </div>
