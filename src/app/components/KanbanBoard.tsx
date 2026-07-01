@@ -29,6 +29,7 @@ import {
 import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog"
+import { PetDetailModal } from './PetDetailModal';
 import { useState } from 'react';
 
 interface KanbanBoardProps {
@@ -49,7 +50,6 @@ interface KanbanBoardProps {
     petId: string,
     serviceType: "banho" | "escovar" | "tosa",
   ) => void
-  // ✅ NOVO: avanço de etapa atômico (status + profissional + problemas em 1 write)
   onAdvanceStage: (
     petId: string,
     newStatus: SlotStatus,
@@ -60,6 +60,7 @@ interface KanbanBoardProps {
 
 interface PetCardProps {
   pet: Pet
+  onOpenDetail?: (pet: Pet) => void;
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
   onRevertService: (petId: string, etapa: string, motivo: string) => void
   onCheckout: (petId: string) => void
@@ -86,6 +87,7 @@ interface PetCardProps {
 
 export function PetCard({
   pet,
+  onOpenDetail,
   onUpdateStatus,
   onRevertService,
   onCheckout,
@@ -168,7 +170,6 @@ export function PetCard({
     }
   }
 
-  // ── Exibe feedback de sucesso antes do pet sumir ──
   const handleConfirmarFinalizacao = () => {
     setIsFinalizarDialogOpen(false)
     setShowSuccessFeedback(true)
@@ -208,13 +209,14 @@ export function PetCard({
       default:        pBanho   = novoProfissional
     }
 
-    onAssignProfessional(pet.id, pBanho, pTosa, pEscovar)
+    onAssignProfessional(
+      pet.id,
+      pBanho ?? undefined,
+      pTosa ?? undefined,
+      pEscovar ?? undefined
+    )
   }
 
-  // ── Calcula APENAS o delta da etapa (não escreve no banco) ──
-  // O selector devolve o array acumulado (banho ∪ escovar ∪ tosa).
-  // Aqui removemos o que já pertence às etapas anteriores, devolvendo
-  // { campo, delta } para ser gravado dentro do write atômico.
   const calcularDeltaProblemas = (etapa: string, problemasAcumulados: string[]) => {
     const campo =
       etapa === "banho"   ? "problemasSaudeBanho"   :
@@ -235,18 +237,78 @@ export function PetCard({
     return { campo, delta }
   }
 
-  // ── Para edição rápida (sem avançar etapa): grava só o delta da etapa ──
   const salvarProblemasSaude = (etapa: string, problemasAcumulados: string[]) => {
     const resultado = calcularDeltaProblemas(etapa, problemasAcumulados)
     if (!resultado) return
     onEditPet(pet.id, { [resultado.campo]: resultado.delta } as Partial<Pet>)
   }
 
+  // ── Card COMPACTO para status "espera" (clicável → abre detalhe) ──
+  if (pet.status === "espera") {
+    return (
+      <>
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <Card
+              className="mb-2 mt-1 mr-2 relative cursor-pointer hover:shadow-md hover:border-blue-200 transition-all"
+              onClick={() => onOpenDetail?.(pet)}
+            >
+            <div className="absolute -top-2.5 -right-2.5 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg z-20 ring-2 ring-white">
+              {pet.slotNumber}
+            </div>
+
+          <CardContent className="p-2">
+            <div className="flex items-center gap-2 pr-6">
+              <div className="flex-1 min-w-0">
+                <p className="font-bold text-gray-800 text-base sm:text-lg truncate leading-tight">
+                  {pet.nomePet}
+                </p>
+              </div>
+
+              <Badge className={`${getServiceColor(pet.servico)} text-xs px-2.5 py-1 whitespace-nowrap flex-shrink-0`}>
+                {getServiceLabel(pet.servico)}
+              </Badge>
+            </div>
+
+            <Button
+              className="w-full bg-blue-500 hover:bg-blue-600 h-7 text-[11px] mt-2"
+              onClick={(e) => prepararAvanco(e, "banho")}
+            >
+              <Droplet className="w-3 h-3 mr-1" /> Iniciar Atendimento
+            </Button>
+          </CardContent>
+          </Card>
+        </motion.div>
+
+        <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Selecionar Profissional</DialogTitle>
+              <DialogDescription className="sr-only">
+                Escolha o profissional responsável e marque os problemas de saúde do pet.
+              </DialogDescription>
+            </DialogHeader>
+            <ProfessionalSelector
+              pet={{ ...pet, proximaEtapa: etapaDestino || "banho" }}
+              onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
+              onAssignProfessional={onAssignProfessional}
+              onSubmit={(profissionalEscolhido, problemasSaude) => {
+                const problemasField = calcularDeltaProblemas("banho", problemasSaude)
+                onAdvanceStage(pet.id, "banho", { pB: profissionalEscolhido }, problemasField)
+                setIsProfessionalDialogOpen(false)
+                setEtapaDestino("")
+              }}
+            />
+          </DialogContent>
+        </Dialog>
+      </>
+    )
+  }
+
+  // ── Card COMPLETO para demais status ──
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Card className={`mb-3 relative overflow-hidden ${estaProntoParaRetirada ? 'border-green-300 shadow-green-100 shadow-md' : ''}`}>
 
-        {/* ── Overlay de sucesso animado ── */}
         <AnimatePresence>
           {showSuccessFeedback && (
             <motion.div
@@ -307,17 +369,6 @@ export function PetCard({
                   </div>
                   <span>Editar</span>
                 </button>
-                {pet.status === "espera" && (
-                  <button
-                    className="flex items-center gap-2 text-xs text-gray-500 hover:text-red-600 transition-colors"
-                    onClick={(e) => { e.stopPropagation(); onDeletePet(pet.id) }}
-                  >
-                    <div className="h-7 w-7 flex items-center justify-center rounded-full bg-gray-50 border border-gray-100">
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </div>
-                    <span>Excluir Registro</span>
-                  </button>
-                )}
               </div>
             </div>
             <div className="w-full space-y-1 mt-2">
@@ -383,62 +434,50 @@ export function PetCard({
                 >
                   <Pencil className="w-3.5 h-3.5" />
                 </Button>
-                {pet.status === "espera" && (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 w-7 p-0 text-gray-500 hover:text-red-600"
-                    onClick={(e) => { e.stopPropagation(); onDeletePet(pet.id) }}
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </Button>
-                )}
               </div>
             </div>
           </CardHeader>
         )}
 
         <CardContent className="space-y-2">
-          {pet.status !== "espera" && (
-            <div className="space-y-1.5 py-2 border-y border-gray-100 my-2 bg-slate-50/50 rounded-sm px-2">
-              {pet.profissionalBanho && (
-                <div className={`flex items-center gap-2 text-xs ${pet.banhoCompleto ? "text-gray-400" : "text-gray-700"}`}>
-                  <Droplet className={`w-3.5 h-3.5 ${pet.banhoCompleto ? "text-gray-300" : "text-blue-500"}`} />
-                  <span className="flex items-center gap-1">
-                    <span className="font-medium">Banho:</span>
-                    <span className={pet.banhoCompleto ? "line-through decoration-gray-300" : "font-bold"}>
-                      {pet.profissionalBanho}
-                    </span>
-                    {pet.banhoCompleto && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+          <div className="space-y-1.5 py-2 border-y border-gray-100 my-2 bg-slate-50/50 rounded-sm px-2">
+            {pet.profissionalBanho && (
+              <div className={`flex items-center gap-2 text-xs ${pet.banhoCompleto ? "text-gray-400" : "text-gray-700"}`}>
+                <Droplet className={`w-3.5 h-3.5 ${pet.banhoCompleto ? "text-gray-300" : "text-blue-500"}`} />
+                <span className="flex items-center gap-1">
+                  <span className="font-medium">Banho:</span>
+                  <span className={pet.banhoCompleto ? "line-through decoration-gray-300" : "font-bold"}>
+                    {pet.profissionalBanho}
                   </span>
-                </div>
-              )}
-              {(pet.profissionalEscovar || pet.status === "escovar" || pet.escovarCompleto) && (
-                <div className={`flex items-center gap-2 text-xs ${pet.escovarCompleto ? "text-gray-400" : "text-gray-700"}`}>
-                  <Wind className={`w-3.5 h-3.5 ${pet.escovarCompleto ? "text-gray-300" : "text-cyan-500"}`} />
-                  <span className="flex items-center gap-1">
-                    <span className="font-medium">Escovar:</span>
-                    <span className={pet.escovarCompleto ? "line-through decoration-gray-300" : "font-bold"}>
-                      {pet.profissionalEscovar}
-                    </span>
-                    {pet.escovarCompleto && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                  {pet.banhoCompleto && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                </span>
+              </div>
+            )}
+            {(pet.profissionalEscovar || pet.status === "escovar" || pet.escovarCompleto) && (
+              <div className={`flex items-center gap-2 text-xs ${pet.escovarCompleto ? "text-gray-400" : "text-gray-700"}`}>
+                <Wind className={`w-3.5 h-3.5 ${pet.escovarCompleto ? "text-gray-300" : "text-cyan-500"}`} />
+                <span className="flex items-center gap-1">
+                  <span className="font-medium">Escovar:</span>
+                  <span className={pet.escovarCompleto ? "line-through decoration-gray-300" : "font-bold"}>
+                    {pet.profissionalEscovar}
                   </span>
-                </div>
-              )}
-              {needsTosa && (pet.profissionalTosa || pet.status === "tosa") && (
-                <div className={`flex items-center gap-2 text-xs ${pet.tosaCompleta ? "text-gray-400" : "text-gray-700"}`}>
-                  <Scissors className={`w-3.5 h-3.5 ${pet.tosaCompleta ? "text-gray-300" : "text-purple-500"}`} />
-                  <span className="flex items-center gap-1">
-                    <span className="font-medium">Tosa:</span>
-                    <span className={pet.tosaCompleta ? "line-through decoration-gray-300" : "font-bold"}>
-                      {pet.profissionalTosa || "Pendente"}
-                    </span>
-                    {pet.tosaCompleta && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                  {pet.escovarCompleto && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                </span>
+              </div>
+            )}
+            {needsTosa && (pet.profissionalTosa || pet.status === "tosa") && (
+              <div className={`flex items-center gap-2 text-xs ${pet.tosaCompleta ? "text-gray-400" : "text-gray-700"}`}>
+                <Scissors className={`w-3.5 h-3.5 ${pet.tosaCompleta ? "text-gray-300" : "text-purple-500"}`} />
+                <span className="flex items-center gap-1">
+                  <span className="font-medium">Tosa:</span>
+                  <span className={pet.tosaCompleta ? "line-through decoration-gray-300" : "font-bold"}>
+                    {pet.profissionalTosa || "Pendente"}
                   </span>
-                </div>
-              )}
-            </div>
-          )}
+                  {pet.tosaCompleta && <CheckCircle2 className="w-3 h-3 text-green-500 ml-1" />}
+                </span>
+              </div>
+            )}
+          </div>
 
           <div className="flex items-center gap-2 text-sm text-gray-600">
             <Calendar className="w-4 h-4" />
@@ -452,7 +491,7 @@ export function PetCard({
             </div>
           )}
 
-          {pet.status !== "espera" && pet.status !== "finalizado" && (
+          {pet.status !== "finalizado" && (
             <div className="flex gap-2 pt-2">
               <Badge variant={pet.banhoCompleto ? "default" : "outline"} className="text-xs">
                 {pet.banhoCompleto ? "✓" : "○"} Banho
@@ -470,7 +509,6 @@ export function PetCard({
 
           <div className="pt-2 space-y-2">
 
-            {/* ── Modal de confirmação de finalização ── */}
             <Dialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
               <DialogContent className="max-w-sm">
                 <DialogHeader>
@@ -503,7 +541,6 @@ export function PetCard({
               </DialogContent>
             </Dialog>
 
-            {/* ── Modal de seleção de profissional (avanço de etapa) ── */}
             <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
               <DialogContent>
                 <DialogHeader>
@@ -517,21 +554,10 @@ export function PetCard({
                   onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
                   onAssignProfessional={onAssignProfessional}
                   onSubmit={(profissionalEscolhido, problemasSaude) => {
-                    // etapa de referência: destino se existir, senão status atual
-                    const etapaRef = etapaDestino || (pet.status === "espera" ? "banho" : pet.status)
+                    const etapaRef = etapaDestino || pet.status
                     const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
 
-                    if (pet.status === "espera") {
-                      // espera → banho (write atômico)
-                      onAdvanceStage(
-                        pet.id,
-                        "banho",
-                        { pB: profissionalEscolhido },
-                        problemasField,
-                      )
-                    } else if (etapaDestino) {
-                      // avanço normal entre etapas (write atômico)
-                      // undefined preserva profissionais que não mudam
+                    if (etapaDestino) {
                       const profissionais = {
                         pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
                         pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
@@ -544,7 +570,6 @@ export function PetCard({
                         problemasField,
                       )
                     } else {
-                      // fallback: edição rápida sem mudar etapa
                       handleQuickEditProfessional(profissionalEscolhido)
                       salvarProblemasSaude(etapaRef, problemasSaude)
                     }
@@ -555,13 +580,6 @@ export function PetCard({
                 />
               </DialogContent>
             </Dialog>
-
-            {/* ── Botões por status ── */}
-            {pet.status === "espera" && (
-              <Button className="w-full bg-blue-500 hover:bg-blue-600" onClick={(e) => prepararAvanco(e, "banho")}>
-                <Droplet className="w-4 h-4 mr-2" /> Iniciar Atendimento
-              </Button>
-            )}
 
             {pet.status === "banho" && (
               <div className="space-y-2">
@@ -656,7 +674,6 @@ export function PetCard({
         }}
       />
 
-      {/* Modal 1: Editar dados do pet */}
       <Dialog open={isEditPetOpen} onOpenChange={setIsEditPetOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -676,12 +693,10 @@ export function PetCard({
         </DialogContent>
       </Dialog>
 
-      {/* Modal 2: Editar profissional (edição rápida — sem avançar etapa) */}
       <Dialog open={isEditProfessionalOpen} onOpenChange={setIsEditProfessionalOpen}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>
-              {pet.status === "espera"  && "Selecionar Banhista"}
               {pet.status === "banho"   && "Alterar Responsável pelo Banho"}
               {pet.status === "escovar" && "Alterar Responsável pela Escovação"}
               {pet.status === "tosa"    && "Alterar Tosador"}
@@ -695,22 +710,8 @@ export function PetCard({
             onCancel={() => setIsEditProfessionalOpen(false)}
             onAssignProfessional={onAssignProfessional}
             onSubmit={(profissionalEscolhido, problemasSaude) => {
-              // Edição rápida: mantém status, só altera profissional + problemas da etapa atual
-              const etapaRef = pet.status === "espera" ? "banho" : pet.status
-
-              if (pet.status === "espera") {
-                // espera → banho (write atômico)
-                onAdvanceStage(
-                  pet.id,
-                  "banho",
-                  { pB: profissionalEscolhido },
-                  calcularDeltaProblemas("banho", problemasSaude),
-                )
-              } else {
-                handleQuickEditProfessional(profissionalEscolhido)
-                salvarProblemasSaude(etapaRef, problemasSaude)
-              }
-
+              handleQuickEditProfessional(profissionalEscolhido)
+              salvarProblemasSaude(pet.status, problemasSaude)
               setIsEditProfessionalOpen(false)
             }}
           />
@@ -770,6 +771,7 @@ function KanbanColumn({
   allPets = [],
 }: KanbanColumnProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
+  const [detailPet, setDetailPet]       = useState<Pet | null>(null)
 
   const columnPets = pets.filter((p) => p.status === status)
 
@@ -811,6 +813,7 @@ function KanbanColumn({
           <PetCard
             key={pet.id}
             pet={pet}
+            onOpenDetail={setDetailPet}
             onRevertService={onRevertService}
             onUpdateStatus={onUpdateStatus}
             onCheckout={onCheckout}
@@ -855,6 +858,15 @@ function KanbanColumn({
           </Dialog>
         )}
       </div>
+
+      {/* Modal de detalhes (usado pelo card compacto do "espera") */}
+      <PetDetailModal
+        pet={detailPet}
+        open={!!detailPet}
+        onClose={() => setDetailPet(null)}
+        onEdit={onEditPet}
+        onDelete={(id) => { onDeletePet(id); setDetailPet(null) }}
+      />
     </div>
   )
 }
