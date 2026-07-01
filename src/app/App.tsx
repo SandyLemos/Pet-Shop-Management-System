@@ -281,17 +281,32 @@ export default function App() {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
 
+    // Base comum a qualquer reversão
     const updates: Partial<Pet> = {
-      status:              'espera' as SlotStatus,
-      banhoCompleto:       false,
-      escovarCompleto:     false,
-      tosaCompleta:        false,
-      atendimentoIniciado: false,
       historicoReversoes: [
         ...(pet.historicoReversoes || []),
         { etapa, motivo, data: new Date().toISOString() },
       ],
     };
+
+    // Limpa os campos da etapa revertida e volta ao status anterior
+    if (etapa === 'banho') {
+      updates.status               = 'espera' as SlotStatus;
+      updates.profissionalBanho    = null;
+      updates.banhoCompleto        = false;
+      updates.problemasSaudeBanho  = [];
+      updates.atendimentoIniciado  = false;
+    } else if (etapa === 'escovar') {
+      updates.status                = 'banho' as SlotStatus;
+      updates.profissionalEscovar   = null;
+      updates.escovarCompleto       = false;
+      updates.problemasSaudeEscovar = [];
+    } else if (etapa === 'tosa') {
+      updates.status              = 'escovar' as SlotStatus;
+      updates.profissionalTosa    = null;
+      updates.tosaCompleta        = false;
+      updates.problemasSaudeTosa  = [];
+    }
 
     try {
       await updatePet(petId, updates);
