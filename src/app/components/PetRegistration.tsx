@@ -5,7 +5,7 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
-import { Upload, Save, CheckCircle2, Search, X, Loader2 } from "lucide-react"
+import { Upload, Save, CheckCircle2, Search, X, Loader2, AlertTriangle } from "lucide-react"
 import type { Pet } from "../types/pet"
 import { useCloudinaryUpload } from "../../hooks/useCloudinaryUpload"
 import { buscarPetsCadastro, type PetCadastro } from "../../services/petService"
@@ -153,6 +153,9 @@ export function PetRegistration({
   const [jaBuscou, setJaBuscou] = useState(false)
   const [petVinculado, setPetVinculado] = useState(!!(initialData as any)?.petNumber)
 
+  // ✅ NOVO: modal de aviso de telefone vazio
+  const [showTelefoneAviso, setShowTelefoneAviso] = useState(false)
+
   // Hook do Cloudinary
   const { uploadImage, uploading, error } = useCloudinaryUpload()
 
@@ -243,9 +246,8 @@ export function PetRegistration({
     setJaBuscou(false)
   }
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!nomePet || !nomeTutor || !servico) return
+  // ✅ Envio real do cadastro
+  const enviarCadastro = () => {
     onSubmit({
       nomePet,
       nomeTutor,
@@ -259,6 +261,21 @@ export function PetRegistration({
       observacoes,
       slotNumber: selectedSlot || defaultSlot,
     } as any)
+    setShowTelefoneAviso(false)
+  }
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!nomePet || !nomeTutor || !servico) return
+
+    // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
+    const telefoneVazio = !telefone || telefone.trim() === ""
+    if (telefoneVazio && !isEditing) {
+      setShowTelefoneAviso(true)
+      return
+    }
+
+    enviarCadastro()
   }
 
   // Upload para o Cloudinary
@@ -619,6 +636,47 @@ export function PetRegistration({
           )}
         </Button>
       </div>
+
+      {/* ✅ MODAL DE AVISO — TELEFONE VAZIO */}
+      {showTelefoneAviso && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowTelefoneAviso(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm p-6 flex flex-col items-center gap-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="bg-orange-100 p-3 rounded-2xl">
+              <AlertTriangle className="w-7 h-7 text-orange-500" />
+            </div>
+            <div className="text-center space-y-1">
+              <h2 className="text-base font-bold text-slate-800">
+                Telefone não informado
+              </h2>
+              <p className="text-sm text-slate-500">
+                Sem o número de telefone, o{" "}
+                <strong>aviso automático via WhatsApp</strong> não será enviado
+                ao tutor quando o pet estiver pronto.
+              </p>
+            </div>
+            <div className="flex flex-col gap-2 w-full mt-1">
+              <button
+                type="button"
+                onClick={() => setShowTelefoneAviso(false)}
+                className="w-full py-2.5 rounded-xl bg-indigo-700 hover:bg-indigo-600 text-white text-sm font-semibold transition"
+              >
+                Cadastrar número
+              </button>
+              <button
+                type="button"
+                onClick={enviarCadastro}
+                className="w-full py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-slate-700 text-sm font-semibold hover:bg-slate-100 transition"
+              >
+                Continuar sem telefone
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </form>
   )
 }

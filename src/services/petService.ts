@@ -334,8 +334,12 @@ export async function addPet(
     petNumberExistente, // se veio da busca, mantém o mesmo número
   );
 
+  const petDataLimpo = Object.fromEntries(
+   Object.entries(petData).filter(([, v]) => v !== undefined),
+  );
+
   const ref = await addDoc(petsCollection(), {
-    ...petData,
+    ...petDataLimpo,
     petNumber,                  // ✅ referência à ficha global
     checkInTime:        serverTimestamp(),
     historicoReversoes: [],
@@ -635,6 +639,45 @@ export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
   const snap = await getDocs(q);
   return snap.docs.map((d) => logFromFirestore(d.id, d.data()));
 }
+
+// ─── Relatório de contagem de serviços (apenas ENTREGUES) ───────────────────
+
+export interface RelatorioServicos {
+  porServico: Record<string, number>;
+  total: number;
+}
+
+function contarEntregues(logs: LogEntry[]): RelatorioServicos {
+  const porServico: Record<string, number> = {};
+  let total = 0;
+  for (const log of logs) {
+    if (log.tipo !== 'entregue') continue;
+    const s = log.servico || 'outro';
+    porServico[s] = (porServico[s] ?? 0) + 1;
+    total++;
+  }
+  return { porServico, total };
+}
+
+export async function getRelatorioDia(dateKey: string): Promise<RelatorioServicos> {
+  return contarEntregues(await getLogsByDate(dateKey));
+}
+
+export async function getRelatorioPeriodo(
+  dataInicio: string,
+  dataFim: string,
+): Promise<RelatorioServicos> {
+  const datas: string[] = [];
+  const cur = new Date(dataInicio + 'T00:00:00');
+  const fin = new Date(dataFim + 'T00:00:00');
+  while (cur <= fin) {
+    datas.push(cur.toISOString().split('T')[0]);
+    cur.setDate(cur.getDate() + 1);
+  }
+  const resultados = await Promise.all(datas.map((d) => getLogsByDate(d)));
+  return contarEntregues(resultados.flat());
+}
+
 
 // ─── Buscar pets ativos de um dia específico ──────────────────────────────────
 
