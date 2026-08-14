@@ -1,5 +1,6 @@
 "use client"
 
+import { toast } from "sonner"
 import React, { useState, useMemo, useEffect } from "react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
@@ -265,18 +266,23 @@ export function PetRegistration({
   }
 
   const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault()
-    if (!nomePet || !nomeTutor || !servico) return
+  e.preventDefault()
 
-    // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
-    const telefoneVazio = !telefone || telefone.trim() === ""
-    if (telefoneVazio && !isEditing) {
-      setShowTelefoneAviso(true)
-      return
-    }
+  if (!nomePet || !nomeTutor) return
 
-    enviarCadastro()
+  if (!servico) {
+    toast.error("Selecione um serviço antes de finalizar o cadastro.")
+    return
   }
+
+  // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
+  const telefoneVazio = !telefone || telefone.trim() === ""
+  if (telefoneVazio && !isEditing) {
+    setShowTelefoneAviso(true)
+    return
+  }
+  enviarCadastro()
+}
 
   // Upload para o Cloudinary
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {

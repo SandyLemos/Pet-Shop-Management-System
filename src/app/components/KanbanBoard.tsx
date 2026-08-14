@@ -184,7 +184,7 @@ export function PetCard({
 
   const temFoto             = !!pet.foto
   const nomeLongo           = pet.nomePet && pet.nomePet.length > 12
-  const usarLayoutExpandido = temFoto || nomeLongo
+  const usarLayoutExpandido = nomeLongo
   const estaProntoParaRetirada = pet.status === "finalizado"
 
   const prepararAvanco = (e: React.MouseEvent, etapa: string) => {
@@ -336,16 +336,13 @@ export function PetCard({
         </AnimatePresence>
 
         {usarLayoutExpandido ? (
-           <CardHeader className="gap-0 px-3 pt-2 pb-0">
-            <div className="absolute -top-2.5 -right-2.5 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg z-20 ring-2 ring-white">
-              {pet.slotNumber}
-            </div>
+          <CardHeader className="gap-0 px-3 pt-2 pb-0">
+            {pet.status !== "finalizado" && !showSuccessFeedback && (
+              <div className="absolute -top-2.5 -right-2.5 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg z-20 ring-2 ring-white">
+                {pet.slotNumber}
+              </div>
+            )}
             <div className="flex items-start gap-3">
-              {pet.foto && (
-                <div className="w-14 h-14 rounded-lg overflow-hidden border-2 border-gray-100 shadow-sm flex-shrink-0">
-                  <img src={pet.foto} alt={pet.nomePet} className="w-full h-full object-cover" />
-                </div>
-              )}
               <div className="flex flex-col items-start gap-1.5 flex-1 min-w-0 pr-6">
                 <Badge className={`${getServiceColor(pet.servico)} text-xs px-2.5 py-1 whitespace-nowrap`}>
                   {getServiceLabel(pet.servico)}
@@ -358,9 +355,11 @@ export function PetCard({
           </CardHeader>
         ) : (
           <CardHeader className="gap-0 px-3 pt-2.5 pb-0">
-            <div className="absolute -top-2.5 -right-2.5 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg z-20 ring-2 ring-white">
-              {pet.slotNumber}
-            </div>
+            {pet.status !== "finalizado" && !showSuccessFeedback && (
+              <div className="absolute -top-2.5 -right-2.5 bg-gradient-to-br from-blue-500 to-purple-500 text-white rounded-full w-8 h-8 flex items-center justify-center font-bold text-sm shadow-lg z-20 ring-2 ring-white">
+                {pet.slotNumber}
+              </div>
+            )}
             <div className="flex items-start justify-between gap-2 pr-6">
               <div className="flex-1 min-w-0">
                 <CardTitle className="text-base sm:text-lg font-bold leading-tight break-words whitespace-normal text-gray-800 m-0">
