@@ -1,7 +1,7 @@
 "use client"
 
 import { toast } from "sonner"
-import React, { useState, useMemo, useEffect } from "react"
+import React, { useState, useMemo, useEffect, useRef } from "react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
@@ -154,8 +154,14 @@ export function PetRegistration({
   const [jaBuscou, setJaBuscou] = useState(false)
   const [petVinculado, setPetVinculado] = useState(!!(initialData as any)?.petNumber)
 
-  // ✅ NOVO: modal de aviso de telefone vazio
+  // ✅ modal de aviso de telefone vazio
   const [showTelefoneAviso, setShowTelefoneAviso] = useState(false)
+
+  // Ref para o bloco de busca (usado no scrollIntoView ao focar, importante em landscape)
+  const buscaWrapperRef = useRef<HTMLDivElement>(null)
+
+  // ✅ Ref para o input de busca (usado para fechar o teclado ao encontrar resultados)
+  const inputBuscaRef = useRef<HTMLInputElement>(null)
 
   // Hook do Cloudinary
   const { uploadImage, uploading, error } = useCloudinaryUpload()
@@ -185,6 +191,11 @@ export function PetRegistration({
     try {
       const achados = await buscarPetsCadastro(t)
       setResultados(achados)
+
+      // ✅ Fecha o teclado automaticamente ao encontrar resultados
+      if (achados.length > 0) {
+        inputBuscaRef.current?.blur()
+      }
     } catch (err) {
       console.error("[buscarPetsCadastro]", err)
     } finally {
@@ -222,6 +233,13 @@ export function PetRegistration({
     setResultados([])
     setJaBuscou(false)
     setBuscando(false)
+  }
+
+  // Garante que o campo de busca fique visível ao ganhar foco (evita ficar escondido pelo teclado, principalmente em landscape)
+  const handleFocusBusca = () => {
+    setTimeout(() => {
+      buscaWrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" })
+    }, 300)
   }
 
   // Preenche o formulário com um pet encontrado
@@ -266,23 +284,23 @@ export function PetRegistration({
   }
 
   const handleSubmit = (e: React.FormEvent) => {
-  e.preventDefault()
+    e.preventDefault()
 
-  if (!nomePet || !nomeTutor) return
+    if (!nomePet || !nomeTutor) return
 
-  if (!servico) {
-    toast.error("Selecione um serviço antes de finalizar o cadastro.")
-    return
+    if (!servico) {
+      toast.error("Selecione um serviço antes de finalizar o cadastro.")
+      return
+    }
+
+    // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
+    const telefoneVazio = !telefone || telefone.trim() === ""
+    if (telefoneVazio && !isEditing) {
+      setShowTelefoneAviso(true)
+      return
+    }
+    enviarCadastro()
   }
-
-  // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
-  const telefoneVazio = !telefone || telefone.trim() === ""
-  if (telefoneVazio && !isEditing) {
-    setShowTelefoneAviso(true)
-    return
-  }
-  enviarCadastro()
-}
 
   // Upload para o Cloudinary
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -299,14 +317,14 @@ export function PetRegistration({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col h-full max-h-[80vh] relative bg-white"
+      className="flex flex-col h-full min-h-0 relative bg-white"
     >
       {/* ÁREA DE CAMPOS COM SCROLL */}
-      <div className="flex-1 overflow-y-auto px-4 pt-2 pb-32 space-y-6 scrollbar-hide">
+      <div className="flex-1 overflow-y-auto min-h-0 px-4 pt-2 pb-32 space-y-6 scrollbar-hide">
 
         {/* BARRA DE BUSCA DE PET CADASTRADO (só em cadastro novo) */}
         {!isEditing && (
-          <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+          <div ref={buscaWrapperRef} className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
             {petVinculado ? (
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-sm text-indigo-700 font-semibold">
@@ -333,9 +351,11 @@ export function PetRegistration({
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   <Input
+                    ref={inputBuscaRef}
                     placeholder="Nº, nome ou telefone..."
                     value={termoBusca}
                     onChange={(e) => setTermoBusca(e.target.value)}
+                    onFocus={handleFocusBusca}
                     onKeyDown={(e) => {
                       if (e.key === "Enter") {
                         e.preventDefault()

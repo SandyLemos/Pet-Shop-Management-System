@@ -109,7 +109,13 @@ function LoginScreen({
             style={{ background: 'linear-gradient(160deg, #1a1560 0%, #3B2FBE 60%, #E8192C 100%)' }}
           >
             <div className="bg-white rounded-2xl px-6 py-4 shadow-lg">
-              <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-20 w-auto object-contain" />
+              <img
+                src="/logo-elite.png"
+                alt="Elite Pet Shop"
+                width={126}
+                height={80}
+                className="h-20 w-auto object-contain"
+              />
             </div>
             <p className="text-white/70 text-xs mt-2 tracking-widest uppercase font-semibold">
               Sistema de Gestão
@@ -213,7 +219,13 @@ function SplashScreen() {
     >
       <div className="flex flex-col items-center gap-5">
         <div className="bg-white rounded-2xl px-6 py-4 shadow-xl">
-          <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-16 w-auto object-contain" />
+          <img
+            src="/logo-elite.png"
+            alt="Elite Pet Shop"
+            width={101}
+            height={64}
+            className="h-16 w-auto object-contain"
+          />
         </div>
         <span className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
         <p className="text-sm text-white/60 tracking-widest uppercase">Verificando sessão...</p>
@@ -528,7 +540,13 @@ export default function App() {
             {/* Logo no header */}
             <div className="flex items-center gap-4">
               <div className="bg-white rounded-xl px-4 py-2 shadow-md">
-                <img src="/logo-elite.png" alt="Elite Pet Shop" className="h-10 w-auto object-contain" />
+                <img
+                  src="/logo-elite.png"
+                  alt="Elite Pet Shop"
+                  width={63}
+                  height={40}
+                  className="h-10 w-auto object-contain"
+                />
               </div>
               <div className="hidden sm:block">
                 <p className="text-white/60 text-xs capitalize">
@@ -540,7 +558,7 @@ export default function App() {
             {/* 🆕 Nome do Pet Shop (centro) */}
             <div className="flex-1 flex justify-center">
               <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
-                <h1 className="...">Elite Pet Shop</h1>
+                Elite Pet Shop
               </h1>
             </div>
 
@@ -589,7 +607,7 @@ export default function App() {
                   <option value="higienica">Tosa Higiênica</option>
                   <option value="ozonio">Ozônio</option>
                   <option value="hidratacao">Hidratação</option>
-              </select>
+                </select>
               </div>
             </div>
 

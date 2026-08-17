@@ -5,7 +5,7 @@ import {
   DialogHeader,
   DialogTitle,
   DialogTrigger,
-  DialogDescription, // 🔧 adicionado
+  DialogDescription,
 } from './ui/dialog';
 import { Badge } from './ui/badge';
 import {
@@ -308,7 +308,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             </DialogTrigger>
 
             {status === 'livre' && (
-              <DialogContent className="max-w-2xl"
+              <DialogContent
+                className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
                 onOpenAutoFocus={(e) => e.preventDefault()}
               >
                 <DialogHeader>
@@ -366,7 +367,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           }
         }}
       >
-        <DialogContent className="max-w-2xl"
+        <DialogContent
+          className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
