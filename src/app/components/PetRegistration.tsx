@@ -7,7 +7,7 @@ import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
 import { Upload, Save, CheckCircle2, Search, X, Loader2, AlertTriangle } from "lucide-react"
-import type { Pet } from "../types/pet"
+import type { Pet, SlotStatus } from "../types/pet"
 import { useCloudinaryUpload } from "../../hooks/useCloudinaryUpload"
 import { buscarPetsCadastro, type PetCadastro } from "../../services/petService"
 
@@ -52,6 +52,9 @@ const RACAS_GATO = [
   "Siamês",
   "Sphynx",
 ]
+
+// ✅ Status considerados "em produção" (pet ativo em algum slot)
+const STATUS_ATIVOS: SlotStatus[] = ["espera", "banho", "escovar", "tosa"]
 
 interface PetRegistrationProps {
   onSubmit: (
@@ -178,6 +181,19 @@ export function PetRegistration({
     return slots
   }, [allPets, isEditing, initialData])
 
+  // ✅ Verifica se este pet (por petNumber) já está ativo em produção em outro slot
+  const verificarPetEmProducao = (numero: string) => {
+    if (!numero) return false
+    const encontrado = allPets.some(
+      (p) =>
+        p.petNumber === numero &&
+        STATUS_ATIVOS.includes(p.status) &&
+        (isEditing ? p.id !== initialData?.id : true),
+    )
+    console.log("🔍 Verificando:", numero, "allPets:", allPets, "resultado:", encontrado)
+    return encontrado
+  }
+
   // Executa busca no cadastro permanente (aceita termo do debounce)
   const handleBuscar = async (termo: string = termoBusca) => {
     const t = termo.trim()
@@ -244,6 +260,14 @@ export function PetRegistration({
 
   // Preenche o formulário com um pet encontrado
   const selecionarPet = (p: PetCadastro) => {
+    // ✅ Bloqueia vínculo se o pet já estiver em produção (espera/banho/tosa/escovar)
+    if (verificarPetEmProducao(p.petNumber)) {
+      toast.error(
+        `${p.nomePet} já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.`,
+      )
+      return
+    }
+
     setNomePet(p.nomePet)
     setNomeTutor(p.nomeTutor)
     setTelefone(p.telefone || "")
@@ -293,6 +317,14 @@ export function PetRegistration({
       return
     }
 
+    // ✅ Segurança extra: bloqueia cadastro duplicado do mesmo pet já em produção
+    if (petNumber && verificarPetEmProducao(petNumber)) {
+      toast.error(
+        "Este pet já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.",
+      )
+      return
+    }
+
     // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
     const telefoneVazio = !telefone || telefone.trim() === ""
     if (telefoneVazio && !isEditing) {
@@ -317,10 +349,10 @@ export function PetRegistration({
   return (
     <form
       onSubmit={handleSubmit}
-      className="flex flex-col h-full min-h-0 relative bg-white"
+      className="flex flex-col flex-1 min-h-0 relative bg-white"
     >
-      {/* ÁREA DE CAMPOS COM SCROLL */}
-      <div className="flex-1 overflow-y-auto min-h-0 px-4 pt-2 pb-32 space-y-6 scrollbar-hide">
+      {/* ÁREA DE CAMPOS COM SCROLL — ✅ px-6 e pb-6 (rodapé não é mais absoluto) */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pt-2 pb-6 space-y-6 scrollbar-hide">
 
         {/* BARRA DE BUSCA DE PET CADASTRADO (só em cadastro novo) */}
         {!isEditing && (
@@ -394,30 +426,42 @@ export function PetRegistration({
                 {/* Resultados */}
                 {!buscando && resultados.length > 0 && (
                   <ul className="bg-white rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-100">
-                    {resultados.map((p) => (
-                      <li key={p.petNumber}>
-                        <button
-                          type="button"
-                          onClick={() => selecionarPet(p)}
-                          className="w-full text-left px-3 py-2 hover:bg-indigo-50 transition-colors flex items-center gap-2"
-                        >
-                          <span className="text-base shrink-0">
-                            {p.especie === "gato" ? "🐈" : "🐕"}
-                          </span>
-                          <div className="min-w-0">
-                            <p className="text-sm font-semibold text-slate-800 truncate">
-                              {p.nomePet}{" "}
-                              <span className="font-mono text-xs text-indigo-500">
-                                {p.petNumber}
+                    {resultados.map((p) => {
+                      const emProducao = verificarPetEmProducao(p.petNumber)
+                      return (
+                        <li key={p.petNumber}>
+                          <button
+                            type="button"
+                            onClick={() => selecionarPet(p)}
+                            className={`w-full text-left px-3 py-2 transition-colors flex items-center gap-2 ${
+                              emProducao
+                                ? "opacity-60 cursor-not-allowed hover:bg-transparent"
+                                : "hover:bg-indigo-50"
+                            }`}
+                          >
+                            <span className="text-base shrink-0">
+                              {p.especie === "gato" ? "🐈" : "🐕"}
+                            </span>
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-semibold text-slate-800 truncate">
+                                {p.nomePet}{" "}
+                                <span className="font-mono text-xs text-indigo-500">
+                                  {p.petNumber}
+                                </span>
+                              </p>
+                              <p className="text-xs text-slate-400 truncate">
+                                {p.nomeTutor} · {p.telefone || "sem telefone"}
+                              </p>
+                            </div>
+                            {emProducao && (
+                              <span className="text-[10px] font-bold text-orange-500 bg-orange-50 px-2 py-0.5 rounded-full shrink-0">
+                                Em atendimento
                               </span>
-                            </p>
-                            <p className="text-xs text-slate-400 truncate">
-                              {p.nomeTutor} · {p.telefone || "sem telefone"}
-                            </p>
-                          </div>
-                        </button>
-                      </li>
-                    ))}
+                            )}
+                          </button>
+                        </li>
+                      )
+                    })}
                   </ul>
                 )}
 
@@ -627,7 +671,7 @@ export function PetRegistration({
           </div>
 
           {/* 7. OBSERVAÇÕES */}
-          <div className="space-y-2 pb-4">
+          <div className="space-y-2">
             <Label className="text-slate-600 font-semibold text-sm">
               Observações
             </Label>
@@ -642,8 +686,8 @@ export function PetRegistration({
         </div>
       </div>
 
-      {/* RODAPÉ FIXO */}
-      <div className="absolute bottom-0 left-0 right-0 p-5 bg-white/80 backdrop-blur-md border-t border-slate-100/50 z-10">
+      {/* ✅ RODAPÉ FIXO — agora shrink-0 no flow do flex (era absolute) */}
+      <div className="shrink-0 px-6 py-4 bg-white border-t border-slate-100">
         <Button
           type="submit"
           disabled={uploading}
@@ -663,9 +707,9 @@ export function PetRegistration({
         </Button>
       </div>
 
-      {/* ✅ MODAL DE AVISO — TELEFONE VAZIO */}
+      {/* ✅ MODAL DE AVISO — TELEFONE VAZIO (fixed para cobrir todo o dialog) */}
       {showTelefoneAviso && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
             className="absolute inset-0 bg-black/40 backdrop-blur-sm"
             onClick={() => setShowTelefoneAviso(false)}

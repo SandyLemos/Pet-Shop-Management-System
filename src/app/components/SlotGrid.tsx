@@ -308,8 +308,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             </DialogTrigger>
 
             {status === 'livre' && (
+              /* ✅ altura FIXA para o scroll interno do formulário funcionar */
               <DialogContent
-                className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+                className="sm:max-w-2xl h-[85vh]"
                 onOpenAutoFocus={(e) => e.preventDefault()}
               >
                 <DialogHeader>
@@ -318,7 +319,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                     Preencha os dados do pet para reservar o slot {selectedSlot}.
                   </DialogDescription>
                 </DialogHeader>
-                <PetRegistration onSubmit={handleRegister} />
+                <PetRegistration
+                  onSubmit={handleRegister}
+                  allPets={pets}
+                />
               </DialogContent>
             )}
           </Dialog>
@@ -357,7 +361,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         }}
       />
 
-      {/* 🆕 Modal de EDIÇÃO do pet */}
+      {/* 🆕 Modal de EDIÇÃO do pet — ✅ altura FIXA */}
       <Dialog
         open={isEditOpen}
         onOpenChange={(open) => {
@@ -368,7 +372,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         }}
       >
         <DialogContent
-          className="max-w-2xl max-h-[85vh] overflow-hidden flex flex-col"
+          className="sm:max-w-2xl h-[85vh]"
           onOpenAutoFocus={(e) => e.preventDefault()}
         >
           <DialogHeader>
@@ -382,6 +386,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             <PetRegistration
               isEditing={true}
               initialData={petParaEditar}
+              allPets={pets}
               onSubmit={(updatedData) => {
                 onEditPet(petParaEditar.id, updatedData as Partial<Pet>);
                 setIsEditOpen(false);

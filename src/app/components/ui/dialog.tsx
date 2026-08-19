@@ -49,13 +49,18 @@ const DialogContent = React.forwardRef<
           e.preventDefault()
       }}
       className={cn(
-        "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg",
+        // animações
+        "bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95",
+        // posicionamento
+        "fixed top-[50%] left-[50%] z-50 translate-x-[-50%] translate-y-[-50%]",
+        // ✅ layout: flex coluna (era 'grid gap-4 p-6 sm:max-w-lg')
+        "flex flex-col w-full max-w-[calc(100%-2rem)] rounded-lg border shadow-lg duration-200 overflow-hidden",
         className,
       )}
       {...props}
     >
       {children}
-      <DialogPrimitive.Close className="absolute top-4 right-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
+      <DialogPrimitive.Close className="absolute top-4 right-4 z-20 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground">
         <XIcon className="h-4 w-4" />
         <span className="sr-only">Close</span>
       </DialogPrimitive.Close>
@@ -69,11 +74,26 @@ const DialogHeader = ({
   ...props
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
-    className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+    className={cn(
+      // ✅ shrink-0 + padding próprio (o p-6 saiu do DialogContent)
+      "shrink-0 flex flex-col gap-2 px-6 pt-6 pb-3 pr-12 text-center sm:text-left",
+      className,
+    )}
     {...props}
   />
 )
 DialogHeader.displayName = "DialogHeader"
+
+const DialogBody = ({
+  className,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) => (
+  <div
+    className={cn("flex-1 min-h-0 overflow-y-auto px-6 py-2", className)}
+    {...props}
+  />
+)
+DialogBody.displayName = "DialogBody"
 
 const DialogFooter = ({
   className,
@@ -81,7 +101,8 @@ const DialogFooter = ({
 }: React.HTMLAttributes<HTMLDivElement>) => (
   <div
     className={cn(
-      "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+      // ✅ shrink-0 + padding próprio
+      "shrink-0 flex flex-col-reverse gap-2 px-6 pb-6 pt-3 sm:flex-row sm:justify-end",
       className,
     )}
     {...props}
@@ -121,6 +142,7 @@ export {
   DialogClose,
   DialogContent,
   DialogHeader,
+  DialogBody,
   DialogFooter,
   DialogTitle,
   DialogDescription,

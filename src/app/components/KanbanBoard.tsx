@@ -22,6 +22,7 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
+  DialogBody,
 } from './ui/dialog';
 import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
@@ -272,25 +273,31 @@ export function PetCard({
           </Card>
         </motion.div>
 
+        {/* ✅ Selecionar Profissional — largura normal + DialogBody com padding */}
         <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
-          <DialogContent onClick={(e) => e.stopPropagation()}>
+          <DialogContent
+            className="sm:max-w-lg max-h-[85vh]"
+            onClick={(e) => e.stopPropagation()}
+          >
             <DialogHeader>
               <DialogTitle>Selecionar Profissional</DialogTitle>
               <DialogDescription className="sr-only">
                 Escolha o profissional responsável e marque os problemas de saúde do pet.
               </DialogDescription>
             </DialogHeader>
-            <ProfessionalSelector
-              pet={{ ...pet, proximaEtapa: etapaDestino || "banho" }}
-              onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
-              onAssignProfessional={onAssignProfessional}
-              onSubmit={(profissionalEscolhido, problemasSaude) => {
-                const problemasField = calcularDeltaProblemas("banho", problemasSaude)
-                onAdvanceStage(pet.id, "banho", { pB: profissionalEscolhido }, problemasField)
-                setIsProfessionalDialogOpen(false)
-                setEtapaDestino("")
-              }}
-            />
+            <DialogBody className="pb-6">
+              <ProfessionalSelector
+                pet={{ ...pet, proximaEtapa: etapaDestino || "banho" }}
+                onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
+                onAssignProfessional={onAssignProfessional}
+                onSubmit={(profissionalEscolhido, problemasSaude) => {
+                  const problemasField = calcularDeltaProblemas("banho", problemasSaude)
+                  onAdvanceStage(pet.id, "banho", { pB: profissionalEscolhido }, problemasField)
+                  setIsProfessionalDialogOpen(false)
+                  setEtapaDestino("")
+                }}
+              />
+            </DialogBody>
           </DialogContent>
         </Dialog>
       </>
@@ -438,8 +445,9 @@ export function PetCard({
 
           <div className="pt-0 space-y-1">
 
+            {/* ✅ Disponibilizar para Retirada — volta a ser modal pequeno */}
             <Dialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
-              <DialogContent className="max-w-sm" onClick={(e) => e.stopPropagation()}>
+              <DialogContent className="sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-green-700">
                     <PackageCheck className="w-5 h-5" />
@@ -451,7 +459,7 @@ export function PetCard({
                     disponibilizá-lo para retirada pelo tutor?
                   </DialogDescription>
                 </DialogHeader>
-                <DialogFooter className="flex gap-2 pt-2 sm:gap-2">
+                <DialogFooter className="flex gap-2 sm:gap-2">
                   <Button
                     variant="outline"
                     className="flex-1"
@@ -470,43 +478,49 @@ export function PetCard({
               </DialogContent>
             </Dialog>
 
+            {/* ✅ Selecionar Profissional (card completo) */}
             <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
-              <DialogContent onClick={(e) => e.stopPropagation()}>
+              <DialogContent
+                className="sm:max-w-lg max-h-[85vh]"
+                onClick={(e) => e.stopPropagation()}
+              >
                 <DialogHeader>
                   <DialogTitle>Selecionar Profissional</DialogTitle>
                   <DialogDescription className="sr-only">
                     Escolha o profissional responsável e marque os problemas de saúde do pet.
                   </DialogDescription>
                 </DialogHeader>
-                <ProfessionalSelector
-                  pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
-                  onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
-                  onAssignProfessional={onAssignProfessional}
-                  onSubmit={(profissionalEscolhido, problemasSaude) => {
-                    const etapaRef = etapaDestino || pet.status
-                    const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
+                <DialogBody className="pb-6">
+                  <ProfessionalSelector
+                    pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
+                    onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
+                    onAssignProfessional={onAssignProfessional}
+                    onSubmit={(profissionalEscolhido, problemasSaude) => {
+                      const etapaRef = etapaDestino || pet.status
+                      const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
 
-                    if (etapaDestino) {
-                      const profissionais = {
-                        pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
-                        pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
-                        pT: etapaDestino === "tosa"    ? profissionalEscolhido : undefined,
+                      if (etapaDestino) {
+                        const profissionais = {
+                          pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
+                          pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
+                          pT: etapaDestino === "tosa"    ? profissionalEscolhido : undefined,
+                        }
+                        onAdvanceStage(
+                          pet.id,
+                          etapaDestino as SlotStatus,
+                          profissionais,
+                          problemasField,
+                        )
+                      } else {
+                        handleQuickEditProfessional(profissionalEscolhido)
+                        salvarProblemasSaude(etapaRef, problemasSaude)
                       }
-                      onAdvanceStage(
-                        pet.id,
-                        etapaDestino as SlotStatus,
-                        profissionais,
-                        problemasField,
-                      )
-                    } else {
-                      handleQuickEditProfessional(profissionalEscolhido)
-                      salvarProblemasSaude(etapaRef, problemasSaude)
-                    }
 
-                    setIsProfessionalDialogOpen(false)
-                    setEtapaDestino("")
-                  }}
-                />
+                      setIsProfessionalDialogOpen(false)
+                      setEtapaDestino("")
+                    }}
+                  />
+                </DialogBody>
               </DialogContent>
             </Dialog>
 
@@ -603,8 +617,12 @@ export function PetCard({
         }}
       />
 
+      {/* ✅ Editar Perfil do Pet — altura FIXA para o scroll interno funcionar */}
       <Dialog open={isEditPetOpen} onOpenChange={setIsEditPetOpen}>
-        <DialogContent className="max-w-2xl" onClick={(e) => e.stopPropagation()}>
+        <DialogContent
+          className="sm:max-w-2xl h-[85vh]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <DialogHeader>
             <DialogTitle>Editar Perfil do Pet</DialogTitle>
             <DialogDescription className="sr-only">
@@ -622,8 +640,12 @@ export function PetCard({
         </DialogContent>
       </Dialog>
 
+      {/* ✅ Alterar Responsável — largura normal + DialogBody */}
       <Dialog open={isEditProfessionalOpen} onOpenChange={setIsEditProfessionalOpen}>
-        <DialogContent onClick={(e) => e.stopPropagation()}>
+        <DialogContent
+          className="sm:max-w-lg max-h-[85vh]"
+          onClick={(e) => e.stopPropagation()}
+        >
           <DialogHeader>
             <DialogTitle>
               {pet.status === "banho"   && "Alterar Responsável pelo Banho"}
@@ -634,16 +656,18 @@ export function PetCard({
               Altere o profissional responsável por esta etapa.
             </DialogDescription>
           </DialogHeader>
-          <ProfessionalSelector
-            pet={{ ...pet, proximaEtapa: pet.status }}
-            onCancel={() => setIsEditProfessionalOpen(false)}
-            onAssignProfessional={onAssignProfessional}
-            onSubmit={(profissionalEscolhido, problemasSaude) => {
-              handleQuickEditProfessional(profissionalEscolhido)
-              salvarProblemasSaude(pet.status, problemasSaude)
-              setIsEditProfessionalOpen(false)
-            }}
-          />
+          <DialogBody className="pb-6">
+            <ProfessionalSelector
+              pet={{ ...pet, proximaEtapa: pet.status }}
+              onCancel={() => setIsEditProfessionalOpen(false)}
+              onAssignProfessional={onAssignProfessional}
+              onSubmit={(profissionalEscolhido, problemasSaude) => {
+                handleQuickEditProfessional(profissionalEscolhido)
+                salvarProblemasSaude(pet.status, problemasSaude)
+                setIsEditProfessionalOpen(false)
+              }}
+            />
+          </DialogBody>
         </DialogContent>
       </Dialog>
     </motion.div>
@@ -678,6 +702,7 @@ interface KanbanColumnProps {
   onAddPet?: (pet: Omit<Pet, "id" | "checkInTime">) => void
   allPets?: Pet[]
 }
+
 function KanbanColumn({
   status,
   title,
@@ -764,7 +789,8 @@ function KanbanColumn({
               <Plus className="w-4 h-4" />
               Adicionar Animal
             </button>
-            <DialogContent>
+            {/* ✅ Adicionar Animal — altura FIXA */}
+            <DialogContent className="sm:max-w-2xl h-[85vh]">
               <DialogHeader>
                 <DialogTitle>Adicionar Animal - Slot {getNextAvailableSlot()}</DialogTitle>
                 <DialogDescription className="sr-only">
