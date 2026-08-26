@@ -745,7 +745,7 @@ function KanbanColumn({
 
   return (
     // 🔧 ALTERADO: coluna virou flex vertical com altura total do trilho
-    <div className="flex-1 min-w-[280px] flex flex-col min-h-0 transition-colors rounded-lg">
+    <div className="shrink-0 w-[280px] xl:w-auto xl:flex-1 flex flex-col min-h-0 transition-colors rounded-lg">
       {/* 🔧 ALTERADO: header fixo (shrink-0) */}
       <div className={`${color} p-4 rounded-t-lg shrink-0`}>
         <div className="flex items-center justify-between text-white">
@@ -760,7 +760,7 @@ function KanbanColumn({
       </div>
 
       {/* 🔧 ALTERADO: corpo com scroll próprio; min-h só no desktop */}
-      <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-gray-50 rounded-b-lg min-h-[200px] xl:min-h-[400px]">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 bg-gray-50 rounded-b-lg">
         {columnPets.map((pet) => (
           <PetCard
             key={pet.id}
@@ -843,8 +843,8 @@ export function KanbanBoard({
         </h2>
 
         {/* 🔧 ALTERADO: trilho rolável que ocupa o espaço restante */}
-        <div className="flex-1 min-h-0 overflow-x-auto md:overflow-y-auto">
-          <div className="flex gap-4 pb-4 h-full">
+          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch]">
+            <div className="flex flex-nowrap gap-4 pb-4 h-full w-max xl:w-full">
             <KanbanColumn
               status="espera"
               title="Aguardando"

@@ -5,7 +5,13 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite"
+    "dev": "vite",
+    "deploy": "vite build && firebase deploy --only hosting",
+    "reset:dias": "firebase firestore:delete dias --recursive --force",
+    "reset:pets": "firebase firestore:delete petsCadastro --recursive --force",
+    "reset:contadores": "firebase firestore:delete contadores --recursive --force",
+    "reset:profissionais": "firebase firestore:delete profissionais --recursive --force",
+    "reset": "powershell -ExecutionPolicy Bypass -File ./reset.ps1"
   },
   "dependencies": {
     "@emotion/react": "11.14.0",
