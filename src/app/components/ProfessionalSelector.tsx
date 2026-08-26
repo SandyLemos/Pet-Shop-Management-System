@@ -22,6 +22,7 @@ interface ProfissionalSelectorSimpleProps {
   onSubmit?: undefined;
   onCancel?: undefined;
   onAssignProfessional?: undefined;
+  fillHeight?: undefined;
 }
 
 /** Modo modal: usado dentro de Dialog no KanbanBoard */
@@ -36,6 +37,15 @@ interface ProfissionalSelectorModalProps {
     profissionalTosa?: string,
     profissionalEscovar?: string,
   ) => void;
+  /**
+   * 🆕 Quando true, o componente ocupa 100% da altura disponível do Dialog:
+   * o corpo (dropdown + problemas de saúde) rola, enquanto o aviso de
+   * validação e os botões Cancelar/Confirmar ficam FIXOS no rodapé.
+   *
+   * Requer que o DialogContent pai tenha:
+   *   p-0 gap-0 h-[88vh] flex flex-col overflow-hidden
+   */
+  fillHeight?: boolean;
   etapa?: undefined;
   value?: undefined;
   onChange?: undefined;
@@ -118,6 +128,9 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
 
   // ── Detecta modo de uso (antes dos effects, resolve ts2448/ts2454) ──
   const isModalMode = props.pet !== undefined;
+
+  // ── 🆕 Layout com rodapé fixo (só faz sentido no modo modal) ──
+  const fillHeight = isModalMode ? (props.fillHeight ?? false) : false;
 
   // ── petKey: chave estável que muda apenas quando o conteúdo relevante muda ──
   const petKey = isModalMode
@@ -228,142 +241,210 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
   const podeConfirmar = !!selecionadoNome && problemasSaudeValido;
 
   // ── Render ─────────────────────────────────────────────────────────────────
-  return (
-    <div className="space-y-4">
-      <div ref={ref} className="relative w-full">
-        {/* Label */}
-        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
-          {ETAPA_LABEL[etapaAtual] ?? `Responsável por ${etapaAtual}`}
+
+  // 🆕 Bloco do dropdown de profissional — reaproveitado nos 3 layouts
+  const blocoProfissional = (
+    <div ref={ref} className="relative w-full">
+      {/* Label */}
+      <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">
+        {ETAPA_LABEL[etapaAtual] ?? `Responsável por ${etapaAtual}`}
+      </p>
+
+      {/* Trigger */}
+      <button
+        type="button"
+        disabled={disabled || loading}
+        onClick={() => setOpen((prev) => !prev)}
+        className={`
+          w-full flex items-center justify-between gap-2
+          px-4 py-2.5 rounded-xl border text-sm font-medium
+          transition-all duration-150 focus:outline-none
+          ${disabled
+            ? 'bg-slate-100 border-slate-200 text-gray-400 cursor-not-allowed'
+            : open
+              ? 'bg-white border-orange-400 ring-2 ring-orange-100 text-gray-800'
+              : 'bg-white border-slate-200 hover:border-orange-300 text-gray-700'
+          }
+        `}
+      >
+        <div className="flex items-center gap-2 truncate">
+          {loading ? (
+            <Loader2 size={15} className="animate-spin text-orange-400 shrink-0" />
+          ) : (
+            <Briefcase size={15} className="text-orange-400 shrink-0" />
+          )}
+          <span className="truncate">
+            {loading ? 'Carregando...' : nomeExibido}
+          </span>
+        </div>
+        <ChevronDown
+          size={15}
+          className={`shrink-0 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+        />
+      </button>
+
+      {/* Dropdown */}
+      {open && !loading && (
+        <div className="
+          absolute z-50 mt-1.5 w-full
+          bg-white border border-slate-200 rounded-xl shadow-xl
+          overflow-hidden
+        ">
+          {profissionais.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-6 gap-2 text-center px-4">
+              <Briefcase size={20} className="text-slate-300" />
+              <p className="text-xs text-gray-400 font-medium">
+                Nenhum profissional ativo encontrado.
+              </p>
+            </div>
+          ) : (
+            <ul className="max-h-52 overflow-y-auto overscroll-contain divide-y divide-slate-50">
+              {profissionais.map((p) => (
+                <li key={p.id}>
+                  <button
+                    type="button"
+                    onClick={() => handleSelect(p)}
+                    className={`
+                      w-full flex items-center gap-3 px-4 py-3
+                      text-left text-sm transition hover:bg-orange-50
+                      ${currentId === p.id ? 'bg-orange-50' : ''}
+                    `}
+                  >
+                    {/* Avatar inicial */}
+                    <div className={`
+                      w-8 h-8 rounded-full flex items-center justify-center
+                      text-xs font-bold shrink-0
+                      ${currentId === p.id
+                        ? 'bg-orange-500 text-white'
+                        : 'bg-orange-100 text-orange-600'}
+                    `}>
+                      {p.nome.charAt(0).toUpperCase()}
+                    </div>
+
+                    <div className="flex flex-col min-w-0">
+                      <span className={`font-semibold truncate ${currentId === p.id ? 'text-orange-700' : 'text-gray-800'}`}>
+                        {p.nome} {p.sobrenome}
+                      </span>
+                      <span className="text-xs text-gray-400 truncate">{p.funcao}</span>
+                    </div>
+
+                    {currentId === p.id && (
+                      <span className="ml-auto text-orange-500 text-xs font-bold shrink-0">✓</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+
+  // ── MODO SIMPLES: apenas o dropdown inline ──────────────────────────────────
+  if (!isModalMode) {
+    return <div className="space-y-4">{blocoProfissional}</div>;
+  }
+
+  // 🆕 Rodapé: aviso de validação + botões (usado no layout fillHeight)
+  const rodape = (
+    <div
+      className="shrink-0 border-t border-slate-100 bg-white
+                 px-5 py-3 space-y-2
+                 pb-[max(0.75rem,env(safe-area-inset-bottom))]"
+    >
+      {!problemasSaudeValido && (
+        <p className="text-xs text-red-500 leading-snug">
+          Selecione ao menos um item (marque "Nenhuma" se não houver problemas).
         </p>
+      )}
 
-        {/* Trigger */}
-        <button
-          type="button"
-          disabled={disabled || loading}
-          onClick={() => setOpen((prev) => !prev)}
-          className={`
-            w-full flex items-center justify-between gap-2
-            px-4 py-2.5 rounded-xl border text-sm font-medium
-            transition-all duration-150 focus:outline-none
-            ${disabled
-              ? 'bg-slate-100 border-slate-200 text-gray-400 cursor-not-allowed'
-              : open
-                ? 'bg-white border-orange-400 ring-2 ring-orange-100 text-gray-800'
-                : 'bg-white border-slate-200 hover:border-orange-300 text-gray-700'
-            }
-          `}
+      <div className="flex gap-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={props.onCancel}
         >
-          <div className="flex items-center gap-2 truncate">
-            {loading ? (
-              <Loader2 size={15} className="animate-spin text-orange-400 shrink-0" />
-            ) : (
-              <Briefcase size={15} className="text-orange-400 shrink-0" />
-            )}
-            <span className="truncate">
-              {loading ? 'Carregando...' : nomeExibido}
-            </span>
-          </div>
-          <ChevronDown
-            size={15}
-            className={`shrink-0 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-          />
-        </button>
-
-        {/* Dropdown */}
-        {open && !loading && (
-          <div className="
-            absolute z-50 mt-1.5 w-full
-            bg-white border border-slate-200 rounded-xl shadow-xl
-            overflow-hidden
-          ">
-            {profissionais.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-6 gap-2 text-center px-4">
-                <Briefcase size={20} className="text-slate-300" />
-                <p className="text-xs text-gray-400 font-medium">
-                  Nenhum profissional ativo encontrado.
-                </p>
-              </div>
-            ) : (
-              <ul className="max-h-52 overflow-y-auto divide-y divide-slate-50">
-                {profissionais.map((p) => (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      onClick={() => handleSelect(p)}
-                      className={`
-                        w-full flex items-center gap-3 px-4 py-3
-                        text-left text-sm transition hover:bg-orange-50
-                        ${currentId === p.id ? 'bg-orange-50' : ''}
-                      `}
-                    >
-                      {/* Avatar inicial */}
-                      <div className={`
-                        w-8 h-8 rounded-full flex items-center justify-center
-                        text-xs font-bold shrink-0
-                        ${currentId === p.id
-                          ? 'bg-orange-500 text-white'
-                          : 'bg-orange-100 text-orange-600'}
-                      `}>
-                        {p.nome.charAt(0).toUpperCase()}
-                      </div>
-
-                      <div className="flex flex-col min-w-0">
-                        <span className={`font-semibold truncate ${currentId === p.id ? 'text-orange-700' : 'text-gray-800'}`}>
-                          {p.nome} {p.sobrenome}
-                        </span>
-                        <span className="text-xs text-gray-400 truncate">{p.funcao}</span>
-                      </div>
-
-                      {currentId === p.id && (
-                        <span className="ml-auto text-orange-500 text-xs font-bold shrink-0">✓</span>
-                      )}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+          Cancelar
+        </Button>
+        <Button
+          className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+          disabled={!podeConfirmar}
+          onClick={() => {
+            if (podeConfirmar) {
+              props.onSubmit(selecionadoNome, problemasSaude);
+            }
+          }}
+        >
+          Confirmar
+        </Button>
       </div>
+    </div>
+  );
 
-      {/* ── Seletor de problemas de saúde + Botões — apenas no modo modal ── */}
-      {isModalMode && (
-        <>
-          {/* ── Problemas de saúde (obrigatório) ── */}
+  // ── MODO MODAL com rodapé FIXO ──────────────────────────────────────────────
+  // Requer DialogContent pai com: p-0 gap-0 h-[88vh] flex flex-col overflow-hidden
+  if (fillHeight) {
+    return (
+      <div className="flex flex-col flex-1 min-h-0">
+        <div
+          className={`flex-1 min-h-0 overflow-y-auto overscroll-contain px-5 py-4 space-y-4
+                      transition-[padding] duration-150
+                      ${open ? 'pb-56' : 'pb-4'}`}
+        >
+          {blocoProfissional}
+
           <div className="pt-2 border-t border-slate-100">
             <HealthIssuesSelector
               selectedIds={problemasSaude}
               onChange={handleProblemasChange}
             />
-            {!problemasSaudeValido && (
-              <p className="text-xs text-red-500 mt-2">
-                Selecione ao menos um item (marque "Nenhuma" se não houver problemas).
-              </p>
-            )}
           </div>
+        </div>
 
-          <div className="flex gap-2 pt-2">
-            <Button
-              variant="outline"
-              className="flex-1"
-              onClick={props.onCancel}
-            >
-              Cancelar
-            </Button>
-            <Button
-              className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
-              disabled={!podeConfirmar}
-              onClick={() => {
-                if (podeConfirmar) {
-                  props.onSubmit(selecionadoNome, problemasSaude);
-                }
-              }}
-            >
-              Confirmar
-            </Button>
-          </div>
-        </>
-      )}
+        {rodape}
+      </div>
+    );
+  }
+
+  // ── MODO MODAL legado (rodapé rola junto) — compatibilidade ─────────────────
+  return (
+    <div className="space-y-4">
+      {blocoProfissional}
+
+      {/* ── Problemas de saúde (obrigatório) ── */}
+      <div className="pt-2 border-t border-slate-100">
+        <HealthIssuesSelector
+          selectedIds={problemasSaude}
+          onChange={handleProblemasChange}
+        />
+        {!problemasSaudeValido && (
+          <p className="text-xs text-red-500 mt-2">
+            Selecione ao menos um item (marque "Nenhuma" se não houver problemas).
+          </p>
+        )}
+      </div>
+
+      <div className="flex gap-2 pt-2">
+        <Button
+          variant="outline"
+          className="flex-1"
+          onClick={props.onCancel}
+        >
+          Cancelar
+        </Button>
+        <Button
+          className="flex-1 bg-orange-500 hover:bg-orange-600 text-white"
+          disabled={!podeConfirmar}
+          onClick={() => {
+            if (podeConfirmar) {
+              props.onSubmit(selecionadoNome, problemasSaude);
+            }
+          }}
+        >
+          Confirmar
+        </Button>
+      </div>
     </div>
   );
 }

@@ -22,13 +22,18 @@ import {
   DialogTitle,
   DialogDescription,
   DialogFooter,
-  DialogBody,
 } from './ui/dialog';
 import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog"
 import { PetDetailModal } from './PetDetailModal';
 import { useState } from 'react';
+
+const DIALOG_SELETOR_CLASS =
+  "sm:max-w-lg p-0 gap-0 h-[88vh] max-h-[88vh] sm:h-[80vh] flex flex-col overflow-hidden"
+
+const DIALOG_HEADER_CLASS =
+  "shrink-0 px-5 py-4 border-b border-slate-100 text-left"
 
 interface KanbanBoardProps {
   pets: Pet[]
@@ -128,7 +133,6 @@ export function PetCard({
     return labels[servico] || servico
   }
 
-  // ✅ Volta um status limpando os dados da etapa abandonada
   const handlePreviousStatus = () => {
     if (pet.status === "escovar") {
       onEditPet(pet.id, {
@@ -147,7 +151,6 @@ export function PetCard({
     }
   }
 
-  // ✅ Volta para aguardando limpando os dados do banho
   const handleVoltarParaAguardando = () => {
     onEditPet(pet.id, {
       status: "espera",
@@ -237,7 +240,7 @@ export function PetCard({
     onEditPet(pet.id, { [resultado.campo]: resultado.delta } as Partial<Pet>)
   }
 
-  // ── Card COMPACTO para espera (clicável → abre detalhe) ──
+  // ── Card COMPACTO para espera ──
   if (pet.status === "espera") {
     return (
       <>
@@ -273,38 +276,37 @@ export function PetCard({
           </Card>
         </motion.div>
 
-        {/* ✅ Selecionar Profissional — largura normal + DialogBody com padding */}
         <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
           <DialogContent
-            className="sm:max-w-lg max-h-[85vh]"
+            className={DIALOG_SELETOR_CLASS}
             onClick={(e) => e.stopPropagation()}
           >
-            <DialogHeader>
+            <DialogHeader className={DIALOG_HEADER_CLASS}>
               <DialogTitle>Selecionar Profissional</DialogTitle>
               <DialogDescription className="sr-only">
                 Escolha o profissional responsável e marque os problemas de saúde do pet.
               </DialogDescription>
             </DialogHeader>
-            <DialogBody className="pb-6">
-              <ProfessionalSelector
-                pet={{ ...pet, proximaEtapa: etapaDestino || "banho" }}
-                onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
-                onAssignProfessional={onAssignProfessional}
-                onSubmit={(profissionalEscolhido, problemasSaude) => {
-                  const problemasField = calcularDeltaProblemas("banho", problemasSaude)
-                  onAdvanceStage(pet.id, "banho", { pB: profissionalEscolhido }, problemasField)
-                  setIsProfessionalDialogOpen(false)
-                  setEtapaDestino("")
-                }}
-              />
-            </DialogBody>
+
+            <ProfessionalSelector
+              fillHeight
+              pet={{ ...pet, proximaEtapa: etapaDestino || "banho" }}
+              onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
+              onAssignProfessional={onAssignProfessional}
+              onSubmit={(profissionalEscolhido, problemasSaude) => {
+                const problemasField = calcularDeltaProblemas("banho", problemasSaude)
+                onAdvanceStage(pet.id, "banho", { pB: profissionalEscolhido }, problemasField)
+                setIsProfessionalDialogOpen(false)
+                setEtapaDestino("")
+              }}
+            />
           </DialogContent>
         </Dialog>
       </>
     )
   }
 
-  // ── Card COMPLETO para outros status (clicável → abre detalhe) ──
+  // ── Card COMPLETO ──
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Card
@@ -445,7 +447,6 @@ export function PetCard({
 
           <div className="pt-0 space-y-1">
 
-            {/* ✅ Disponibilizar para Retirada — volta a ser modal pequeno */}
             <Dialog open={isFinalizarDialogOpen} onOpenChange={setIsFinalizarDialogOpen}>
               <DialogContent className="sm:max-w-sm" onClick={(e) => e.stopPropagation()}>
                 <DialogHeader>
@@ -478,49 +479,48 @@ export function PetCard({
               </DialogContent>
             </Dialog>
 
-            {/* ✅ Selecionar Profissional (card completo) */}
             <Dialog open={isProfessionalDialogOpen} onOpenChange={setIsProfessionalDialogOpen}>
               <DialogContent
-                className="sm:max-w-lg max-h-[85vh]"
+                className={DIALOG_SELETOR_CLASS}
                 onClick={(e) => e.stopPropagation()}
               >
-                <DialogHeader>
+                <DialogHeader className={DIALOG_HEADER_CLASS}>
                   <DialogTitle>Selecionar Profissional</DialogTitle>
                   <DialogDescription className="sr-only">
                     Escolha o profissional responsável e marque os problemas de saúde do pet.
                   </DialogDescription>
                 </DialogHeader>
-                <DialogBody className="pb-6">
-                  <ProfessionalSelector
-                    pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
-                    onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
-                    onAssignProfessional={onAssignProfessional}
-                    onSubmit={(profissionalEscolhido, problemasSaude) => {
-                      const etapaRef = etapaDestino || pet.status
-                      const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
 
-                      if (etapaDestino) {
-                        const profissionais = {
-                          pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
-                          pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
-                          pT: etapaDestino === "tosa"    ? profissionalEscolhido : undefined,
-                        }
-                        onAdvanceStage(
-                          pet.id,
-                          etapaDestino as SlotStatus,
-                          profissionais,
-                          problemasField,
-                        )
-                      } else {
-                        handleQuickEditProfessional(profissionalEscolhido)
-                        salvarProblemasSaude(etapaRef, problemasSaude)
+                <ProfessionalSelector
+                  fillHeight
+                  pet={{ ...pet, proximaEtapa: etapaDestino || pet.status }}
+                  onCancel={() => { setIsProfessionalDialogOpen(false); setEtapaDestino("") }}
+                  onAssignProfessional={onAssignProfessional}
+                  onSubmit={(profissionalEscolhido, problemasSaude) => {
+                    const etapaRef = etapaDestino || pet.status
+                    const problemasField = calcularDeltaProblemas(etapaRef, problemasSaude)
+
+                    if (etapaDestino) {
+                      const profissionais = {
+                        pB: etapaDestino === "banho"   ? profissionalEscolhido : undefined,
+                        pE: etapaDestino === "escovar" ? profissionalEscolhido : undefined,
+                        pT: etapaDestino === "tosa"    ? profissionalEscolhido : undefined,
                       }
+                      onAdvanceStage(
+                        pet.id,
+                        etapaDestino as SlotStatus,
+                        profissionais,
+                        problemasField,
+                      )
+                    } else {
+                      handleQuickEditProfessional(profissionalEscolhido)
+                      salvarProblemasSaude(etapaRef, problemasSaude)
+                    }
 
-                      setIsProfessionalDialogOpen(false)
-                      setEtapaDestino("")
-                    }}
-                  />
-                </DialogBody>
+                    setIsProfessionalDialogOpen(false)
+                    setEtapaDestino("")
+                  }}
+                />
               </DialogContent>
             </Dialog>
 
@@ -617,7 +617,6 @@ export function PetCard({
         }}
       />
 
-      {/* ✅ Editar Perfil do Pet — altura FIXA para o scroll interno funcionar */}
       <Dialog open={isEditPetOpen} onOpenChange={setIsEditPetOpen}>
         <DialogContent
           className="sm:max-w-2xl h-[85vh]"
@@ -640,13 +639,12 @@ export function PetCard({
         </DialogContent>
       </Dialog>
 
-      {/* ✅ Alterar Responsável — largura normal + DialogBody */}
       <Dialog open={isEditProfessionalOpen} onOpenChange={setIsEditProfessionalOpen}>
         <DialogContent
-          className="sm:max-w-lg max-h-[85vh]"
+          className={DIALOG_SELETOR_CLASS}
           onClick={(e) => e.stopPropagation()}
         >
-          <DialogHeader>
+          <DialogHeader className={DIALOG_HEADER_CLASS}>
             <DialogTitle>
               {pet.status === "banho"   && "Alterar Responsável pelo Banho"}
               {pet.status === "escovar" && "Alterar Responsável pela Escovação"}
@@ -656,18 +654,18 @@ export function PetCard({
               Altere o profissional responsável por esta etapa.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody className="pb-6">
-            <ProfessionalSelector
-              pet={{ ...pet, proximaEtapa: pet.status }}
-              onCancel={() => setIsEditProfessionalOpen(false)}
-              onAssignProfessional={onAssignProfessional}
-              onSubmit={(profissionalEscolhido, problemasSaude) => {
-                handleQuickEditProfessional(profissionalEscolhido)
-                salvarProblemasSaude(pet.status, problemasSaude)
-                setIsEditProfessionalOpen(false)
-              }}
-            />
-          </DialogBody>
+
+          <ProfessionalSelector
+            fillHeight
+            pet={{ ...pet, proximaEtapa: pet.status }}
+            onCancel={() => setIsEditProfessionalOpen(false)}
+            onAssignProfessional={onAssignProfessional}
+            onSubmit={(profissionalEscolhido, problemasSaude) => {
+              handleQuickEditProfessional(profissionalEscolhido)
+              salvarProblemasSaude(pet.status, problemasSaude)
+              setIsEditProfessionalOpen(false)
+            }}
+          />
         </DialogContent>
       </Dialog>
     </motion.div>
@@ -746,8 +744,10 @@ function KanbanColumn({
   }
 
   return (
-    <div className="flex-1 min-w-[280px] transition-colors rounded-lg">
-      <div className={`${color} p-4 rounded-t-lg`}>
+    // 🔧 ALTERADO: coluna virou flex vertical com altura total do trilho
+    <div className="flex-1 min-w-[280px] flex flex-col min-h-0 transition-colors rounded-lg">
+      {/* 🔧 ALTERADO: header fixo (shrink-0) */}
+      <div className={`${color} p-4 rounded-t-lg shrink-0`}>
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-2">
             {icon}
@@ -758,7 +758,9 @@ function KanbanColumn({
           </Badge>
         </div>
       </div>
-      <div className="p-4 bg-gray-50 rounded-b-lg min-h-[400px]">
+
+      {/* 🔧 ALTERADO: corpo com scroll próprio; min-h só no desktop */}
+      <div className="flex-1 min-h-0 overflow-y-auto p-4 bg-gray-50 rounded-b-lg min-h-[200px] xl:min-h-[400px]">
         {columnPets.map((pet) => (
           <PetCard
             key={pet.id}
@@ -789,7 +791,6 @@ function KanbanColumn({
               <Plus className="w-4 h-4" />
               Adicionar Animal
             </button>
-            {/* ✅ Adicionar Animal — altura FIXA */}
             <DialogContent className="sm:max-w-2xl h-[85vh]">
               <DialogHeader>
                 <DialogTitle>Adicionar Animal - Slot {getNextAvailableSlot()}</DialogTitle>
@@ -807,7 +808,7 @@ function KanbanColumn({
           </Dialog>
         )}
       </div>
-      {/* Modal detalhes */}
+
       <PetDetailModal
         pet={detailPet}
         open={!!detailPet}
@@ -833,75 +834,83 @@ export function KanbanBoard({
   onAdvanceStage,
 }: KanbanBoardProps) {
   return (
-    <div className="flex gap-6">
-      <div className="flex-1 overflow-x-auto">
-        <h2 className="text-lg font-semibold mb-4 text-gray-800">Fluxo de Trabalho</h2>
-        <div className="flex gap-4 pb-4">
-          <KanbanColumn
-            status="espera"
-            title="Aguardando"
-            onRevertService={onRevertService}
-            icon={<Calendar className="w-5 h-5" />}
-            pets={pets}
-            onUpdateStatus={onUpdateStatus}
-            onCheckout={onCheckout}
-            onEditPet={onEditPet}
-            onDeletePet={onDeletePet}
-            onAssignProfessional={onAssignProfessional}
-            onMarkServiceComplete={onMarkServiceComplete}
-            onAdvanceStage={onAdvanceStage}
-            color="bg-amber-400"
-            onAddPet={onAddPet}
-            allPets={pets}
-          />
-          <KanbanColumn
-            status="banho"
-            title="Banho"
-            onRevertService={onRevertService}
-            icon={<Droplet className="w-5 h-5" />}
-            pets={pets}
-            onUpdateStatus={onUpdateStatus}
-            onCheckout={onCheckout}
-            onEditPet={onEditPet}
-            onDeletePet={onDeletePet}
-            onAssignProfessional={onAssignProfessional}
-            onMarkServiceComplete={onMarkServiceComplete}
-            onAdvanceStage={onAdvanceStage}
-            color="bg-sky-400"
-            allPets={pets}
-          />
-          <KanbanColumn
-            status="escovar"
-            title="Escovar"
-            onRevertService={onRevertService}
-            icon={<Wind className="w-5 h-5" />}
-            pets={pets}
-            onUpdateStatus={onUpdateStatus}
-            onCheckout={onCheckout}
-            onEditPet={onEditPet}
-            onDeletePet={onDeletePet}
-            onAssignProfessional={onAssignProfessional}
-            onMarkServiceComplete={onMarkServiceComplete}
-            onAdvanceStage={onAdvanceStage}
-            color="bg-sky-400"
-            allPets={pets}
-          />
-          <KanbanColumn
-            status="tosa"
-            title="Tosa"
-            onRevertService={onRevertService}
-            icon={<Scissors className="w-5 h-5" />}
-            pets={pets}
-            onUpdateStatus={onUpdateStatus}
-            onCheckout={onCheckout}
-            onEditPet={onEditPet}
-            onDeletePet={onDeletePet}
-            onAssignProfessional={onAssignProfessional}
-            onMarkServiceComplete={onMarkServiceComplete}
-            onAdvanceStage={onAdvanceStage}
-            color="bg-sky-400"
-            allPets={pets}
-          />
+    // 🔧 ALTERADO: wrapper com a classe .flow-area (travada só no tablet via CSS)
+    <div className="flex gap-6 flow-area md:h-[calc(100dvh-300px)] md:overflow-hidden xl:h-auto xl:overflow-visible">
+      {/* 🔧 ALTERADO: coluna flex vertical, sem overflow aqui */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <h2 className="shrink-0 text-lg font-semibold mb-4 text-gray-800">
+          Fluxo de Trabalho
+        </h2>
+
+        {/* 🔧 ALTERADO: trilho rolável que ocupa o espaço restante */}
+        <div className="flex-1 min-h-0 overflow-x-auto md:overflow-y-auto">
+          <div className="flex gap-4 pb-4 h-full">
+            <KanbanColumn
+              status="espera"
+              title="Aguardando"
+              onRevertService={onRevertService}
+              icon={<Calendar className="w-5 h-5" />}
+              pets={pets}
+              onUpdateStatus={onUpdateStatus}
+              onCheckout={onCheckout}
+              onEditPet={onEditPet}
+              onDeletePet={onDeletePet}
+              onAssignProfessional={onAssignProfessional}
+              onMarkServiceComplete={onMarkServiceComplete}
+              onAdvanceStage={onAdvanceStage}
+              color="bg-amber-400"
+              onAddPet={onAddPet}
+              allPets={pets}
+            />
+            <KanbanColumn
+              status="banho"
+              title="Banho"
+              onRevertService={onRevertService}
+              icon={<Droplet className="w-5 h-5" />}
+              pets={pets}
+              onUpdateStatus={onUpdateStatus}
+              onCheckout={onCheckout}
+              onEditPet={onEditPet}
+              onDeletePet={onDeletePet}
+              onAssignProfessional={onAssignProfessional}
+              onMarkServiceComplete={onMarkServiceComplete}
+              onAdvanceStage={onAdvanceStage}
+              color="bg-sky-400"
+              allPets={pets}
+            />
+            <KanbanColumn
+              status="escovar"
+              title="Escovar"
+              onRevertService={onRevertService}
+              icon={<Wind className="w-5 h-5" />}
+              pets={pets}
+              onUpdateStatus={onUpdateStatus}
+              onCheckout={onCheckout}
+              onEditPet={onEditPet}
+              onDeletePet={onDeletePet}
+              onAssignProfessional={onAssignProfessional}
+              onMarkServiceComplete={onMarkServiceComplete}
+              onAdvanceStage={onAdvanceStage}
+              color="bg-sky-400"
+              allPets={pets}
+            />
+            <KanbanColumn
+              status="tosa"
+              title="Tosa"
+              onRevertService={onRevertService}
+              icon={<Scissors className="w-5 h-5" />}
+              pets={pets}
+              onUpdateStatus={onUpdateStatus}
+              onCheckout={onCheckout}
+              onEditPet={onEditPet}
+              onDeletePet={onDeletePet}
+              onAssignProfessional={onAssignProfessional}
+              onMarkServiceComplete={onMarkServiceComplete}
+              onAdvanceStage={onAdvanceStage}
+              color="bg-sky-400"
+              allPets={pets}
+            />
+          </div>
         </div>
       </div>
     </div>

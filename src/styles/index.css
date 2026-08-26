@@ -1,3 +1,11 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+/* Trava a altura do Kanban apenas em tablets */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .flow-area {
+    height: calc(100dvh - 120px); /* ajuste ao seu header */
+    overflow: hidden;
+  }
+}
