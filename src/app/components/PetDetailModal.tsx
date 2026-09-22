@@ -24,9 +24,11 @@ import {
   CheckCircle2,
   PackageCheck,
   PhoneCall,
+  HeartPulse,
 } from 'lucide-react';
 import type { Pet } from '../types/pet';
 import { PetRegistration } from './PetRegistration';
+import { HEALTH_ISSUES, NO_ISSUES_ID } from '../constants/healthIssues';
 
 interface PetDetailModalProps {
   pet: Pet | null;
@@ -110,10 +112,22 @@ export function PetDetailModal({
   const isFinalizado = pet.status === 'finalizado';
   const jaAvisado    = !!pet.avisado;
 
+  // ── Saúde observada ─────────────────────────────────────────────
+  const issueMap = new Map(HEALTH_ISSUES.map((i) => [i.id, i]));
+
+  const etapasSaude = [
+    { key: 'Banho',   icon: <Droplet  className="w-3 h-3 text-blue-400" />,   ids: pet.problemasSaudeBanho   ?? [] },
+    { key: 'Escovar', icon: <Wind     className="w-3 h-3 text-cyan-400" />,   ids: pet.problemasSaudeEscovar ?? [] },
+    { key: 'Tosa',    icon: <Scissors className="w-3 h-3 text-purple-400" />, ids: pet.problemasSaudeTosa    ?? [] },
+  ].filter((e) => e.ids.length > 0);
+
+  const todosProblemas = Array.from(
+    new Set(etapasSaude.flatMap((e) => e.ids).filter((id) => id !== NO_ISSUES_ID))
+  );
+
   return (
     <>
       <Dialog open={open} onOpenChange={onClose}>
-        {/* ✅ largura ampliada para evitar corte de textos */}
         <DialogContent
           className="sm:max-w-lg max-h-[85vh]"
           onOpenAutoFocus={(e) => e.preventDefault()}
@@ -122,7 +136,6 @@ export function PetDetailModal({
           {/* ── Header: foto + nome + tutor ── */}
           <DialogHeader className="pb-2">
             <div className="flex items-center gap-3">
-              {/* Avatar */}
               {pet.foto ? (
                 <img
                   src={pet.foto}
@@ -137,9 +150,7 @@ export function PetDetailModal({
                   }
                 </div>
               )}
-              {/* Nome + tutor */}
               <div className="flex-1 min-w-0 text-left">
-                {/* ✅ break-words em vez de truncate */}
                 <DialogTitle className="text-lg font-bold text-gray-800 leading-tight break-words">
                   {pet.nomePet}
                 </DialogTitle>
@@ -155,7 +166,6 @@ export function PetDetailModal({
             </DialogDescription>
           </DialogHeader>
 
-          {/* corpo com scroll próprio */}
           <DialogBody className="pb-6 space-y-3">
 
             {/* ── Badges ── */}
@@ -191,10 +201,8 @@ export function PetDetailModal({
             )}
 
             {/* ── Grid: Informações + Profissionais ── */}
-            {/* ✅ 1 coluna no mobile, 2 no desktop + min-w-0 nos filhos */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-start [&>*]:min-w-0">
 
-              {/* Informações */}
               <div className="bg-gray-50 rounded-lg p-2.5 space-y-1.5">
                 <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider">
                   Informações
@@ -221,7 +229,6 @@ export function PetDetailModal({
                 />
               </div>
 
-              {/* Profissionais */}
               {(pet.profissionalBanho || pet.profissionalTosa || pet.profissionalEscovar) && (
                 <div className="bg-blue-50 rounded-lg p-2.5 space-y-1.5">
                   <p className="text-[10px] font-semibold text-blue-400 uppercase tracking-wider">
@@ -255,6 +262,56 @@ export function PetDetailModal({
               )}
             </div>
 
+            {/* ── Saúde observada ── */}
+            {etapasSaude.length > 0 && (
+              <div className="rounded-lg border border-rose-100 bg-rose-50/60 p-2.5 space-y-2">
+                <p className="text-[10px] font-semibold text-rose-500 uppercase tracking-wider flex items-center gap-1">
+                  <HeartPulse className="w-3 h-3" />
+                  Saúde observada
+                </p>
+
+                {todosProblemas.length === 0 ? (
+                  <p className="text-xs text-green-600">
+                    ✓ Nenhum problema de saúde aparente relatado
+                  </p>
+                ) : (
+                  <>
+                    <div className="flex flex-wrap gap-1.5">
+                      {todosProblemas.map((id) => {
+                        const issue = issueMap.get(id);
+                        return (
+                          <Badge
+                            key={id}
+                            className="bg-white text-rose-700 border border-rose-200 text-xs flex items-center gap-1"
+                          >
+                            <span aria-hidden>{issue?.icon ?? '⚠️'}</span>
+                            {issue?.label ?? id}
+                          </Badge>
+                        );
+                      })}
+                    </div>
+
+                    <div className="space-y-1 pt-1 border-t border-rose-100">
+                      {etapasSaude.map((e) => {
+                        const reais = e.ids.filter((id) => id !== NO_ISSUES_ID);
+                        return (
+                          <div key={e.key} className="flex items-start gap-1.5 text-xs min-w-0">
+                            <span className="w-4 flex justify-center flex-shrink-0 mt-0.5">{e.icon}</span>
+                            <span className="text-gray-400 flex-shrink-0">{e.key}:</span>
+                            <span className="flex-1 min-w-0 break-words text-gray-700 font-medium">
+                              {reais.length === 0
+                                ? 'sem alterações'
+                                : reais.map((id) => issueMap.get(id)?.label ?? id).join(', ')}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
             {/* ── Observações ── */}
             {pet.observacoes && (
               <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-lg p-2">
@@ -276,7 +333,7 @@ export function PetDetailModal({
               </div>
             )}
 
-            {/* ── Encerrar atendimento (finalizado) ── */}
+            {/* ── Encerrar atendimento ── */}
             {isFinalizado && onCheckout && (
               <div className="rounded-lg border border-purple-100 bg-purple-50 p-2.5 space-y-2">
                 <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">
@@ -286,7 +343,7 @@ export function PetDetailModal({
                   <Button
                     size="sm"
                     className="flex-1 bg-green-500 hover:bg-green-600 text-white h-8 text-xs"
-                    onClick={() => { onCheckout(pet.id, 'entregue'); onClose(); }}
+                    onClick={() => onCheckout(pet.id, 'entregue')}
                   >
                     <PackageCheck className="w-3.5 h-3.5 mr-1" />
                     Entregue
@@ -390,7 +447,6 @@ function InfoRow({
     <div className="flex items-start gap-1.5 text-xs min-w-0">
       <span className="w-4 flex items-center justify-center flex-shrink-0">{icon}</span>
       <span className="text-gray-400 flex-shrink-0">{label}:</span>
-      {/* ✅ sem truncate: quebra linha em textos longos */}
       <span
         className={`font-medium flex-1 min-w-0 break-words inline-flex flex-wrap items-center gap-1 ${
           done ? 'line-through text-gray-300' : 'text-gray-700'

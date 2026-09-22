@@ -6,10 +6,23 @@ import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
 import { Textarea } from "./ui/textarea"
-import { Upload, Save, CheckCircle2, Search, X, Loader2, AlertTriangle } from "lucide-react"
+import {
+  Upload,
+  Save,
+  CheckCircle2,
+  Search,
+  X,
+  Loader2,
+  AlertTriangle,
+  Plus,
+  Settings2,
+} from "lucide-react"
 import type { Pet, SlotStatus } from "../types/pet"
 import { useCloudinaryUpload } from "../../hooks/useCloudinaryUpload"
 import { buscarPetsCadastro, type PetCadastro } from "../../services/petService"
+import { useRacas } from "../../hooks/useRacas"
+import { GerenciarRacas } from "./GerenciarRacas"
+import { useAuth } from "../../hooks/useAuth"
 
 const RACAS_CAO = [
   "SRD (Sem Raça Definida)",
@@ -67,6 +80,8 @@ interface PetRegistrationProps {
   showSlotSelector?: boolean
   initialData?: Pet
   isEditing?: boolean
+  /** ✅ NOVO: slots já queimados/usados hoje */
+  slotsUsados?: Set<number>
 }
 
 // Componente de Select Nativo Estilizado
@@ -79,7 +94,9 @@ const NativeSelect = ({
   disabled = false,
 }: any) => (
   <div className="space-y-2">
-    <Label className="text-sm font-semibold text-slate-700">{label}</Label>
+    {label ? (
+      <Label className="text-sm font-semibold text-slate-700">{label}</Label>
+    ) : null}
     <div className="relative">
       <select
         value={value}
@@ -126,6 +143,7 @@ export function PetRegistration({
   showSlotSelector = false,
   initialData,
   isEditing = false,
+  slotsUsados,
 }: PetRegistrationProps) {
   const [nomePet, setNomePet] = useState(initialData?.nomePet || "")
   const [nomeTutor, setNomeTutor] = useState(initialData?.nomeTutor || "")
@@ -160,41 +178,111 @@ export function PetRegistration({
   // ✅ modal de aviso de telefone vazio
   const [showTelefoneAviso, setShowTelefoneAviso] = useState(false)
 
-  // Ref para o bloco de busca (usado no scrollIntoView ao focar, importante em landscape)
-  const buscaWrapperRef = useRef<HTMLDivElement>(null)
+  // ✅ ETAPA 4 — criação de raça nova
+  const [showAddRaca, setShowAddRaca] = useState(false)
+  const [novaRaca, setNovaRaca] = useState("")
+  const [erroRaca, setErroRaca] = useState("")
+  const [salvandoRaca, setSalvandoRaca] = useState(false)
 
-  // ✅ Ref para o input de busca (usado para fechar o teclado ao encontrar resultados)
+  // ✅ ETAPA 5 — modal de gerenciamento de raças
+  const [showGerenciarRacas, setShowGerenciarRacas] = useState(false)
+
+  // Ref para o bloco de busca
+  const buscaWrapperRef = useRef<HTMLDivElement>(null)
   const inputBuscaRef = useRef<HTMLInputElement>(null)
 
   // Hook do Cloudinary
   const { uploadImage, uploading, error } = useCloudinaryUpload()
 
+  // Raças customizadas do Firestore
+  const { nomesPorEspecie, criar } = useRacas()
+  const { isAdmin } = useAuth()
+
+  const opcoesRaca = useMemo(() => {
+    if (!especie) return []
+    const fixas = especie === "cao" ? RACAS_CAO : RACAS_GATO
+    const todas = [...fixas, ...nomesPorEspecie(especie)]
+
+    const vistas = new Set<string>()
+    const lista = todas.filter((n) => {
+      const k = n.trim().toLowerCase()
+      if (!k || vistas.has(k)) return false
+      vistas.add(k)
+      return true
+    })
+
+    const srd = lista.filter((n) => n.startsWith("SRD"))
+    const resto = lista
+      .filter((n) => !n.startsWith("SRD"))
+      .sort((a, b) => a.localeCompare(b, "pt-BR"))
+
+    return [...srd, ...resto]
+  }, [especie, nomesPorEspecie])
+
+  // ✅ ATUALIZADO: ignora slots ocupados E slots já usados hoje
   const availableSlots = useMemo(() => {
     const occupiedSlots = allPets
       .filter((p) => (isEditing ? p.id !== initialData?.id : true))
       .map((p) => p.slotNumber)
+
     const slots = []
     for (let i = 1; i <= 100; i++) {
-      if (!occupiedSlots.includes(i))
-        slots.push({ value: i, label: `Slot ${i}` })
+      if (occupiedSlots.includes(i)) continue
+      // mantém o slot atual visível quando estiver editando
+      if (slotsUsados?.has(i) && i !== initialData?.slotNumber) continue
+      slots.push({ value: i, label: `Slot ${i}` })
     }
     return slots
-  }, [allPets, isEditing, initialData])
+  }, [allPets, isEditing, initialData, slotsUsados])
 
-  // ✅ Verifica se este pet (por petNumber) já está ativo em produção em outro slot
+  // ✅ Garante que o slot selecionado seja válido
+  useEffect(() => {
+    if (!showSlotSelector || isEditing) return
+    if (availableSlots.length === 0) return
+    const valido = availableSlots.some((s) => s.value === selectedSlot)
+    if (!valido) setSelectedSlot(availableSlots[0].value)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [availableSlots, showSlotSelector, isEditing])
+
+  // ✅ Verifica se este pet já está ativo em produção
   const verificarPetEmProducao = (numero: string) => {
     if (!numero) return false
-    const encontrado = allPets.some(
+    return allPets.some(
       (p) =>
         p.petNumber === numero &&
         STATUS_ATIVOS.includes(p.status) &&
         (isEditing ? p.id !== initialData?.id : true),
     )
-    console.log("🔍 Verificando:", numero, "allPets:", allPets, "resultado:", encontrado)
-    return encontrado
   }
 
-  // Executa busca no cadastro permanente (aceita termo do debounce)
+  // ✅ ETAPA 4 — salvar nova raça
+  const handleSalvarRaca = async () => {
+    if (!especie) return
+    setErroRaca("")
+    setSalvandoRaca(true)
+    try {
+      const nova = await criar(novaRaca, especie)
+      setRaca(nova.nome)
+      setNovaRaca("")
+      setShowAddRaca(false)
+      toast.success(`Raça "${nova.nome}" adicionada.`)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ""
+      if (msg === "DUPLICADA") setErroRaca("Essa raça já existe.")
+      else if (msg === "NOME_VAZIO") setErroRaca("Informe o nome da raça.")
+      else setErroRaca("Erro ao salvar. Tente novamente.")
+    } finally {
+      setSalvandoRaca(false)
+    }
+  }
+
+  const resetAddRaca = () => {
+    setShowAddRaca(false)
+    setNovaRaca("")
+    setErroRaca("")
+  }
+
+  // Executa busca no cadastro permanente
   const handleBuscar = async (termo: string = termoBusca) => {
     const t = termo.trim()
     if (!t) {
@@ -207,8 +295,6 @@ export function PetRegistration({
     try {
       const achados = await buscarPetsCadastro(t)
       setResultados(achados)
-
-      // ✅ Fecha o teclado automaticamente ao encontrar resultados
       if (achados.length > 0) {
         inputBuscaRef.current?.blur()
       }
@@ -225,7 +311,6 @@ export function PetRegistration({
     if (petVinculado || isEditing) return
     const t = termoBusca.trim()
 
-    // ✅ Se for só dígitos (busca por número), basta 1 caractere; senão, 2
     const apenasNumero = /^\d+$/.test(t)
     const minimo = apenasNumero ? 1 : 2
 
@@ -243,7 +328,6 @@ export function PetRegistration({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [termoBusca, petVinculado, isEditing])
 
-  // ✅ Limpa o campo de busca
   const limparBusca = () => {
     setTermoBusca("")
     setResultados([])
@@ -251,7 +335,6 @@ export function PetRegistration({
     setBuscando(false)
   }
 
-  // Garante que o campo de busca fique visível ao ganhar foco (evita ficar escondido pelo teclado, principalmente em landscape)
   const handleFocusBusca = () => {
     setTimeout(() => {
       buscaWrapperRef.current?.scrollIntoView({ block: "center", behavior: "smooth" })
@@ -260,7 +343,6 @@ export function PetRegistration({
 
   // Preenche o formulário com um pet encontrado
   const selecionarPet = (p: PetCadastro) => {
-    // ✅ Bloqueia vínculo se o pet já estiver em produção (espera/banho/tosa/escovar)
     if (verificarPetEmProducao(p.petNumber)) {
       toast.error(
         `${p.nomePet} já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.`,
@@ -280,16 +362,15 @@ export function PetRegistration({
     setResultados([])
     setTermoBusca("")
     setJaBuscou(false)
+    resetAddRaca()
   }
 
-  // Desvincula (volta a ser cadastro novo)
   const limparVinculo = () => {
     setPetVinculado(false)
     setPetNumber("")
     setJaBuscou(false)
   }
 
-  // ✅ Envio real do cadastro
   const enviarCadastro = () => {
     onSubmit({
       nomePet,
@@ -317,7 +398,6 @@ export function PetRegistration({
       return
     }
 
-    // ✅ Segurança extra: bloqueia cadastro duplicado do mesmo pet já em produção
     if (petNumber && verificarPetEmProducao(petNumber)) {
       toast.error(
         "Este pet já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.",
@@ -325,7 +405,6 @@ export function PetRegistration({
       return
     }
 
-    // ✅ Telefone não é obrigatório, mas avisa sobre o WhatsApp
     const telefoneVazio = !telefone || telefone.trim() === ""
     if (telefoneVazio && !isEditing) {
       setShowTelefoneAviso(true)
@@ -334,7 +413,6 @@ export function PetRegistration({
     enviarCadastro()
   }
 
-  // Upload para o Cloudinary
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -346,23 +424,24 @@ export function PetRegistration({
   const inputStyle =
     "h-11 rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
 
+  const racaBloqueada = isEditing && initialData?.atendimentoIniciado
+
   return (
     <form
       onSubmit={handleSubmit}
       className="flex flex-col flex-1 min-h-0 relative bg-white"
     >
-      {/* ÁREA DE CAMPOS COM SCROLL — ✅ px-6 e pb-6 (rodapé não é mais absoluto) */}
+      {/* ÁREA DE CAMPOS COM SCROLL */}
       <div className="flex-1 overflow-y-auto min-h-0 px-6 pt-2 pb-6 space-y-6 scrollbar-hide">
 
-        {/* BARRA DE BUSCA DE PET CADASTRADO (só em cadastro novo) */}
+        {/* BARRA DE BUSCA DE PET CADASTRADO */}
         {!isEditing && (
           <div ref={buscaWrapperRef} className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
             {petVinculado ? (
               <div className="flex items-center justify-between gap-2">
                 <div className="flex items-center gap-2 text-sm text-indigo-700 font-semibold">
                   <CheckCircle2 className="w-4 h-4" />
-                  Pet vinculado:{" "}
-                  <span className="font-mono">{petNumber}</span>
+                  Pet vinculado: <span className="font-mono">{petNumber}</span>
                 </div>
                 <button
                   type="button"
@@ -379,7 +458,6 @@ export function PetRegistration({
                   Buscar pet já cadastrado
                 </Label>
 
-                {/* Campo de busca com ícone, spinner e botão limpar */}
                 <div className="relative">
                   <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
                   <Input
@@ -396,7 +474,6 @@ export function PetRegistration({
                     }}
                     className="h-10 rounded-lg border-none bg-white text-slate-800 font-medium pl-9 pr-9"
                   />
-                  {/* Spinner enquanto busca / botão limpar quando há texto */}
                   <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center">
                     {buscando ? (
                       <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />
@@ -415,7 +492,6 @@ export function PetRegistration({
                   </div>
                 </div>
 
-                {/* Feedback "buscando..." */}
                 {buscando && (
                   <p className="flex items-center gap-1.5 text-xs text-indigo-500 font-medium px-1">
                     <Loader2 className="w-3 h-3 animate-spin" />
@@ -423,7 +499,6 @@ export function PetRegistration({
                   </p>
                 )}
 
-                {/* Resultados */}
                 {!buscando && resultados.length > 0 && (
                   <ul className="bg-white rounded-lg divide-y divide-slate-100 max-h-48 overflow-y-auto border border-slate-100">
                     {resultados.map((p) => {
@@ -465,7 +540,6 @@ export function PetRegistration({
                   </ul>
                 )}
 
-                {/* Nenhum resultado */}
                 {!buscando && jaBuscou && resultados.length === 0 && (
                   <p className="text-xs text-slate-400 italic px-1">
                     Nenhum pet encontrado — preencha abaixo para cadastrar novo.
@@ -476,7 +550,7 @@ export function PetRegistration({
           </div>
         )}
 
-        {/* 1. SLOT (SE DISPONÍVEL) */}
+        {/* 1. SLOT */}
         {showSlotSelector && (
           <NativeSelect
             label="Slot/Vaga *"
@@ -490,16 +564,12 @@ export function PetRegistration({
 
           {/* 2. NOME DO PET */}
           <div className="space-y-2">
-            <Label
-              htmlFor="nomePet"
-              className="text-slate-700 font-bold text-base"
-            >
+            <Label htmlFor="nomePet" className="text-slate-700 font-bold text-base">
               Nome do Pet *
             </Label>
             <Input
               id="nomePet"
               placeholder="Ex: Bob"
-              //autoFocus
               disabled={isEditing && initialData?.atendimentoIniciado}
               className={inputStyle}
               value={nomePet}
@@ -508,7 +578,7 @@ export function PetRegistration({
             />
           </div>
 
-          {/* 3. ESPÉCIE, PORTE E RAÇA */}
+          {/* 3. ESPÉCIE E PORTE */}
           <div className="grid grid-cols-2 gap-3">
             <NativeSelect
               label="Espécie *"
@@ -517,6 +587,7 @@ export function PetRegistration({
               onChange={(v: any) => {
                 setEspecie(v)
                 setRaca("")
+                resetAddRaca()
               }}
               options={[
                 { value: "cao", label: "🐕 Cão" },
@@ -532,29 +603,89 @@ export function PetRegistration({
             />
           </div>
 
-          <NativeSelect
-            label="Raça *"
-            value={raca}
-            onChange={setRaca}
-            disabled={!especie || (isEditing && initialData?.atendimentoIniciado)}
-            options={
-              especie === "cao"
-                ? RACAS_CAO
-                : especie === "gato"
-                ? RACAS_GATO
-                : []
-            }
-            placeholder={
-              especie ? "Selecione a raça..." : "Escolha a espécie primeiro"
-            }
-          />
+          {/* 3b. RAÇA + ADICIONAR NOVA + GERENCIAR */}
+          <div className="space-y-2">
+            <NativeSelect
+              label="Raça *"
+              value={raca}
+              onChange={setRaca}
+              disabled={!especie || racaBloqueada}
+              options={opcoesRaca}
+              placeholder={especie ? "Selecione a raça..." : "Escolha a espécie primeiro"}
+            />
+
+            {especie && !racaBloqueada && (
+              showAddRaca ? (
+                <div className="bg-indigo-50 border border-indigo-100 rounded-xl p-3 space-y-2">
+                  <Label className="text-xs font-bold text-indigo-700 uppercase tracking-wide">
+                    Nova raça ({especie === "cao" ? "cão" : "gato"})
+                  </Label>
+                  <Input
+                    autoFocus
+                    placeholder="Ex: Spitz Alemão"
+                    value={novaRaca}
+                    onChange={(e) => {
+                      setNovaRaca(e.target.value)
+                      setErroRaca("")
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault()
+                        handleSalvarRaca()
+                      }
+                    }}
+                    className="h-10 rounded-lg border-none bg-white text-slate-800 font-medium"
+                  />
+                  {erroRaca && (
+                    <p className="text-[11px] text-red-500 font-medium px-1">⚠️ {erroRaca}</p>
+                  )}
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSalvarRaca}
+                      disabled={salvandoRaca || !novaRaca.trim()}
+                      className="flex-1 py-2 rounded-lg bg-indigo-700 hover:bg-indigo-600 text-white text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2"
+                    >
+                      {salvandoRaca && <Loader2 className="w-4 h-4 animate-spin" />}
+                      Salvar raça
+                    </button>
+                    <button
+                      type="button"
+                      onClick={resetAddRaca}
+                      className="px-4 py-2 rounded-lg border border-slate-200 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 transition"
+                    >
+                      Cancelar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex items-center justify-between px-1">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddRaca(true)}
+                    className="flex items-center gap-1.5 text-xs font-semibold text-indigo-600 hover:text-indigo-800 transition"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    Não encontrou? Adicionar nova raça
+                  </button>
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => setShowGerenciarRacas(true)}
+                      className="flex items-center gap-1 text-xs font-semibold text-slate-500 hover:text-slate-700 transition"
+                    >
+                      <Settings2 className="w-3.5 h-3.5" />
+                      Gerenciar
+                    </button>
+                  )}
+                </div>
+              )
+            )}
+          </div>
 
           {/* 4. NOME DO TUTOR */}
           <div className="space-y-2">
-            <Label
-              htmlFor="nomeTutor"
-              className="text-slate-700 font-bold text-base"
-            >
+            <Label htmlFor="nomeTutor" className="text-slate-700 font-bold text-base">
               Nome do Tutor *
             </Label>
             <Input
@@ -567,12 +698,9 @@ export function PetRegistration({
             />
           </div>
 
-          {/* 4b. TELEFONE DO TUTOR */}
+          {/* 4b. TELEFONE */}
           <div className="space-y-2">
-            <Label
-              htmlFor="telefone"
-              className="text-slate-700 font-bold text-base"
-            >
+            <Label htmlFor="telefone" className="text-slate-700 font-bold text-base">
               Telefone do Tutor
             </Label>
             <Input
@@ -587,19 +715,14 @@ export function PetRegistration({
 
           {/* 5. SERVIÇO */}
           <div className="space-y-2">
-            <Label
-              htmlFor="tipoServico"
-              className="text-slate-700 font-bold text-base"
-            >
+            <Label htmlFor="tipoServico" className="text-slate-700 font-bold text-base">
               Tipo de Serviço *
             </Label>
             <NativeSelect
-              id="tipoServico"
               label=""
               disabled={isEditing && initialData?.atendimentoIniciado}
               value={servico}
               onChange={(v: any) => setServico(v)}
-              className={`${inputStyle} h-12`}
               options={[
                 { value: "banho", label: "💧 Banho" },
                 { value: "tosa", label: "✂️ Tosa" },
@@ -610,18 +733,16 @@ export function PetRegistration({
             />
           </div>
 
-          {/* DIVISOR OPCIONAL */}
+          {/* DIVISOR */}
           <div className="border-t border-dashed pt-4 opacity-60">
             <h3 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">
               Informações Opcionais
             </h3>
           </div>
 
-          {/* 6. FOTO DO PET */}
+          {/* 6. FOTO */}
           <div className="space-y-2">
-            <Label className="text-slate-600 font-semibold text-sm">
-              Foto do Pet
-            </Label>
+            <Label className="text-slate-600 font-semibold text-sm">Foto do Pet</Label>
             <div className="flex gap-3">
               {foto && (
                 <img
@@ -646,21 +767,16 @@ export function PetRegistration({
                   {uploading ? (
                     <>
                       <div className="w-4 h-4 border-2 border-slate-400 border-t-transparent rounded-full animate-spin" />
-                      <span className="text-[10px] font-medium mt-1">
-                        Enviando...
-                      </span>
+                      <span className="text-[10px] font-medium mt-1">Enviando...</span>
                     </>
                   ) : (
                     <>
                       <Upload className="w-4 h-4" />
-                      <span className="text-[10px] font-medium mt-1">
-                        Upload Foto
-                      </span>
+                      <span className="text-[10px] font-medium mt-1">Upload Foto</span>
                     </>
                   )}
                 </Label>
 
-                {/* Erro de upload */}
                 {error && (
                   <p className="text-[11px] text-red-500 font-medium mt-1 px-1">
                     ⚠️ {error}
@@ -672,9 +788,7 @@ export function PetRegistration({
 
           {/* 7. OBSERVAÇÕES */}
           <div className="space-y-2">
-            <Label className="text-slate-600 font-semibold text-sm">
-              Observações
-            </Label>
+            <Label className="text-slate-600 font-semibold text-sm">Observações</Label>
             <Textarea
               placeholder="Alergias, comportamento, etc..."
               className="rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
@@ -686,7 +800,7 @@ export function PetRegistration({
         </div>
       </div>
 
-      {/* ✅ RODAPÉ FIXO — agora shrink-0 no flow do flex (era absolute) */}
+      {/* RODAPÉ FIXO */}
       <div className="shrink-0 px-6 py-4 bg-white border-t border-slate-100">
         <Button
           type="submit"
@@ -707,7 +821,7 @@ export function PetRegistration({
         </Button>
       </div>
 
-      {/* ✅ MODAL DE AVISO — TELEFONE VAZIO (fixed para cobrir todo o dialog) */}
+      {/* MODAL DE AVISO — TELEFONE VAZIO */}
       {showTelefoneAviso && (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4">
           <div
@@ -724,8 +838,8 @@ export function PetRegistration({
               </h2>
               <p className="text-sm text-slate-500">
                 Sem o número de telefone, o{" "}
-                <strong>aviso automático via WhatsApp</strong> não será enviado
-                ao tutor quando o pet estiver pronto.
+                <strong>aviso automático via WhatsApp</strong> não será enviado ao
+                tutor quando o pet estiver pronto.
               </p>
             </div>
             <div className="flex flex-col gap-2 w-full mt-1">
@@ -743,6 +857,31 @@ export function PetRegistration({
               >
                 Continuar sem telefone
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL — GERENCIAR RAÇAS */}
+      {showGerenciarRacas && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4">
+          <div
+            className="absolute inset-0 bg-black/40 backdrop-blur-sm"
+            onClick={() => setShowGerenciarRacas(false)}
+          />
+          <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-md max-h-[80vh] flex flex-col animate-in fade-in zoom-in-95 duration-200">
+            <div className="shrink-0 flex items-center justify-between px-5 py-4 border-b border-slate-100">
+              <h2 className="text-base font-bold text-slate-800">Gerenciar raças</h2>
+              <button
+                type="button"
+                onClick={() => setShowGerenciarRacas(false)}
+                className="text-slate-400 hover:text-slate-600 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              <GerenciarRacas />
             </div>
           </div>
         </div>

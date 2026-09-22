@@ -4,10 +4,11 @@ import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
 import AdminSidebar from './components/AdminSidebar';
-import { PetCodeModal } from './components/PetCodeModal'; // ✅ NOVO
-import PawBackground from './components/PawBackground'; // 🐾 NOVO
+import { PetCodeModal } from './components/PetCodeModal';
+import PawBackground from './components/PawBackground';
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
+import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import type { Pet, SlotStatus } from './types/pet';
 import {
   addPet,
@@ -19,9 +20,10 @@ import {
 import {
   LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
-  PackageCheck, // 🆕 ícone da aba Entregues
+  PackageCheck,
 } from 'lucide-react';
 import { EntreguesTab } from './components/EntreguesTab';
+
 
 // ─── Modal de Confirmação de Logout ──────────────────────────────────────────
 function LogoutModal({
@@ -93,7 +95,6 @@ function LoginScreen({
       className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
       style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 40%, #E8192C 100%)' }}
     >
-      {/* Círculos decorativos de fundo */}
       <div className="absolute inset-0 overflow-hidden pointer-events-none">
         <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#E8192C' }} />
         <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#3B2FBE' }} />
@@ -103,7 +104,6 @@ function LoginScreen({
       <div className="relative w-full max-w-md z-10">
         <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
 
-          {/* ── Header com Logo ── */}
           <div
             className="flex flex-col items-center gap-2 px-8 pt-10 pb-6"
             style={{ background: 'linear-gradient(160deg, #1a1560 0%, #3B2FBE 60%, #E8192C 100%)' }}
@@ -122,14 +122,12 @@ function LoginScreen({
             </p>
           </div>
 
-          {/* ── Formulário ── */}
           <form onSubmit={handleSubmit} className="px-8 py-8 space-y-5">
             <div className="text-center mb-1">
               <h2 className="text-lg font-bold text-gray-800">Acesse sua conta</h2>
               <p className="text-sm text-gray-400">Informe suas credenciais para continuar</p>
             </div>
 
-            {/* E-mail */}
             <div className="space-y-1">
               <label className="text-sm font-semibold text-gray-600">E-mail</label>
               <input
@@ -145,7 +143,6 @@ function LoginScreen({
               />
             </div>
 
-            {/* Senha */}
             <div className="space-y-1">
               <label className="text-sm font-semibold text-gray-600">Senha</label>
               <div className="relative">
@@ -170,7 +167,6 @@ function LoginScreen({
               </div>
             </div>
 
-            {/* Erro */}
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-xl flex items-center gap-2">
                 <AlertTriangle size={15} className="flex-shrink-0" />
@@ -178,7 +174,6 @@ function LoginScreen({
               </div>
             )}
 
-            {/* Botão */}
             <button
               type="submit"
               disabled={loading}
@@ -201,7 +196,6 @@ function LoginScreen({
           </form>
         </div>
 
-        {/* Rodapé */}
         <p className="text-center text-xs text-white/50 mt-5">
           © {new Date().getFullYear()} Elite Pet Shop · Desenvolvido por Studio3D Criativo
         </p>
@@ -238,6 +232,9 @@ function SplashScreen() {
 export default function App() {
   const { user, loading, error, isAuthenticated, login, logout, isAdmin } = useAuth();
 
+  // ✅ NOVO: slots já queimados hoje (compartilhado entre todos os dispositivos)
+  const { marcarUsado } = useSlotsUsadosHoje();
+
   const [pets, setPets]                         = useState<Pet[]>([]);
   const [filter, setFilter]                     = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
   const [dailyCounter, setDailyCounter]         = useState<number>(1);
@@ -245,7 +242,6 @@ export default function App() {
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
   const [adminActivePage, setAdminActivePage]   = useState<'criar' | 'deletar' | 'editar' | null>(null);
 
-  // ✅ NOVO: estado para o modal do código do pet
   const [codigoModal, setCodigoModal] = useState<{
     petNumber: string;
     nomePet: string;
@@ -263,10 +259,8 @@ export default function App() {
     return () => unsubscribe();
   }, [isAuthenticated]);
 
-  // 1️⃣ Firebase ainda verificando sessão → exibe splash
   if (loading) return <SplashScreen />;
 
-  // 2️⃣ Não autenticado → exibe login
   if (!isAuthenticated) {
     return (
       <>
@@ -288,12 +282,10 @@ export default function App() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleRevertService = async (petId: string, etapa: string, motivo: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
 
-    // Base comum a qualquer reversão
     const updates: Partial<Pet> = {
       historicoReversoes: [
         ...(pet.historicoReversoes || []),
@@ -301,7 +293,6 @@ export default function App() {
       ],
     };
 
-    // Limpa os campos da etapa revertida e volta ao status anterior
     if (etapa === 'banho') {
       updates.status               = 'espera' as SlotStatus;
       updates.profissionalBanho    = null;
@@ -328,7 +319,6 @@ export default function App() {
     }
   };
 
-  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleUpdateStatus = async (petId: string, newStatus: SlotStatus) => {
     const updates: Partial<Pet> = { status: newStatus };
     if (newStatus === 'banho')   { updates.banhoCompleto = false; updates.escovarCompleto = false; }
@@ -342,13 +332,11 @@ export default function App() {
     }
   };
 
-  // ✅ ATUALIZADO: trata o retorno de addPet e exibe o modal apenas se for pet novo
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
     try {
       const { petNumber, isNovo } = await addPet(petData);
       setDailyCounter((c) => c + 1);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
-      // Se for primeira visita, mostra o modal com o código do pet
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
       }
@@ -357,28 +345,20 @@ export default function App() {
     }
   };
 
-  // ✅ handleCheckout para o KanbanBoard — sempre 'entregue'
-  const handleCheckout = async (petId: string) => {
+  // ✅ ATUALIZADO: SlotGrid — 'avisado' não queima, 'entregue' queima
+  const handleCheckoutWithType = async (petId: string, tipo?: 'entregue' | 'avisado') => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
-    try {
-      await encerrarPet(pet, 'entregue');
-      toast.success(`${pet.nomePet} entregue ao tutor com sucesso! 🐾`);
-    } catch {
-      toast.error('Erro ao registrar entrega. Tente novamente.');
-    }
-  };
 
-  // ✅ handleCheckoutWithType para o SlotGrid — separa 'avisado' de 'entregue'
-  const handleCheckoutWithType = async (petId: string, tipo: 'entregue' | 'avisado') => {
-    const pet = pets.find((p) => p.id === petId);
-    if (!pet) return;
+    const slot = pet.slotNumber;
+
     try {
       if (tipo === 'avisado') {
         await marcarComoAvisado(pet);
         toast.success(`${pet.nomePet} marcado como avisado! 📞`);
       } else {
         await encerrarPet(pet, 'entregue');
+        if (slot) await marcarUsado(slot);
         toast.success(`${pet.nomePet} entregue ao tutor! 🐾`);
       }
     } catch {
@@ -389,14 +369,13 @@ export default function App() {
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
     try {
       await updatePet(petId, updatedData);
-      // ✅ sem setPets — onSnapshot já atualiza
     } catch (err) {
       console.error('[handleEditPet] Erro ao editar pet:', err);
       toast.error('Erro ao editar pet. Tente novamente.');
     }
   };
 
-  // ✅ handleDeletePet usa encerrarPet com tipo 'removido'
+  // ⚠️ Remoção NÃO queima o slot — libera para reuso
   const handleDeletePet = async (petId: string) => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
@@ -409,7 +388,6 @@ export default function App() {
     }
   };
 
-  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleAssignProfessional = async (
     petId: string,
     pB?: string,
@@ -420,7 +398,6 @@ export default function App() {
     if (!pet) return;
 
     const updates: Partial<Pet> = {
-      // ✅ Só sobrescreve se vier um valor definido
       ...(pB !== undefined && { profissionalBanho: pB }),
       ...(pT !== undefined && { profissionalTosa: pT }),
       ...(pE !== undefined && { profissionalEscovar: pE }),
@@ -435,8 +412,6 @@ export default function App() {
     }
   };
 
-  // ✅ Avanço de etapa ATÔMICO — consolida status + profissional + problemas de saúde
-  // em um ÚNICO updateDoc, eliminando a race condition de writes paralelos.
   const handleAdvanceStage = async (
     petId: string,
     newStatus: SlotStatus,
@@ -446,18 +421,15 @@ export default function App() {
     const updates: Partial<Pet> = {
       status: newStatus,
       atendimentoIniciado: true,
-      // ✅ Só sobrescreve profissional se vier valor definido
       ...(profissionais.pB !== undefined && { profissionalBanho: profissionais.pB }),
       ...(profissionais.pT !== undefined && { profissionalTosa: profissionais.pT }),
       ...(profissionais.pE !== undefined && { profissionalEscovar: profissionais.pE }),
     };
 
-    // ✅ Reset de flags conforme a etapa de destino
     if (newStatus === 'banho')   { updates.banhoCompleto = false; updates.escovarCompleto = false; }
     if (newStatus === 'escovar') { updates.escovarCompleto = false; updates.tosaCompleta = false; }
     if (newStatus === 'tosa')    { updates.tosaCompleta = false; }
 
-    // ✅ Delta dos problemas de saúde (apenas o que é da etapa)
     if (problemasField) {
       (updates as any)[problemasField.campo] = problemasField.delta;
     }
@@ -469,7 +441,6 @@ export default function App() {
     }
   };
 
-  // ✅ Salva no Firestore — onSnapshot atualiza o estado automaticamente
   const handleMarkServiceComplete = async (
     petId: string,
     type: 'banho' | 'escovar' | 'tosa',
@@ -494,15 +465,12 @@ export default function App() {
     toast.success('Sessão encerrada com sucesso.');
   };
 
-  // 3️⃣ Autenticado → renderiza app completo
   return (
     <div className="min-h-screen bg-pet-pattern relative">
-      {/* 🐾 NOVO: Fundo de patinhas */}
       <PawBackground quantidade={25} imgSrc="/paw.png" espacamento={1.2} />
 
       <Toaster position="top-right" richColors />
 
-      {/* ✅ NOVO: Modal do código do pet (primeira visita) */}
       {codigoModal && (
         <PetCodeModal
           petNumber={codigoModal.petNumber}
@@ -511,7 +479,6 @@ export default function App() {
         />
       )}
 
-      {/* Modal de logout */}
       {showLogoutModal && (
         <LogoutModal
           onConfirm={handleLogoutConfirm}
@@ -519,7 +486,6 @@ export default function App() {
         />
       )}
 
-      {/* Sidebar Admin */}
       {showAdminSidebar && (
         <AdminSidebar
           onClose={() => setShowAdminSidebar(false)}
@@ -527,17 +493,14 @@ export default function App() {
         />
       )}
 
-      {/* 🐾 NOVO: wrapper para o conteúdo ficar ACIMA das patinhas */}
       <div className="relative z-10">
 
-        {/* ── Header ── */}
         <div
           className="shadow-md"
           style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 50%, #E8192C 100%)' }}
         >
           <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
 
-            {/* Logo no header */}
             <div className="flex items-center gap-4">
               <div className="bg-white rounded-xl px-4 py-2 shadow-md">
                 <img
@@ -555,14 +518,12 @@ export default function App() {
               </div>
             </div>
 
-            {/* 🆕 Nome do Pet Shop (centro) */}
             <div className="flex-1 flex justify-center">
               <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
                 Elite Pet Shop
               </h1>
             </div>
 
-            {/* Botões do header */}
             <div className="flex items-center gap-2">
               {isAdmin && (
                 <button
@@ -584,7 +545,6 @@ export default function App() {
           </div>
         </div>
 
-        {/* ── Conteúdo ── */}
         <div className="max-w-7xl mx-auto px-6 py-8">
           <Tabs defaultValue="grid" className="space-y-6">
             <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
@@ -626,7 +586,7 @@ export default function App() {
               <KanbanBoard
                 pets={pets}
                 onUpdateStatus={handleUpdateStatus}
-                onCheckout={handleCheckout}
+                onCheckout={handleCheckoutWithType}
                 onAddPet={handleAddPet}
                 onEditPet={handleEditPet}
                 onDeletePet={handleDeletePet}
@@ -644,8 +604,6 @@ export default function App() {
         </div>
 
       </div>
-      {/* 🐾 fim do wrapper z-10 */}
-
     </div>
   );
 }

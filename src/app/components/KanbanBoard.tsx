@@ -27,6 +27,7 @@ import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog"
 import { PetDetailModal } from './PetDetailModal';
+import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje';
 import { useState } from 'react';
 
 const DIALOG_SELETOR_CLASS =
@@ -39,7 +40,7 @@ interface KanbanBoardProps {
   pets: Pet[]
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
-  onCheckout: (petId: string) => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
   onAddPet: (pet: Omit<Pet, "id" | "checkInTime">) => void
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
@@ -66,7 +67,7 @@ interface PetCardProps {
   onOpenDetail?: (pet: Pet) => void;
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
   onRevertService: (petId: string, etapa: string, motivo: string) => void
-  onCheckout: (petId: string) => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
   onAssignProfessional: (
@@ -594,6 +595,7 @@ export function PetCard({
                     Serviço finalizado — aguardando retirada
                   </p>
                 </div>
+                {/* ✅ marcação do slot é feita no App.tsx (handleCheckout) */}
                 <Button
                   onClick={(e) => { e.stopPropagation(); onCheckout(pet.id) }}
                   className="w-full h-7 text-xs bg-green-600 hover:bg-green-700 text-white"
@@ -680,7 +682,7 @@ interface KanbanColumnProps {
   pets: Pet[]
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
-  onCheckout: (petId: string) => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
   onAssignProfessional: (
@@ -699,6 +701,8 @@ interface KanbanColumnProps {
   color: string
   onAddPet?: (pet: Omit<Pet, "id" | "checkInTime">) => void
   allPets?: Pet[]
+  /** ✅ slots já queimados hoje (recebido do KanbanBoard) */
+  slotsUsados: Set<number>
 }
 
 function KanbanColumn({
@@ -717,23 +721,31 @@ function KanbanColumn({
   color,
   onAddPet,
   allPets = [],
+  slotsUsados,
 }: KanbanColumnProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
-  const [detailPet, setDetailPet]       = useState<Pet | null>(null)
+
+  // ✅ guarda só o ID → o modal sempre reflete os dados vivos do Firestore
+  const [detailPetId, setDetailPetId] = useState<string | null>(null)
+  const detailPet = detailPetId
+    ? allPets.find((p) => p.id === detailPetId) ?? null
+    : null
 
   const columnPets = pets.filter((p) => p.status === status)
 
   const getNextAvailableSlot = () => {
     const occupiedSlots = allPets.map((p) => p.slotNumber)
     for (let i = 1; i <= 100; i++) {
-      if (!occupiedSlots.includes(i)) return i
+      if (!occupiedSlots.includes(i) && !slotsUsados.has(i)) return i
     }
-    return 1
+    return 0
   }
+
+  const proximoSlot = getNextAvailableSlot()
 
   const handleAddFromColumn = (petData: any) => {
     if (onAddPet) {
-      const finalSlot = Number(petData.slotNumber) || getNextAvailableSlot()
+      const finalSlot = Number(petData.slotNumber) || proximoSlot
       onAddPet({
         ...petData,
         slotNumber: finalSlot,
@@ -744,9 +756,7 @@ function KanbanColumn({
   }
 
   return (
-    // 🔧 ALTERADO: coluna virou flex vertical com altura total do trilho
-    <div className="shrink-0 w-[280px] xl:w-auto xl:flex-1 flex flex-col min-h-0 transition-colors rounded-lg">
-      {/* 🔧 ALTERADO: header fixo (shrink-0) */}
+    <div className="shrink-0 w-[280px] xl:w-auto xl:flex-1 xl:min-w-0 flex flex-col min-h-0 transition-colors rounded-lg">
       <div className={`${color} p-4 rounded-t-lg shrink-0`}>
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-2">
@@ -759,13 +769,12 @@ function KanbanColumn({
         </div>
       </div>
 
-      {/* 🔧 ALTERADO: corpo com scroll próprio; min-h só no desktop */}
-      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain p-4 bg-gray-50 rounded-b-lg">
+      <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain touch-pan-y p-4 bg-gray-50 rounded-b-lg">
         {columnPets.map((pet) => (
           <PetCard
             key={pet.id}
             pet={pet}
-            onOpenDetail={setDetailPet}
+            onOpenDetail={(p) => setDetailPetId(p.id)}
             onRevertService={onRevertService}
             onUpdateStatus={onUpdateStatus}
             onCheckout={onCheckout}
@@ -782,7 +791,7 @@ function KanbanColumn({
             <p className="text-sm">Nenhum pet nesta etapa</p>
           </div>
         )}
-        {status === "espera" && onAddPet && (
+        {status === "espera" && onAddPet && proximoSlot > 0 && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <button
               onClick={() => setIsDialogOpen(true)}
@@ -793,28 +802,38 @@ function KanbanColumn({
             </button>
             <DialogContent className="sm:max-w-2xl h-[85vh]">
               <DialogHeader>
-                <DialogTitle>Adicionar Animal - Slot {getNextAvailableSlot()}</DialogTitle>
+                <DialogTitle>Adicionar Animal - Slot {proximoSlot}</DialogTitle>
                 <DialogDescription className="sr-only">
                   Formulário para cadastrar um novo pet no sistema.
                 </DialogDescription>
               </DialogHeader>
               <PetRegistration
                 onSubmit={handleAddFromColumn}
-                defaultSlot={getNextAvailableSlot()}
+                defaultSlot={proximoSlot}
                 allPets={allPets}
                 showSlotSelector={true}
+                slotsUsados={slotsUsados}
               />
             </DialogContent>
           </Dialog>
+        )}
+        {status === "espera" && onAddPet && proximoSlot === 0 && (
+          <p className="mt-3 text-center text-xs text-slate-400 italic">
+            Todos os slots do dia já foram utilizados.
+          </p>
         )}
       </div>
 
       <PetDetailModal
         pet={detailPet}
         open={!!detailPet}
-        onClose={() => setDetailPet(null)}
+        onClose={() => setDetailPetId(null)}
         onEdit={onEditPet}
-        onDelete={(id) => { onDeletePet(id); setDetailPet(null) }}
+        onDelete={(id) => { onDeletePet(id); setDetailPetId(null) }}
+        onCheckout={(id, tipo) => {
+          onCheckout(id, tipo)
+          if (tipo === 'entregue') setDetailPetId(null)
+        }}
       />
     </div>
   )
@@ -833,18 +852,18 @@ export function KanbanBoard({
   onMarkServiceComplete,
   onAdvanceStage,
 }: KanbanBoardProps) {
+  // ✅ um único listener para todas as colunas
+  const { usados } = useSlotsUsadosHoje()
+
   return (
-    // 🔧 ALTERADO: wrapper com a classe .flow-area (travada só no tablet via CSS)
-    <div className="flex gap-6 flow-area md:h-[calc(100dvh-300px)] md:overflow-hidden xl:h-auto xl:overflow-visible">
-      {/* 🔧 ALTERADO: coluna flex vertical, sem overflow aqui */}
-      <div className="flex-1 flex flex-col min-h-0">
+    <div className="flex w-full min-w-0 gap-6 flow-area md:h-[calc(100dvh-300px)] md:overflow-hidden xl:h-auto xl:overflow-visible">
+      <div className="flex-1 min-w-0 w-full flex flex-col min-h-0">
         <h2 className="shrink-0 text-lg font-semibold mb-4 text-gray-800">
           Fluxo de Trabalho
         </h2>
 
-        {/* 🔧 ALTERADO: trilho rolável que ocupa o espaço restante */}
-          <div className="flex-1 min-h-0 overflow-x-auto overflow-y-hidden [-webkit-overflow-scrolling:touch]">
-            <div className="flex flex-nowrap gap-4 pb-4 h-full w-max xl:w-full">
+        <div className="flex-1 min-h-0 w-full min-w-0 overflow-x-auto overflow-y-hidden touch-pan-x [-webkit-overflow-scrolling:touch]">
+          <div className="flex flex-nowrap gap-4 pb-4 h-full w-max xl:w-full">
             <KanbanColumn
               status="espera"
               title="Aguardando"
@@ -861,6 +880,7 @@ export function KanbanBoard({
               color="bg-amber-400"
               onAddPet={onAddPet}
               allPets={pets}
+              slotsUsados={usados}
             />
             <KanbanColumn
               status="banho"
@@ -877,6 +897,7 @@ export function KanbanBoard({
               onAdvanceStage={onAdvanceStage}
               color="bg-sky-400"
               allPets={pets}
+              slotsUsados={usados}
             />
             <KanbanColumn
               status="escovar"
@@ -893,6 +914,7 @@ export function KanbanBoard({
               onAdvanceStage={onAdvanceStage}
               color="bg-sky-400"
               allPets={pets}
+              slotsUsados={usados}
             />
             <KanbanColumn
               status="tosa"
@@ -909,6 +931,7 @@ export function KanbanBoard({
               onAdvanceStage={onAdvanceStage}
               color="bg-sky-400"
               allPets={pets}
+              slotsUsados={usados}
             />
           </div>
         </div>

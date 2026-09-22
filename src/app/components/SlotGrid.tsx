@@ -10,11 +10,12 @@ import {
 import { Badge } from './ui/badge';
 import {
   Dog, Clock, Droplet, Wind, Scissors,
-  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall,
+  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall, Ban,
 } from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
 import { Button } from './ui/button';
 import { PetDetailModal } from './PetDetailModal';
+import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import type { Pet, SlotStatus } from '../types/pet';
 
 interface SlotGridProps {
@@ -39,15 +40,39 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const [petParaEditar, setPetParaEditar] = useState<Pet | null>(null);
   const [isEditOpen, setIsEditOpen] = useState(false);
 
+  // ✅ NOVO: slots já queimados hoje
+  const { usados } = useSlotsUsadosHoje();
+
   const totalSlots      = 100;
   const SLOTS_PER_BATCH = 10;
   const MIN_VISIBLE_SLOTS = 10;
 
-  const occupiedSlotsInVisibleRange = useMemo(() => {
-    return pets.filter(p => p.slotNumber <= visibleSlots).length;
-  }, [pets, visibleSlots]);
+  // ✅ ATUALIZADO: slots queimados NÃO contam como livres
+  const freeSlotsInVisibleRange = useMemo(() => {
+    let livres = 0;
+    for (let n = 1; n <= visibleSlots; n++) {
+      const ocupado = pets.some(p => p.slotNumber === n);
+      if (!ocupado && !usados.has(n)) livres++;
+    }
+    return livres;
+  }, [pets, visibleSlots, usados]);
 
-  const freeSlotsInVisibleRange = visibleSlots - occupiedSlotsInVisibleRange;
+  // ✅ garante que a grade sempre alcance a maior vaga ocupada/usada
+  const maiorSlotOcupado = useMemo(() => {
+    const maxPet = pets.reduce((max, p) => Math.max(max, Number(p.slotNumber) || 0), 0);
+    const maxUsado = usados.size ? Math.max(...Array.from(usados)) : 0;
+    return Math.max(maxPet, maxUsado);
+  }, [pets, usados]);
+
+  // ✅ piso dinâmico: nunca esconder um slot ocupado/usado
+  const minPermitido = Math.max(MIN_VISIBLE_SLOTS, maiorSlotOcupado);
+
+  useEffect(() => {
+    if (maiorSlotOcupado > visibleSlots) {
+      const alvo = Math.ceil(maiorSlotOcupado / SLOTS_PER_BATCH) * SLOTS_PER_BATCH;
+      setVisibleSlots(Math.min(alvo, totalSlots));
+    }
+  }, [maiorSlotOcupado, visibleSlots, totalSlots]);
 
   useEffect(() => {
     if (freeSlotsInVisibleRange === 0 && visibleSlots < totalSlots) {
@@ -72,8 +97,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     return { status: pet.status, pet };
   };
 
-  // ── cor separada para slot "avisado" ───────────────────────────────────
-  const getStatusColor = (status: SlotStatus, avisado?: boolean) => {
+  // ── cor: usado > avisado > status ───────────────────────────────────────
+  const getStatusColor = (status: SlotStatus, avisado?: boolean, usado?: boolean) => {
+    if (usado && status === 'livre') {
+      return 'bg-slate-200 border-slate-300 text-slate-400';
+    }
     if (status === 'finalizado' && avisado) {
       return 'bg-blue-100 hover:bg-blue-200 border-blue-400 text-blue-700';
     }
@@ -91,8 +119,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     }
   };
 
-  // ── ícone separado para slot "avisado" ─────────────────────────────────
-  const getStatusIcon = (status: SlotStatus, avisado?: boolean) => {
+  // ── ícone: usado > avisado > status ─────────────────────────────────────
+  const getStatusIcon = (status: SlotStatus, avisado?: boolean, usado?: boolean) => {
+    if (usado && status === 'livre') {
+      return <Ban className="w-4 h-4" />;
+    }
     if (status === 'finalizado' && avisado) {
       return <PhoneCall className="w-4 h-4" />;
     }
@@ -117,6 +148,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const handleSlotClick = (slotNumber: number) => {
     const { status, pet } = getSlotStatus(slotNumber);
     if (status === 'livre') {
+      if (usados.has(slotNumber)) return; // ✅ slot já usado hoje — bloqueado
       setSelectedSlot(slotNumber);
       setIsDialogOpen(true);
     } else if (pet) {
@@ -141,11 +173,13 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     setVisibleSlots(prev => Math.min(prev + SLOTS_PER_BATCH, totalSlots));
   };
 
+  const slotBloqueado = (n: number) =>
+    pets.some(p => p.slotNumber === n) || usados.has(n);
+
   const handleRemoveOneSlot = () => {
     setVisibleSlots(prev => {
-      const newValue          = prev - 1;
-      const lastSlotOccupied  = pets.some(p => p.slotNumber === prev);
-      if (newValue < MIN_VISIBLE_SLOTS || lastSlotOccupied) return prev;
+      const newValue = prev - 1;
+      if (newValue < minPermitido || slotBloqueado(prev)) return prev;
       return newValue;
     });
   };
@@ -153,22 +187,20 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const handleRemoveBatchSlots = () => {
     setVisibleSlots(prev => {
       const newValue = prev - SLOTS_PER_BATCH;
-      if (newValue < MIN_VISIBLE_SLOTS) return prev;
+      if (newValue < minPermitido) return prev;
       const slotsToRemove = Array.from({ length: SLOTS_PER_BATCH }, (_, i) => prev - i);
-      const hasOccupied   = slotsToRemove.some(n => pets.some(p => p.slotNumber === n));
-      if (hasOccupied) return prev;
+      if (slotsToRemove.some(slotBloqueado)) return prev;
       return newValue;
     });
   };
 
-  const canRemoveSlots = visibleSlots > MIN_VISIBLE_SLOTS &&
-    !pets.some(p => p.slotNumber === visibleSlots);
+  const canRemoveSlots = visibleSlots > minPermitido && !slotBloqueado(visibleSlots);
 
   const canRemoveBatch = useMemo(() => {
-    if (visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS) return false;
+    if (visibleSlots - SLOTS_PER_BATCH < minPermitido) return false;
     const slotsToRemove = Array.from({ length: SLOTS_PER_BATCH }, (_, i) => visibleSlots - i);
-    return !slotsToRemove.some(n => pets.some(p => p.slotNumber === n));
-  }, [visibleSlots, pets]);
+    return !slotsToRemove.some(n => pets.some(p => p.slotNumber === n) || usados.has(n));
+  }, [visibleSlots, pets, minPermitido, usados]);
 
   // ── render ───────────────────────────────────────────────────────────────────
 
@@ -187,6 +219,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 <span className="font-semibold">{freeSlotsInVisibleRange}</span> slots livres visíveis
               </div>
             </div>
+            {usados.size > 0 && (
+              <Badge variant="secondary" className="bg-slate-200 text-slate-600 text-xs">
+                {usados.size} usados hoje
+              </Badge>
+            )}
           </div>
 
           {/* Controles */}
@@ -203,9 +240,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 className="h-8 px-2 gap-1 border-red-300 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 title={
                   !canRemoveSlots
-                    ? visibleSlots === MIN_VISIBLE_SLOTS
-                      ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
-                      : 'Último slot está ocupado'
+                    ? visibleSlots <= minPermitido
+                      ? `Mínimo de ${minPermitido} slots necessário`
+                      : 'Último slot está ocupado ou já foi usado hoje'
                     : 'Remover 1 slot'
                 }
               >
@@ -220,9 +257,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 className="h-8 px-2 gap-1 border-red-400 text-red-700 hover:bg-red-50 disabled:opacity-30 disabled:cursor-not-allowed"
                 title={
                   !canRemoveBatch
-                    ? visibleSlots - SLOTS_PER_BATCH < MIN_VISIBLE_SLOTS
-                      ? `Mínimo de ${MIN_VISIBLE_SLOTS} slots necessário`
-                      : 'Alguns dos últimos 10 slots estão ocupados'
+                    ? visibleSlots - SLOTS_PER_BATCH < minPermitido
+                      ? `Mínimo de ${minPermitido} slots necessário`
+                      : 'Alguns dos últimos 10 slots estão ocupados ou já usados'
                     : 'Remover 10 slots'
                 }
               >
@@ -264,6 +301,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         const slotNumber = i + 1;
         const { status, pet } = getSlotStatus(slotNumber);
         const avisado = !!pet?.avisado;
+        const slotUsado = usados.has(slotNumber) && !pet; // ✅ NOVO
 
         // 🆕 com filtro ativo, renderiza só os slots cujo serviço bate
         if (filter !== 'all' && (!pet || pet.servico !== filter)) {
@@ -284,20 +322,23 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             <DialogTrigger asChild>
               <button
                 onClick={() => handleSlotClick(slotNumber)}
+                disabled={slotUsado}
                 className={`
                   aspect-square rounded-lg border-2 transition-all
                   flex flex-col items-center justify-center gap-1
-                  cursor-pointer
-                  ${getStatusColor(status, avisado)}
+                  ${slotUsado ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
+                  ${getStatusColor(status, avisado, slotUsado)}
                   ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
                 `}
                 title={
                   pet
                     ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''} (clique para detalhes)`
-                    : `Slot ${slotNumber} - Livre`
+                    : slotUsado
+                      ? `Slot ${slotNumber} - Já utilizado hoje`
+                      : `Slot ${slotNumber} - Livre`
                 }
               >
-                {getStatusIcon(status, avisado)}
+                {getStatusIcon(status, avisado, slotUsado)}
                 <span className="text-xs font-semibold">{slotNumber}</span>
                 {pet && (
                   <span className="text-[8px] font-medium truncate w-full px-1 text-center">
@@ -307,7 +348,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
               </button>
             </DialogTrigger>
 
-            {status === 'livre' && (
+            {status === 'livre' && !slotUsado && (
               /* ✅ altura FIXA para o scroll interno do formulário funcionar */
               <DialogContent
                 className="sm:max-w-2xl h-[85vh]"
@@ -322,6 +363,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 <PetRegistration
                   onSubmit={handleRegister}
                   allPets={pets}
+                  slotsUsados={usados}
                 />
               </DialogContent>
             )}
@@ -339,12 +381,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           setSelectedPet(null);
         }}
         onEdit={(pet) => {
-          // 🆕 fecha os detalhes e abre o modal de EDIÇÃO
           setIsDetailOpen(false);
           setTimeout(() => {
             setPetParaEditar(pet);
             setIsEditOpen(true);
-          }, 120); // espera a animação de saída do detalhe
+          }, 120);
         }}
         onDelete={(petId) => {
           onDeletePet(petId);
@@ -377,7 +418,6 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         >
           <DialogHeader>
             <DialogTitle>Editar Perfil do Pet</DialogTitle>
-            {/* 🔧 descrição acessível adicionada */}
             <DialogDescription className="sr-only">
               Atualize as informações do pet selecionado.
             </DialogDescription>
@@ -387,6 +427,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
               isEditing={true}
               initialData={petParaEditar}
               allPets={pets}
+              slotsUsados={usados}
               onSubmit={(updatedData) => {
                 onEditPet(petParaEditar.id, updatedData as Partial<Pet>);
                 setIsEditOpen(false);
@@ -415,12 +456,18 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           <div className="w-4 h-4 rounded bg-purple-100 border-2 border-purple-300" />
           <span className="text-sm text-gray-600">Finalizado</span>
         </div>
-        {/* ── legenda Avisado ── */}
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-400 flex items-center justify-center">
             <PhoneCall className="w-2.5 h-2.5 text-blue-600" />
           </div>
           <span className="text-sm text-gray-600">Tutor Avisado</span>
+        </div>
+        {/* ✅ NOVO */}
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-slate-200 border-2 border-slate-300 flex items-center justify-center">
+            <Ban className="w-2.5 h-2.5 text-slate-500" />
+          </div>
+          <span className="text-sm text-gray-600">Usado hoje</span>
         </div>
       </div>
 

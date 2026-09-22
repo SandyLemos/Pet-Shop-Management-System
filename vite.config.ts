@@ -10,11 +10,12 @@ export default defineConfig({
     tailwindcss(),
     VitePWA({
       registerType: 'autoUpdate',
+      injectRegister: false,
       includeAssets: ['favicon.ico', 'paw.png', 'paw_cat.png'],
       workbox: {
-        // não precacheia HTML
+        navigateFallback: '/index.html',
+        navigateFallbackDenylist: [/^\/__/, /\/api\//],
         globPatterns: ['**/*.{js,css,ico,png,svg,webp,woff,woff2}'],
-        navigateFallback: null,
         clientsClaim: true,
         skipWaiting: true,
         cleanupOutdatedCaches: true,

@@ -24,6 +24,8 @@ import type { LogEntry, RelatorioServicos } from '../../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SecaoPetsCadastro } from './PetsRegistrationSection';
+import { idDoDiaDe } from '../../utils/dias';
+
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
 interface UsuarioFirestore {

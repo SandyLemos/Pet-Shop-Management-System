@@ -19,6 +19,8 @@ import {
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
 import type { Pet, Profissional } from '../app/types/pet';
+import { idDoDia, idDoDiaDe } from '../utils/dias';
+
 
 /** Gera a chave do dia: "2026-04-28" */
 export function getTodayKey(): string {
