@@ -1,3 +1,4 @@
+// src/services/petService.ts
 import {
   collection,
   addDoc,
@@ -21,10 +22,16 @@ import { db } from '../lib/firebase';
 import type { Pet, Profissional } from '../app/types/pet';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
 
+/** Reexporta para quem já importava daqui */
+export { idDoDia, idDoDiaDe };
 
-/** Gera a chave do dia: "2026-04-28" */
+/**
+ * ✅ Chave do dia no fuso America/Sao_Paulo: "2026-09-23"
+ * NUNCA usar toISOString() aqui — retornaria a data em UTC e
+ * viraria o dia às 21h no horário de Brasília.
+ */
 export function getTodayKey(): string {
-  return new Date().toISOString().split('T')[0];
+  return idDoDia();
 }
 
 /** Referência da coleção de pets ativos do dia */
@@ -39,11 +46,11 @@ const logsCollection = () =>
 const profissionaisCollection = () =>
   collection(db, 'profissionais');
 
-/** ✅ Referência da coleção global de cadastros permanentes de pets */
+/** Referência da coleção global de cadastros permanentes de pets */
 const petsCadastroCollection = () =>
   collection(db, 'petsCadastro');
 
-// 🆕 ─── Helper: inverte uma string de dígitos ("8888" -> "8888", "12345" -> "54321")
+// ─── Helper: inverte uma string de dígitos ────────────────────────────────
 function inverterString(str: string): string {
   return str.split('').reverse().join('');
 }
@@ -120,17 +127,17 @@ export function subscribeToProfissionais(
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
-// ✅ CADASTRO PERMANENTE DE PETS + petNumber sequencial
+// CADASTRO PERMANENTE DE PETS + petNumber sequencial
 // ═══════════════════════════════════════════════════════════════════════════
 
 /** Ficha permanente do pet (coleção petsCadastro) */
 export interface PetCadastro {
   petNumber: string;          // Ex: "PET-000123"
-  petNumberSeq?: string;      // ✅ número puro sem zeros, ex: "123"
+  petNumberSeq?: string;      // número puro sem zeros, ex: "123"
   nomePet: string;
   nomeTutor: string;
   telefone: string;
-  telefoneReverso?: string;   // 🆕 telefone (só dígitos) invertido, p/ busca por final
+  telefoneReverso?: string;   // telefone (só dígitos) invertido, p/ busca por final
   especie?: 'cao' | 'gato';
   raca?: string;
   porte?: 'pequeno' | 'medio' | 'grande';
@@ -140,8 +147,7 @@ export interface PetCadastro {
 }
 
 /**
- * ✅ Gera um petNumber sequencial e ATÔMICO via transaction.
- * Garante que nunca repita, mesmo com cadastros simultâneos.
+ * Gera um petNumber sequencial e ATÔMICO via transaction.
  * Formato: "PET-000123"
  */
 export async function gerarPetNumber(): Promise<string> {
@@ -159,11 +165,8 @@ export async function gerarPetNumber(): Promise<string> {
 }
 
 /**
- * ✅ Busca pets no cadastro permanente por:
- *  - petNumber (por PREFIXO: "1" acha 1, 10, 12, 123... | "PET-1", "pet 001" também funcionam)
- *  - telefone (🆕 por FINAL: digitar os últimos 4+ dígitos acha o pet)
- *  - nomePet (prefixo, case-insensitive)
- * Retorna no máximo ~10 resultados sem duplicar.
+ * Busca pets no cadastro permanente por petNumber (prefixo),
+ * telefone (final) ou nomePet (prefixo).
  */
 export async function buscarPetsCadastro(termo: string): Promise<PetCadastro[]> {
   const t = termo.trim();
@@ -172,20 +175,19 @@ export async function buscarPetsCadastro(termo: string): Promise<PetCadastro[]> 
   const col = petsCadastroCollection();
   const resultados = new Map<string, PetCadastro>();
 
-  // 1️⃣ Por petNumber — busca por PREFIXO (digitar "1" acha 1, 10, 12, 123...)
-  const soDigitosNumero = t.replace(/\D/g, ''); // remove tudo que não é número
+  // 1️⃣ Por petNumber — busca por PREFIXO
+  const soDigitosNumero = t.replace(/\D/g, '');
   if (soDigitosNumero.length > 0) {
-    // remove zeros à esquerda para casar com petNumberSeq ("0001" -> "1")
     const semZeros = String(parseInt(soDigitosNumero, 10));
 
-    // a) match exato com padding (PET-000001) — pega o doc direto
+    // a) match exato com padding (PET-000001)
     const numeroLimpo = `PET-${soDigitosNumero.padStart(6, '0')}`;
     const porNumero = await getDoc(doc(col, numeroLimpo));
     if (porNumero.exists()) {
       resultados.set(numeroLimpo, porNumero.data() as PetCadastro);
     }
 
-    // b) busca por PREFIXO usando o campo petNumberSeq
+    // b) busca por PREFIXO usando petNumberSeq
     const qNum = query(
       col,
       where('petNumberSeq', '>=', semZeros),
@@ -196,12 +198,10 @@ export async function buscarPetsCadastro(termo: string): Promise<PetCadastro[]> 
     snapNum.forEach((d) => resultados.set(d.id, d.data() as PetCadastro));
   }
 
-  // 2️⃣ 🆕 Por telefone — busca por FINAL (últimos 4+ dígitos)
-  // Usa o campo telefoneReverso: o "final" do telefone vira "início" do invertido,
-  // permitindo busca por prefixo (que o Firestore suporta nativamente).
+  // 2️⃣ Por telefone — busca por FINAL (últimos 4+ dígitos)
   const soDigitos = t.replace(/\D/g, '');
   if (soDigitos.length >= 4) {
-    const termoReverso = inverterString(soDigitos); // ex: "8888" -> "8888"
+    const termoReverso = inverterString(soDigitos);
     const qTel = query(
       col,
       where('telefoneReverso', '>=', termoReverso),
@@ -226,10 +226,7 @@ export async function buscarPetsCadastro(termo: string): Promise<PetCadastro[]> 
   return Array.from(resultados.values());
 }
 
-/**
- * ✅ Lista TODOS os pets do cadastro permanente (coleção petsCadastro).
- * Ordenados por nome (case-insensitive via nomePetLower).
- */
+/** Lista TODOS os pets do cadastro permanente, ordenados por nome. */
 export async function getAllPetsCadastro(): Promise<PetCadastro[]> {
   const q = query(petsCadastroCollection(), orderBy('nomePetLower', 'asc'));
   const snap = await getDocs(q);
@@ -237,7 +234,7 @@ export async function getAllPetsCadastro(): Promise<PetCadastro[]> {
 }
 
 /**
- * ✅ Exclui a ficha permanente de um pet pelo petNumber.
+ * Exclui a ficha permanente de um pet pelo petNumber.
  * ⚠️ NÃO afeta os pets da fila do dia nem os logs históricos.
  */
 export async function deletePetCadastro(petNumber: string): Promise<void> {
@@ -245,10 +242,7 @@ export async function deletePetCadastro(petNumber: string): Promise<void> {
   await deleteDoc(ref);
 }
 
-/**
- * ✅ Atualiza a ficha permanente do pet (reusa salvarCadastroPet).
- * Mantém o mesmo petNumber e regenera campos derivados (lower, telefoneReverso).
- */
+/** Atualiza a ficha permanente do pet (reusa salvarCadastroPet). */
 export async function updatePetCadastro(
   petNumber: string,
   dados: Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>,
@@ -257,9 +251,8 @@ export async function updatePetCadastro(
 }
 
 /**
- * ✅ Cria ou atualiza a ficha permanente do pet.
+ * Cria ou atualiza a ficha permanente do pet.
  * Se não houver petNumber, gera um novo (1ª visita).
- * Retorna o petNumber (novo ou existente).
  */
 export async function salvarCadastroPet(
   dados: Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>,
@@ -268,7 +261,6 @@ export async function salvarCadastroPet(
   const petNumber = petNumberExistente ?? (await gerarPetNumber());
   const ref = doc(petsCadastroCollection(), petNumber);
 
-  // 🆕 normaliza o telefone (só dígitos) e gera a versão invertida
   const telefoneDigits = (dados.telefone ?? '').replace(/\D/g, '');
 
   await setDoc(
@@ -276,11 +268,9 @@ export async function salvarCadastroPet(
     {
       ...dados,
       petNumber,
-      // ✅ número puro sem zeros à esquerda ("000123" -> "123")
       petNumberSeq: String(parseInt(petNumber.replace(/\D/g, ''), 10)),
       nomePetLower: dados.nomePet.toLowerCase(),
       telefone: telefoneDigits,
-      // 🆕 telefone invertido para permitir busca por FINAL
       telefoneReverso: inverterString(telefoneDigits),
       ...(petNumberExistente
         ? { atualizadoEm: serverTimestamp() }
@@ -292,13 +282,12 @@ export async function salvarCadastroPet(
   return petNumber;
 }
 
-// ─── Cadastro — Pet (✅ retorna petNumber + isNovo) ────────────
+// ─── Cadastro — Pet ───────────────────────────────────────────────────────
 
-/** ✅ Resultado do cadastro de pet */
 export interface AddPetResult {
   id: string;          // id do documento na fila do dia
   petNumber: string;   // código da ficha, ex: "PET-000123"
-  isNovo: boolean;     // true = 1ª visita (petNumber recém-gerado)
+  isNovo: boolean;     // true = 1ª visita
 }
 
 export async function addPet(
@@ -318,11 +307,9 @@ export async function addPet(
     }
   }
 
-  // ✅ Detecta se é primeira visita: sem petNumber vindo da busca = pet novo
   const petNumberExistente = (petData as any).petNumber as string | undefined;
   const isNovo = !petNumberExistente;
 
-  // ✅ Garante a ficha permanente + petNumber (cria novo ou reusa o existente)
   const petNumber = await salvarCadastroPet(
     {
       nomePet:   petData.nomePet,
@@ -333,27 +320,26 @@ export async function addPet(
       porte:     petData.porte,
       foto:      petData.foto,
     },
-    petNumberExistente, // se veio da busca, mantém o mesmo número
+    petNumberExistente,
   );
 
   const petDataLimpo = Object.fromEntries(
-   Object.entries(petData).filter(([, v]) => v !== undefined),
+    Object.entries(petData).filter(([, v]) => v !== undefined),
   );
 
   const ref = await addDoc(petsCollection(), {
     ...petDataLimpo,
-    petNumber,                  // ✅ referência à ficha global
+    petNumber,
     checkInTime:        serverTimestamp(),
     historicoReversoes: [],
     cadastradoPorId,
     cadastradoPorNome,
   });
 
-  // ✅ Retorna tudo que o App.tsx precisa para exibir o modal de código
   return { id: ref.id, petNumber, isNovo };
 }
 
-// ─── Cadastro — Profissional ───────────────────────────────────────────────
+// ─── Cadastro — Profissional ──────────────────────────────────────────────
 
 export async function addProfissional(
   data: Omit<Profissional, 'id'>,
@@ -368,7 +354,7 @@ export async function addProfissional(
   return ref.id;
 }
 
-// ─── Edição — Pet ──────────────────────────────────────────────────────────
+// ─── Edição — Pet ─────────────────────────────────────────────────────────
 
 export async function updatePet(
   petId: string,
@@ -376,7 +362,7 @@ export async function updatePet(
 ): Promise<void> {
   const petRef = doc(db, 'dias', getTodayKey(), 'pets', petId);
 
-  // ✅ Remove campos undefined — o Firestore rejeita undefined no updateDoc
+  // Remove campos undefined — o Firestore rejeita undefined no updateDoc
   const dadosLimpos = Object.fromEntries(
     Object.entries(updatedData).filter(([, v]) => v !== undefined),
   );
@@ -423,19 +409,22 @@ export async function encerrarPet(
     }
   }
 
+  // ✅ Congela a chave do dia: garante que log e delete usem o MESMO dia,
+  // mesmo que a virada de meia-noite aconteça no meio da operação.
+  const diaKey = getTodayKey();
+
   const checkOut = new Date();
   const checkIn  = new Date(pet.checkInTime);
   const duracaoMinutos = Math.round(
     (checkOut.getTime() - checkIn.getTime()) / 60_000,
   );
 
-  // ✅ Converte checkInTime (string ISO) para Timestamp do Firestore
   const checkInTimestamp = pet.checkInTime
     ? Timestamp.fromDate(new Date(pet.checkInTime))
     : serverTimestamp();
 
   // 1️⃣ Grava log
-  await addDoc(logsCollection(), {
+  await addDoc(collection(db, 'dias', diaKey, 'logs'), {
     tipo,
     petId:               pet.id,
     petNumber:           (pet as any).petNumber       ?? null,
@@ -447,16 +436,18 @@ export async function encerrarPet(
     servico:             pet.servico,
     slotNumber:          pet.slotNumber,
     statusFinal:         pet.status,
-    checkInTime:         checkInTimestamp,        // ✅ Timestamp
+    checkInTime:         checkInTimestamp,
     checkOutTime:        serverTimestamp(),
     duracaoMinutos,
-    // ✅ Quem cadastrou o pet
+    // ✅ dia local em que o encerramento foi registrado (auditoria)
+    diaLocal:            diaKey,
+    // Quem cadastrou o pet
     cadastradoPorId:     pet.cadastradoPorId     ?? null,
     cadastradoPorNome:   pet.cadastradoPorNome   ?? null,
-    // ✅ Quem avisou o tutor
+    // Quem avisou o tutor
     avisadoPorId:        pet.avisadoPorId        ?? null,
     avisadoPorNome:      pet.avisadoPorNome      ?? null,
-    // ✅ Quem encerrou
+    // Quem encerrou
     encerradoPorId,
     encerradoPorNome,
     // legado (compatibilidade com logs antigos)
@@ -470,14 +461,14 @@ export async function encerrarPet(
     historicoReversoes:  pet.historicoReversoes  ?? [],
     avisado:             pet.avisado             ?? false,
     avisadoEm:           pet.avisadoEm           ?? null,
-    // ✅ problemas de saúde detectados em cada etapa
+    // problemas de saúde detectados em cada etapa
     problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
   });
 
   // 2️⃣ Deleta o pet da fila ativa
-  const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
+  const petRef = doc(db, 'dias', diaKey, 'pets', pet.id);
   await deleteDoc(petRef);
 }
 
@@ -498,13 +489,14 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     }
   }
 
-  // ✅ Converte checkInTime (string ISO) para Timestamp do Firestore
+  const diaKey = getTodayKey();
+
   const checkInTimestamp = pet.checkInTime
     ? Timestamp.fromDate(new Date(pet.checkInTime))
     : serverTimestamp();
 
   // 1️⃣ Grava log do aviso
-  await addDoc(logsCollection(), {
+  await addDoc(collection(db, 'dias', diaKey, 'logs'), {
     tipo:                'avisado',
     petId:               pet.id,
     petNumber:           (pet as any).petNumber       ?? null,
@@ -516,12 +508,13 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     servico:             pet.servico,
     slotNumber:          pet.slotNumber,
     statusFinal:         pet.status,
-    checkInTime:         checkInTimestamp,        // ✅ Timestamp
+    checkInTime:         checkInTimestamp,
     avisadoEm:           serverTimestamp(),
-    // ✅ Quem cadastrou
+    diaLocal:            diaKey,
+    // Quem cadastrou
     cadastradoPorId:     pet.cadastradoPorId     ?? null,
     cadastradoPorNome:   pet.cadastradoPorNome   ?? null,
-    // ✅ Quem avisou
+    // Quem avisou
     avisadoPorId,
     avisadoPorNome,
     // legado
@@ -532,14 +525,13 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     profissionalEscovar: pet.profissionalEscovar ?? null,
     observacoes:         pet.observacoes         ?? null,
     historicoReversoes:  pet.historicoReversoes  ?? [],
-    // ✅ problemas de saúde detectados em cada etapa
     problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
   });
 
-  // 2️⃣ Atualiza o pet — salva quem avisou direto no documento do pet
-  const petRef = doc(db, 'dias', getTodayKey(), 'pets', pet.id);
+  // 2️⃣ Atualiza o pet — salva quem avisou direto no documento
+  const petRef = doc(db, 'dias', diaKey, 'pets', pet.id);
   await updateDoc(petRef, {
     avisado:       true,
     avisadoEm:     new Date().toISOString(),
@@ -548,7 +540,7 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
   });
 }
 
-// ─── Tipos para Relatório ─────────────────────────────────────────────────────
+// ─── Tipos para Relatório ─────────────────────────────────────────────────
 
 export interface LogEntry {
   id: string;
@@ -567,11 +559,11 @@ export interface LogEntry {
   checkOutTime?: string;
   avisadoEm?: string;
   duracaoMinutos?: number;
-  // ✅ Os 3 campos principais
+  diaLocal?: string | null;
   cadastradoPorNome?: string | null;
   avisadoPorNome?:    string | null;
   encerradoPorNome?:  string | null;
-  // legados (compatibilidade com logs antigos)
+  // legados
   removidoPorNome?:   string | null;
   registradoPorNome?: string | null;
   profissionalBanho: string | null;
@@ -580,13 +572,12 @@ export interface LogEntry {
   observacoes: string | null;
   historicoReversoes: any[];
   avisado?: boolean;
-  // ✅ problemas de saúde
   problemasSaudeBanho?:   string[];
   problemasSaudeEscovar?: string[];
   problemasSaudeTosa?:    string[];
 }
 
-// ─── Conversor Firestore → LogEntry ──────────────────────────────────────────
+// ─── Conversor Firestore → LogEntry ───────────────────────────────────────
 
 function logFromFirestore(id: string, data: any): LogEntry {
   const toISO = (val: any): string | undefined => {
@@ -613,11 +604,10 @@ function logFromFirestore(id: string, data: any): LogEntry {
     checkOutTime:        toISO(data.checkOutTime),
     avisadoEm:           toISO(data.avisadoEm),
     duracaoMinutos:      data.duracaoMinutos      ?? undefined,
-    // ✅ novos
+    diaLocal:            data.diaLocal            ?? null,
     cadastradoPorNome:   data.cadastradoPorNome   ?? null,
     avisadoPorNome:      data.avisadoPorNome      ?? null,
     encerradoPorNome:    data.encerradoPorNome    ?? null,
-    // legados
     removidoPorNome:     data.removidoPorNome     ?? null,
     registradoPorNome:   data.registradoPorNome   ?? null,
     profissionalBanho:   data.profissionalBanho   ?? null,
@@ -626,14 +616,13 @@ function logFromFirestore(id: string, data: any): LogEntry {
     observacoes:         data.observacoes         ?? null,
     historicoReversoes:  data.historicoReversoes  ?? [],
     avisado:             data.avisado             ?? false,
-    // ✅ problemas de saúde
     problemasSaudeBanho:   data.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: data.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    data.problemasSaudeTosa    ?? [],
   };
 }
 
-// ─── Buscar logs de um dia específico ────────────────────────────────────────
+// ─── Buscar logs de um dia específico ─────────────────────────────────────
 
 export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
   const col  = collection(db, 'dias', dateKey, 'logs');
@@ -642,7 +631,12 @@ export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
   return snap.docs.map((d) => logFromFirestore(d.id, d.data()));
 }
 
-// ─── Relatório de contagem de serviços (apenas ENTREGUES) ───────────────────
+/** Atalho: logs do dia de HOJE no fuso local. */
+export async function getLogsHoje(): Promise<LogEntry[]> {
+  return getLogsByDate(getTodayKey());
+}
+
+// ─── Relatório de contagem de serviços (apenas ENTREGUES) ─────────────────
 
 export interface RelatorioServicos {
   porServico: Record<string, number>;
@@ -665,23 +659,31 @@ export async function getRelatorioDia(dateKey: string): Promise<RelatorioServico
   return contarEntregues(await getLogsByDate(dateKey));
 }
 
+/**
+ * ✅ Gera a lista de dias no fuso local.
+ * Usa 12:00 como âncora para nunca cair na borda de fuso / horário de verão.
+ */
+export function listarDias(dataInicio: string, dataFim: string): string[] {
+  const datas: string[] = [];
+  const cur = new Date(`${dataInicio}T12:00:00`);
+  const fin = new Date(`${dataFim}T12:00:00`);
+  while (cur <= fin) {
+    datas.push(idDoDiaDe(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return datas;
+}
+
 export async function getRelatorioPeriodo(
   dataInicio: string,
   dataFim: string,
 ): Promise<RelatorioServicos> {
-  const datas: string[] = [];
-  const cur = new Date(dataInicio + 'T00:00:00');
-  const fin = new Date(dataFim + 'T00:00:00');
-  while (cur <= fin) {
-    datas.push(cur.toISOString().split('T')[0]);
-    cur.setDate(cur.getDate() + 1);
-  }
+  const datas = listarDias(dataInicio, dataFim);
   const resultados = await Promise.all(datas.map((d) => getLogsByDate(d)));
   return contarEntregues(resultados.flat());
 }
 
-
-// ─── Buscar pets ativos de um dia específico ──────────────────────────────────
+// ─── Buscar pets ativos de um dia específico ──────────────────────────────
 
 export async function getPetsByDate(dateKey: string): Promise<Pet[]> {
   const col  = collection(db, 'dias', dateKey, 'pets');
