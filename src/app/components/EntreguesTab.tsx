@@ -54,6 +54,8 @@ export function EntreguesTab() {
       setDia(alvo);
     } catch (err) {
       console.error('[EntreguesTab] erro ao carregar:', err);
+      // ✅ acesso negado/erro: não deixa a lista antiga visível
+      if (vivo.current) setLogs([]);
     } finally {
       if (vivo.current) setLoading(false);
     }

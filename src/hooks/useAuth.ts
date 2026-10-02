@@ -15,6 +15,31 @@ interface AuthState {
   error: string | null;
 }
 
+// ✅ Mensagens exibidas na tela de login
+export const MSG_ACESSO_NEGADO =
+  'Sua conta não está liberada para usar este sistema. Fale com o administrador.';
+const MSG_SEM_CONEXAO =
+  'Não foi possível verificar seu acesso. Confira a internet e tente novamente.';
+
+const SEM_REGISTRO = 'SEM_REGISTRO';
+
+/**
+ * ✅ Só entra no sistema quem tem registro em /usuarios (criado pelo admin).
+ * Conta que existe só no Firebase Auth (sem registro) é recusada.
+ * Lança Error(SEM_REGISTRO) quando o registro não existe.
+ */
+async function verificarAcesso(user: User): Promise<'admin' | 'user'> {
+  const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+  if (!userDoc.exists()) throw new Error(SEM_REGISTRO);
+  return userDoc.data().role === 'admin' ? 'admin' : 'user';
+}
+
+/**
+ * Mensagem a mostrar depois que o próprio app desconecta a conta
+ * (o signOut dispara o listener com user = null, que lê daqui).
+ */
+let erroPendente: string | null = null;
+
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -25,15 +50,30 @@ export function useAuth() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
-      if (user) {
-        const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
-        const role = userDoc.exists()
-          ? (userDoc.data().role as 'admin' | 'user')
-          : 'user';
+      if (!user) {
+        setAuthState((prev) => ({
+          user: null,
+          role: null,
+          loading: false,
+          error: erroPendente ?? prev.error,
+        }));
+        erroPendente = null;
+        return;
+      }
 
+      try {
+        const role = await verificarAcesso(user);
         setAuthState({ user, role, loading: false, error: null });
-      } else {
-        setAuthState({ user: null, role: null, loading: false, error: null });
+      } catch (err: any) {
+        if (err?.message === SEM_REGISTRO) {
+          // conta sem registro: desconecta e mostra o aviso no login
+          erroPendente = MSG_ACESSO_NEGADO;
+          await signOut(auth);
+        } else {
+          // falha de rede: NÃO desconecta (recarregar a página tenta de novo),
+          // só mostra a tela de login com o aviso em vez de travar no splash
+          setAuthState({ user: null, role: null, loading: false, error: MSG_SEM_CONEXAO });
+        }
       }
     });
 
@@ -41,18 +81,32 @@ export function useAuth() {
   }, []);
 
   const login = async (email: string, password: string): Promise<boolean> => {
-    setAuthState((prev) => ({ ...prev, loading: true, error: null }));
+    // ✅ não liga o "loading" global: a tela de login continua montada
+    //    (mantém o e-mail digitado) e usa o próprio spinner do botão
+    setAuthState((prev) => ({ ...prev, error: null }));
     try {
-      await signInWithEmailAndPassword(auth, email, password);
+      const cred = await signInWithEmailAndPassword(auth, email, password);
+      const role = await verificarAcesso(cred.user);
+      setAuthState({ user: cred.user, role, loading: false, error: null });
       return true;
     } catch (err: any) {
-      const message = getFirebaseErrorMessage(err.code);
+      if (err?.message === SEM_REGISTRO) {
+        erroPendente = MSG_ACESSO_NEGADO;
+        await signOut(auth);
+        setAuthState({ user: null, role: null, loading: false, error: MSG_ACESSO_NEGADO });
+        return false;
+      }
+      const code: string = err?.code ?? '';
+      const message = code.startsWith('auth/')
+        ? getFirebaseErrorMessage(code)
+        : MSG_SEM_CONEXAO;
       setAuthState((prev) => ({ ...prev, loading: false, error: message }));
       return false;
     }
   };
 
   const logout = async () => {
+    erroPendente = null;
     await signOut(auth);
     setAuthState({ user: null, role: null, loading: false, error: null });
   };

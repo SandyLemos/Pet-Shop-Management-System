@@ -72,21 +72,21 @@ function LogoutModal({
 // ─── Tela de Login ────────────────────────────────────────────────────────────
 function LoginScreen({
   onLogin,
+  error,
 }: {
   onLogin: (email: string, password: string) => Promise<boolean>;
+  /** ✅ motivo real vindo do useAuth (senha errada, conta não liberada, sem internet...) */
+  error: string | null;
 }) {
   const [email, setEmail]               = useState('');
   const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError]               = useState('');
   const [loading, setLoading]           = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    setError('');
     setLoading(true);
-    const success = await onLogin(email, password);
-    if (!success) setError('E-mail ou senha inválidos. Tente novamente.');
+    await onLogin(email, password);
     setLoading(false);
   };
 
@@ -248,16 +248,23 @@ export default function App() {
   } | null>(null);
 
   // 🔥 Escuta os pets do dia em tempo real
+  // ✅ Depende da CONTA (uid), não só de "está logado": se a conta mudar
+  //    sem recarregar a página, a lista é zerada e buscada de novo.
+  const uid = user?.uid ?? null;
   useEffect(() => {
-    if (!isAuthenticated) return;
+    setPets([]); // nunca mostra a lista de outra conta
+    if (!uid) return;
 
     const unsubscribe = subscribeToPets(
       (petsDoFirestore: Pet[]) => setPets(petsDoFirestore ?? []),
-      () => toast.error('Erro ao carregar pets. Verifique sua conexão.'),
+      () => {
+        setPets([]); // acesso negado/erro: não deixa dados antigos na tela
+        toast.error('Erro ao carregar pets. Verifique sua conexão.');
+      },
     );
 
     return () => unsubscribe();
-  }, [isAuthenticated]);
+  }, [uid]);
 
   if (loading) return <SplashScreen />;
 
@@ -266,13 +273,12 @@ export default function App() {
       <>
         <Toaster position="top-right" richColors />
         <LoginScreen
+          error={error}
           onLogin={async (email, password) => {
             const success = await login(email, password);
-            if (success) {
-              toast.success('Bem-vindo ao Elite Pet Shop! 🐾');
-            } else if (error) {
-              toast.error(error);
-            }
+            // ✅ só dá boas-vindas quando o acesso foi realmente liberado;
+            //    em caso de recusa, o motivo aparece na própria tela de login
+            if (success) toast.success('Bem-vindo ao Elite Pet Shop! 🐾');
             return success;
           }}
         />

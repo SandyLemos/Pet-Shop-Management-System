@@ -1,0 +1,138 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // —— Funções auxiliares ——————————————————————————————————————
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // NOVO: funcionário = está logado E tem registro em /usuarios.
+    // Conta criada por estranho (sem registro) não acessa nada.
+    function isStaff() {
+      return isAuthenticated() &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
+    }
+
+    // —— Usuários ————————————————————————————————————————————————
+    match /usuarios/{userId} {
+      // cada um lê o próprio registro (necessário no login);
+      // a lista completa só para funcionários
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isStaff());
+
+      // MUDOU: só o admin cria registro (é o que o painel Admin faz).
+      // Antes qualquer conta podia criar o próprio registro como 'user'.
+      allow create: if isAdmin()
+                    && request.resource.data.role in ['admin', 'user'];
+
+      // admin edita qualquer um, mas não muda o próprio papel
+      allow update: if isAdmin()
+                    && request.resource.data.role in ['admin', 'user']
+                    && (userId != request.auth.uid
+                        || request.resource.data.role == resource.data.role);
+
+      // admin exclui qualquer um, menos a si mesmo
+      allow delete: if isAdmin() && userId != request.auth.uid;
+    }
+
+    // —— Profissionais ———————————————————————————————————————————
+    match /profissionais/{profissionalId} {
+      allow read: if isStaff();
+      allow create, update, delete: if isAdmin();
+    }
+
+    // —— Pets Cadastro (ficha permanente) ————————————————————————
+    match /petsCadastro/{petNumber} {
+      allow read: if isStaff();
+      allow create, update: if isStaff()
+                    && request.resource.data.petNumber == petNumber
+                    && request.resource.data.nomePet is string
+                    && request.resource.data.nomePet.size() > 0
+                    && request.resource.data.nomePet.size() <= 100
+                    && request.resource.data.nomeTutor is string
+                    && request.resource.data.nomeTutor.size() <= 100;
+      allow delete: if isAdmin();
+    }
+
+    // —— Raças (catálogo customizável) ————————————————————————————
+    match /racas/{racaId} {
+      allow read: if isStaff();
+
+      allow create: if isStaff()
+                    && request.resource.data.keys().hasOnly(['nome', 'especie', 'criadoEm'])
+                    && request.resource.data.nome is string
+                    && request.resource.data.nome.size() > 0
+                    && request.resource.data.nome.size() <= 60
+                    && request.resource.data.especie in ['cao', 'gato'];
+
+      allow update: if isAdmin()
+                    && request.resource.data.diff(resource.data)
+                         .affectedKeys().hasOnly(['nome', 'atualizadoEm'])
+                    && request.resource.data.nome is string
+                    && request.resource.data.nome.size() > 0
+                    && request.resource.data.nome.size() <= 60;
+
+      allow delete: if isAdmin();
+    }
+
+    // —— Contadores (petNumber sequencial) ———————————————————————
+    // MUDOU: o contador só pode começar em 1 e subir de 1 em 1,
+    // para ninguém voltar o número e sobrescrever fichas.
+    match /contadores/{contadorId} {
+      allow read:   if isStaff();
+      allow create: if isStaff() && request.resource.data.valor == 1;
+      allow update: if isStaff()
+                    && request.resource.data.valor == resource.data.valor + 1;
+      allow delete: if false;
+    }
+
+    // —— Slots já usados no dia (grade compartilhada) ————————————
+    match /slotsUsados/{dia} {
+      allow read:           if isStaff();
+      allow create, update: if isStaff() && request.resource.data.slots is list;
+      allow delete:         if isAdmin();
+    }
+
+    // —— Dias ————————————————————————————————————————————————————
+    match /dias/{diaId} {
+      allow read, create, update: if isStaff();
+      allow delete: if isAdmin();
+
+      match /pets/{petId} {
+        allow read:   if isStaff();
+        allow create, update: if isStaff()
+                    && request.resource.data.slotNumber is int
+                    && request.resource.data.slotNumber >= 1
+                    && request.resource.data.slotNumber <= 100
+                    && request.resource.data.status in
+                         ['espera', 'banho', 'escovar', 'tosa', 'finalizado']
+                    && request.resource.data.servico in
+                         ['banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao']
+                    && request.resource.data.nomePet is string
+                    && request.resource.data.nomePet.size() > 0
+                    && request.resource.data.nomePet.size() <= 100;
+        allow delete: if isStaff();
+      }
+
+      // aba "Entregues" lê para todos os funcionários; log não se edita
+      match /logs/{logId} {
+        allow read:   if isStaff();
+        allow create: if isStaff();
+        allow update: if false;
+        allow delete: if isAdmin();
+      }
+
+      // REMOVIDO: /deletados — o app não usa mais (cai no bloqueio abaixo)
+    }
+
+    // —— Bloqueio de coleções não previstas ——————————————————————
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

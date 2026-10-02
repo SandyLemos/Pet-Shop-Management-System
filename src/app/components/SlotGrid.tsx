@@ -36,10 +36,6 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
 
-  // 🆕 estados do modal de EDIÇÃO
-  const [petParaEditar, setPetParaEditar] = useState<Pet | null>(null);
-  const [isEditOpen, setIsEditOpen] = useState(false);
-
   // ✅ NOVO: slots já queimados hoje
   const { usados } = useSlotsUsadosHoje();
 
@@ -380,13 +376,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           setIsDetailOpen(false);
           setSelectedPet(null);
         }}
-        onEdit={(pet) => {
-          setIsDetailOpen(false);
-          setTimeout(() => {
-            setPetParaEditar(pet);
-            setIsEditOpen(true);
-          }, 120);
-        }}
+        // ✅ O PetDetailModal já tem o próprio formulário de edição e,
+        // ao salvar, chama onEdit(petId, dadosAtualizados) e fecha sozinho.
+        // Aqui só repassamos para o App gravar no Firestore (igual ao Kanban).
+        onEdit={(petId, updatedData) => onEditPet(petId, updatedData)}
         onDelete={(petId) => {
           onDeletePet(petId);
           setIsDetailOpen(false);
@@ -401,42 +394,6 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           }
         }}
       />
-
-      {/* 🆕 Modal de EDIÇÃO do pet — ✅ altura FIXA */}
-      <Dialog
-        open={isEditOpen}
-        onOpenChange={(open) => {
-          if (!open) {
-            setIsEditOpen(false);
-            setPetParaEditar(null);
-          }
-        }}
-      >
-        <DialogContent
-          className="sm:max-w-2xl h-[85vh]"
-          onOpenAutoFocus={(e) => e.preventDefault()}
-        >
-          <DialogHeader>
-            <DialogTitle>Editar Perfil do Pet</DialogTitle>
-            <DialogDescription className="sr-only">
-              Atualize as informações do pet selecionado.
-            </DialogDescription>
-          </DialogHeader>
-          {petParaEditar && (
-            <PetRegistration
-              isEditing={true}
-              initialData={petParaEditar}
-              allPets={pets}
-              slotsUsados={usados}
-              onSubmit={(updatedData) => {
-                onEditPet(petParaEditar.id, updatedData as Partial<Pet>);
-                setIsEditOpen(false);
-                setPetParaEditar(null);
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* ── Legenda ── */}
       <div className="flex gap-4 px-4 pb-4 flex-wrap">
