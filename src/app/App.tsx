@@ -23,6 +23,8 @@ import {
   JA_ENCERRADO,
   CAMPOS_OBRIGATORIOS,
   garantirReservasDeVaga,
+  atualizarFichaComEdicao,
+  CAMPOS_FICHA,
 } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
 import {
@@ -464,11 +466,30 @@ export default function App() {
   };
 
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
+    const pet = pets.find((p) => p.id === petId);
     try {
       await updatePet(petId, updatedData, diaDoPet(petId));
     } catch (err) {
       console.error('[handleEditPet] Erro ao editar pet:', err);
       toast.error('Erro ao editar pet. Tente novamente.');
+      return;
+    }
+
+    // ✅ Correções de nome, tutor, telefone, espécie, raça, porte ou foto
+    //    também vão para a ficha permanente (valem na próxima visita).
+    //    Observação e serviço continuam só no atendimento do dia.
+    if (!pet?.petNumber) return;
+    const mudancas: Record<string, string> = {};
+    for (const k of CAMPOS_FICHA) {
+      const novo = (updatedData as any)[k];
+      if (novo !== undefined && novo !== (pet as any)[k]) mudancas[k] = novo;
+    }
+    if (Object.keys(mudancas).length === 0) return;
+    try {
+      await atualizarFichaComEdicao(pet.petNumber, mudancas);
+    } catch (err) {
+      console.error('[handleEditPet] Erro ao atualizar a ficha:', err);
+      toast.error('O atendimento foi salvo, mas a ficha permanente não foi atualizada.');
     }
   };
 

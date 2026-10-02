@@ -293,6 +293,41 @@ function montarFicha(dados: DadosFicha, petNumber: string, existente: boolean) {
   };
 }
 
+/** Campos da fila que também existem na ficha permanente */
+export const CAMPOS_FICHA = ['nomePet', 'nomeTutor', 'telefone', 'especie', 'raca', 'porte', 'foto'] as const;
+
+/**
+ * ✅ Leva para a ficha permanente as correções feitas no pet da fila
+ * (só os campos informados). Se a ficha não existir mais (excluída pelo
+ * admin), não faz nada — não recria ficha pela metade.
+ * Devolve true se atualizou a ficha.
+ */
+export async function atualizarFichaComEdicao(
+  petNumber: string,
+  campos: Partial<Record<(typeof CAMPOS_FICHA)[number], string>>,
+): Promise<boolean> {
+  const dados: Record<string, any> = {};
+  for (const k of CAMPOS_FICHA) {
+    const v = campos[k];
+    if (v !== undefined) dados[k] = v;
+  }
+  if (Object.keys(dados).length === 0) return false;
+
+  if (dados.nomePet !== undefined) dados.nomePetLower = String(dados.nomePet).toLowerCase();
+  if (dados.telefone !== undefined) {
+    const digitos = String(dados.telefone).replace(/\D/g, '');
+    dados.telefone = digitos;
+    dados.telefoneReverso = inverterString(digitos);
+  }
+  dados.atualizadoEm = serverTimestamp();
+
+  const ref = doc(petsCadastroCollection(), petNumber);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return false;
+  await updateDoc(ref, dados);
+  return true;
+}
+
 // ─── Cadastro — Pet ───────────────────────────────────────────────────────
 
 export interface AddPetResult {

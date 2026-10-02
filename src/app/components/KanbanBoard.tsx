@@ -29,6 +29,7 @@ import { ReversionDialog } from "./ReversionDialog"
 import { PetDetailModal } from './PetDetailModal';
 import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje';
 import { useRef, useState } from 'react';
+import { toast } from 'sonner';
 
 const DIALOG_SELETOR_CLASS =
   "sm:max-w-lg p-0 gap-0 h-[88vh] max-h-[88vh] sm:h-[80vh] flex flex-col overflow-hidden"
@@ -181,10 +182,11 @@ export function PetCard({
   const handleConfirmarFinalizacao = () => {
     setIsFinalizarDialogOpen(false)
     setShowSuccessFeedback(true)
-
-    setTimeout(() => {
-      onUpdateStatus(pet.id, "finalizado")
-    }, 1800)
+    // ✅ grava NA HORA (antes esperava 1,8 s e, se a aba mudasse nesse tempo,
+    // a finalização se perdia). O cartão sai da coluna logo em seguida,
+    // então a confirmação visual fica no aviso abaixo.
+    onUpdateStatus(pet.id, "finalizado")
+    toast.success(`${pet.nomePet} está pronto! Disponibilizado para retirada 🐾`)
   }
 
   const temFoto             = !!pet.foto

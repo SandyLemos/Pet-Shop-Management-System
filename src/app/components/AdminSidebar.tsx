@@ -24,7 +24,7 @@ import type { LogEntry, RelatorioServicos } from '../../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SecaoPetsCadastro } from './PetsRegistrationSection';
-import { idDoDiaDe } from '../../utils/dias';
+import { idDoDia, idDoDiaDe } from '../../utils/dias';
 
 
 // ─── Tipos ────────────────────────────────────────────────────────────────────
@@ -39,9 +39,9 @@ interface UsuarioFirestore {
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+// ✅ Data de hoje no fuso de São Paulo (antes usava UTC: após 21h virava "amanhã")
 function getTodayKeyLocal(): string {
-  const d = new Date();
-  return d.toISOString().split('T')[0];
+  return idDoDia();
 }
 
 function formatDateBR(dateKey: string): string {
@@ -330,10 +330,11 @@ function ModalRelatorios({ onClose }: { onClose: () => void }) {
     }
     const datas: string[] = [];
     if (modo === 'dia') return [dataDia];
-    const cur = new Date(dataInicio + 'T00:00:00');
-    const fin = new Date(dataFim + 'T00:00:00');
+    // ✅ meio-dia como âncora + data em São Paulo (sem desvio de fuso/UTC)
+    const cur = new Date(dataInicio + 'T12:00:00');
+    const fin = new Date(dataFim + 'T12:00:00');
     while (cur <= fin) {
-      datas.push(cur.toISOString().split('T')[0]);
+      datas.push(idDoDiaDe(cur));
       cur.setDate(cur.getDate() + 1);
     }
     if (datas.length > 31) {

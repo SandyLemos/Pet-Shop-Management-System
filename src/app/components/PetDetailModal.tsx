@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -48,6 +48,9 @@ export function PetDetailModal({
   onCheckout,
 }: PetDetailModalProps) {
   const [isEditOpen, setIsEditOpen] = useState(false);
+  // ✅ exclusão pede confirmação (2 toques)
+  const [confirmarExclusao, setConfirmarExclusao] = useState(false);
+  useEffect(() => { setConfirmarExclusao(false); }, [pet?.id, open]);
 
   if (!pet) return null;
 
@@ -382,16 +385,36 @@ export function PetDetailModal({
                   Editar
                 </Button>
               )}
-              {canDelete && (
+              {canDelete && !confirmarExclusao && (
                 <Button
                   size="sm"
                   variant="outline"
                   className="flex-1 min-w-[100px] border-red-200 text-red-600 hover:bg-red-50 h-8 text-xs"
-                  onClick={() => { onDelete(pet.id); onClose(); }}
+                  onClick={() => setConfirmarExclusao(true)}
                 >
                   <Trash2 className="w-3.5 h-3.5 mr-1" />
                   Excluir
                 </Button>
+              )}
+              {canDelete && confirmarExclusao && (
+                <div className="flex-1 min-w-[200px] flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1">
+                  <span className="text-xs font-semibold text-red-700 flex-1">Confirmar exclusão?</span>
+                  <Button
+                    size="sm"
+                    className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    onClick={() => { onDelete(pet.id); onClose(); }}
+                  >
+                    Sim, excluir
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="h-7 text-xs"
+                    onClick={() => setConfirmarExclusao(false)}
+                  >
+                    Cancelar
+                  </Button>
+                </div>
               )}
               <Button size="sm" variant="outline" className="h-8 text-xs" onClick={onClose}>
                 Fechar

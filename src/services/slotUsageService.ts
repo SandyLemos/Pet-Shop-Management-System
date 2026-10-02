@@ -36,13 +36,14 @@ export function ouvirSlotsUsados(
 }
 
 export async function marcarSlotUsado(dia: string, slot: number) {
-  const ref = refDia(dia);
-  try {
-    await updateDoc(ref, { slots: arrayUnion(slot), atualizadoEm: serverTimestamp() });
-  } catch {
-    // doc do dia ainda não existe
-    await setDoc(ref, { slots: [slot], dia, atualizadoEm: serverTimestamp() }, { merge: true });
-  }
+  // ✅ Uma única gravação que só ADICIONA o slot à lista (e cria o documento
+  // do dia se ainda não existir). Antes, se a 1ª tentativa falhasse por
+  // qualquer motivo, a 2ª regravava a lista só com este slot, apagando os outros.
+  await setDoc(
+    refDia(dia),
+    { slots: arrayUnion(slot), dia, atualizadoEm: serverTimestamp() },
+    { merge: true },
+  );
 }
 
 export async function liberarSlotUsado(dia: string, slot: number) {
