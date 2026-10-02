@@ -57,10 +57,11 @@ function inverterString(str: string): string {
 
 // ─── Conversor Firestore → Pet ─────────────────────────────────────────────
 
-function fromFirestore(id: string, data: any): Pet {
+function fromFirestore(id: string, data: any, dia: string): Pet {
   return {
     ...data,
     id,
+    dia, // ✅ de qual fila (dia) este pet veio
     checkInTime: data?.checkInTime?.toDate?.()?.toISOString()
       ?? new Date().toISOString(),
     historicoReversoes: (data?.historicoReversoes ?? []).map((r: any) => ({
@@ -87,13 +88,15 @@ function profissionalFromFirestore(id: string, data: any): Profissional {
 export function subscribeToPets(
   callback: (pets: Pet[]) => void,
   onError?: (err: Error) => void,
+  /** ✅ dia da fila a escutar; o App troca este valor na virada do dia */
+  dia: string = getTodayKey(),
 ): () => void {
-  const q = query(petsCollection(), orderBy('checkInTime', 'asc'));
+  const q = query(collection(db, 'dias', dia, 'pets'), orderBy('checkInTime', 'asc'));
 
   return onSnapshot(
     q,
     (snapshot) => {
-      const pets = snapshot.docs.map((d) => fromFirestore(d.id, d.data()));
+      const pets = snapshot.docs.map((d) => fromFirestore(d.id, d.data(), dia));
       callback(pets ?? []);
     },
     (err) => {
@@ -324,7 +327,7 @@ export async function addPet(
   );
 
   const petDataLimpo = Object.fromEntries(
-    Object.entries(petData).filter(([, v]) => v !== undefined),
+    Object.entries(petData).filter(([k, v]) => v !== undefined && k !== 'dia'),
   );
 
   const ref = await addDoc(petsCollection(), {
@@ -359,12 +362,17 @@ export async function addProfissional(
 export async function updatePet(
   petId: string,
   updatedData: Partial<Pet>,
+  /** ✅ dia da fila do pet (pet.dia). Sem ele, usa hoje (comportamento antigo). */
+  dia: string = getTodayKey(),
 ): Promise<void> {
-  const petRef = doc(db, 'dias', getTodayKey(), 'pets', petId);
+  const petRef = doc(db, 'dias', dia, 'pets', petId);
 
   // Remove campos undefined — o Firestore rejeita undefined no updateDoc
+  // ✅ e os campos que são só do app (id, dia), que não vão para o banco
   const dadosLimpos = Object.fromEntries(
-    Object.entries(updatedData).filter(([, v]) => v !== undefined),
+    Object.entries(updatedData).filter(
+      ([k, v]) => v !== undefined && k !== 'dia' && k !== 'id',
+    ),
   );
 
   await updateDoc(petRef, dadosLimpos);
@@ -409,9 +417,10 @@ export async function encerrarPet(
     }
   }
 
-  // ✅ Congela a chave do dia: garante que log e delete usem o MESMO dia,
-  // mesmo que a virada de meia-noite aconteça no meio da operação.
-  const diaKey = getTodayKey();
+  // ✅ Usa o dia da FILA do pet (não "hoje"): um pet esquecido de ontem é
+  // encerrado e registrado no dia em que foi atendido. Congelado aqui para
+  // log e delete usarem o MESMO dia, mesmo se a meia-noite passar no meio.
+  const diaKey = pet.dia ?? getTodayKey();
 
   const checkOut = new Date();
   const checkIn  = new Date(pet.checkInTime);
@@ -489,7 +498,7 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     }
   }
 
-  const diaKey = getTodayKey();
+  const diaKey = pet.dia ?? getTodayKey(); // ✅ dia da fila do pet
 
   const checkInTimestamp = pet.checkInTime
     ? Timestamp.fromDate(new Date(pet.checkInTime))
@@ -689,5 +698,36 @@ export async function getPetsByDate(dateKey: string): Promise<Pet[]> {
   const col  = collection(db, 'dias', dateKey, 'pets');
   const q    = query(col, orderBy('checkInTime', 'asc'));
   const snap = await getDocs(q);
-  return snap.docs.map((d) => fromFirestore(d.id, d.data()));
+  return snap.docs.map((d) => fromFirestore(d.id, d.data(), dateKey));
+}
+
+// ─── Pets esquecidos em dias anteriores ───────────────────────────────────
+
+/** Chaves dos N dias anteriores a `hoje`, do mais antigo para o mais recente. */
+export function diasAnteriores(hoje: string, quantidade: number): string[] {
+  const base = new Date(`${hoje}T12:00:00-03:00`); // meio-dia em São Paulo
+  const dias: string[] = [];
+  for (let i = quantidade; i >= 1; i--) {
+    dias.push(idDoDiaDe(new Date(base.getTime() - i * 86_400_000)));
+  }
+  return dias;
+}
+
+/**
+ * ✅ Pets que ficaram na fila de dias anteriores sem serem entregues/removidos.
+ * Olha os últimos `quantidade` dias (padrão 7: cobre feriados e fins de semana).
+ * Cada pet volta com `dia` preenchido, para ser encerrado na fila certa.
+ */
+export async function getPetsPendentes(
+  hoje: string = getTodayKey(),
+  quantidade = 7,
+): Promise<Pet[]> {
+  const dias = diasAnteriores(hoje, quantidade);
+  const porDia = await Promise.all(
+    dias.map(async (d) => {
+      const snap = await getDocs(collection(db, 'dias', d, 'pets'));
+      return snap.docs.map((doc) => fromFirestore(doc.id, doc.data(), d));
+    }),
+  );
+  return porDia.flat(); // já em ordem: dia mais antigo primeiro
 }

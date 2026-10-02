@@ -11,6 +11,10 @@ export interface Profissional {
 
 export interface Pet {
   id: string
+  /** ✅ Dia da fila onde o pet está (ex: "2026-10-02"). Preenchido pelo app ao
+   *  ler do Firestore — NÃO é salvo no documento. Usado para editar/encerrar
+   *  o pet na fila certa, mesmo depois da virada do dia. */
+  dia?: string
   petNumber?: string;
   slotNumber: number
   nomePet: string

@@ -9,6 +9,7 @@ import PawBackground from './components/PawBackground';
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
+import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
 import {
   addPet,
@@ -16,7 +17,9 @@ import {
   encerrarPet,
   updatePet,
   marcarComoAvisado,
+  getPetsPendentes,
 } from '../services/petService';
+import { PendentesBanner } from './components/PendentesBanner';
 import {
   LayoutGrid, LayoutList, Filter,
   LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
@@ -247,12 +250,18 @@ export default function App() {
     nomePet: string;
   } | null>(null);
 
+  // ✅ Dia atual que muda sozinho na meia-noite (tablet ligado direto)
+  const dia = useDiaAtual();
+
+  // ✅ Pets esquecidos na fila de dias anteriores (aviso para encerrar)
+  const [pendentes, setPendentes] = useState<Pet[]>([]);
+
   // 🔥 Escuta os pets do dia em tempo real
-  // ✅ Depende da CONTA (uid), não só de "está logado": se a conta mudar
+  // ✅ Depende da CONTA (uid) e do DIA: se a conta mudar ou o dia virar
   //    sem recarregar a página, a lista é zerada e buscada de novo.
   const uid = user?.uid ?? null;
   useEffect(() => {
-    setPets([]); // nunca mostra a lista de outra conta
+    setPets([]); // nunca mostra a lista de outra conta / de outro dia
     if (!uid) return;
 
     const unsubscribe = subscribeToPets(
@@ -261,10 +270,27 @@ export default function App() {
         setPets([]); // acesso negado/erro: não deixa dados antigos na tela
         toast.error('Erro ao carregar pets. Verifique sua conexão.');
       },
+      dia,
     );
 
     return () => unsubscribe();
-  }, [uid]);
+  }, [uid, dia]);
+
+  // ✅ Busca pendentes ao entrar e a cada virada de dia
+  const carregarPendentes = async () => {
+    try {
+      setPendentes(await getPetsPendentes(dia));
+    } catch (err) {
+      console.error('[pendentes] erro ao carregar:', err);
+      setPendentes([]);
+    }
+  };
+  useEffect(() => {
+    setPendentes([]);
+    if (!uid) return;
+    void carregarPendentes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [uid, dia]);
 
   if (loading) return <SplashScreen />;
 
@@ -287,6 +313,26 @@ export default function App() {
   }
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  /** ✅ Dia da fila onde o pet está (para editar no lugar certo) */
+  const diaDoPet = (petId: string) => pets.find((p) => p.id === petId)?.dia;
+
+  /** ✅ Encerra um pet esquecido de dia anterior (registro vai para o dia dele) */
+  const handleEncerrarPendente = async (pet: Pet, tipo: 'entregue' | 'removido') => {
+    try {
+      await encerrarPet(pet, tipo); // usa pet.dia → log e exclusão no dia certo
+      toast.success(
+        tipo === 'entregue'
+          ? `${pet.nomePet} registrado como entregue.`
+          : `${pet.nomePet} removido da fila antiga.`,
+      );
+    } catch (err) {
+      console.error('[handleEncerrarPendente]', err);
+      toast.error('Erro ao encerrar o pet. Tente novamente.');
+    } finally {
+      await carregarPendentes();
+    }
+  };
 
   const handleRevertService = async (petId: string, etapa: string, motivo: string) => {
     const pet = pets.find((p) => p.id === petId);
@@ -318,7 +364,7 @@ export default function App() {
     }
 
     try {
-      await updatePet(petId, updates);
+      await updatePet(petId, updates, diaDoPet(petId));
       toast.success(`Serviço de ${etapa} revertido com sucesso.`);
     } catch {
       toast.error('Erro ao reverter serviço. Tente novamente.');
@@ -332,7 +378,7 @@ export default function App() {
     if (newStatus === 'tosa')    { updates.tosaCompleta = false; }
 
     try {
-      await updatePet(petId, updates);
+      await updatePet(petId, updates, diaDoPet(petId));
     } catch {
       toast.error('Erro ao atualizar status. Tente novamente.');
     }
@@ -364,7 +410,8 @@ export default function App() {
         toast.success(`${pet.nomePet} marcado como avisado! 📞`);
       } else {
         await encerrarPet(pet, 'entregue');
-        if (slot) await marcarUsado(slot);
+        // ✅ só "queima" o slot de hoje se o pet for da fila de hoje
+        if (slot && (!pet.dia || pet.dia === dia)) await marcarUsado(slot);
         toast.success(`${pet.nomePet} entregue ao tutor! 🐾`);
       }
     } catch {
@@ -374,7 +421,7 @@ export default function App() {
 
   const handleEditPet = async (petId: string, updatedData: Partial<Pet>) => {
     try {
-      await updatePet(petId, updatedData);
+      await updatePet(petId, updatedData, diaDoPet(petId));
     } catch (err) {
       console.error('[handleEditPet] Erro ao editar pet:', err);
       toast.error('Erro ao editar pet. Tente novamente.');
@@ -412,7 +459,7 @@ export default function App() {
     };
 
     try {
-      await updatePet(petId, updates);
+      await updatePet(petId, updates, diaDoPet(petId));
     } catch {
       toast.error('Erro ao atribuir profissional. Tente novamente.');
     }
@@ -441,7 +488,7 @@ export default function App() {
     }
 
     try {
-      await updatePet(petId, updates);
+      await updatePet(petId, updates, diaDoPet(petId));
     } catch {
       toast.error('Erro ao avançar etapa. Tente novamente.');
     }
@@ -457,7 +504,7 @@ export default function App() {
     if (type === 'tosa')    updates.tosaCompleta    = true;
 
     try {
-      await updatePet(petId, updates);
+      await updatePet(petId, updates, diaDoPet(petId));
     } catch {
       toast.error('Erro ao marcar serviço. Tente novamente.');
     }
@@ -552,6 +599,13 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto px-6 py-8">
+          {/* ✅ Aviso de pets esquecidos em dias anteriores */}
+          {pendentes.length > 0 && (
+            <div className="mb-6">
+              <PendentesBanner pendentes={pendentes} onEncerrar={handleEncerrarPendente} />
+            </div>
+          )}
+
           <Tabs defaultValue="grid" className="space-y-6">
             <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
               <TabsList className="bg-slate-100">
