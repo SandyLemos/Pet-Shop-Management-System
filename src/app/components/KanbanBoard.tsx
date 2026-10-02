@@ -28,7 +28,7 @@ import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog"
 import { PetDetailModal } from './PetDetailModal';
 import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje';
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 
 const DIALOG_SELETOR_CLASS =
   "sm:max-w-lg p-0 gap-0 h-[88vh] max-h-[88vh] sm:h-[80vh] flex flex-col overflow-hidden"
@@ -41,7 +41,7 @@ interface KanbanBoardProps {
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
   onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
-  onAddPet: (pet: Omit<Pet, "id" | "checkInTime">) => void
+  onAddPet: (pet: Omit<Pet, "id" | "checkInTime">) => void | Promise<boolean>
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
   onAssignProfessional: (
@@ -699,7 +699,7 @@ interface KanbanColumnProps {
     problemasField?: { campo: string; delta: string[] },
   ) => void
   color: string
-  onAddPet?: (pet: Omit<Pet, "id" | "checkInTime">) => void
+  onAddPet?: (pet: Omit<Pet, "id" | "checkInTime">) => void | Promise<boolean>
   allPets?: Pet[]
   /** ✅ slots já queimados hoje (recebido do KanbanBoard) */
   slotsUsados: Set<number>
@@ -743,15 +743,23 @@ function KanbanColumn({
 
   const proximoSlot = getNextAvailableSlot()
 
-  const handleAddFromColumn = (petData: any) => {
-    if (onAddPet) {
+  // ✅ evita cadastro duplo por toque repetido enquanto salva
+  const salvandoRef = useRef(false)
+
+  const handleAddFromColumn = async (petData: any) => {
+    if (!onAddPet || salvandoRef.current) return
+    salvandoRef.current = true
+    try {
       const finalSlot = Number(petData.slotNumber) || proximoSlot
-      onAddPet({
+      const ok = await onAddPet({
         ...petData,
         slotNumber: finalSlot,
         status: "espera" as SlotStatus,
       } as Omit<Pet, "id" | "checkInTime">)
-      setIsDialogOpen(false)
+      // ✅ só fecha se cadastrou; se a vaga foi tomada, mantém o formulário preenchido
+      if (ok !== false) setIsDialogOpen(false)
+    } finally {
+      salvandoRef.current = false
     }
   }
 

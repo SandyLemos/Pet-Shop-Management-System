@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -20,7 +20,8 @@ import type { Pet, SlotStatus } from '../types/pet';
 
 interface SlotGridProps {
   pets: Pet[];
-  onAddPet: (pet: Omit<Pet, 'id' | 'checkInTime'>) => void;
+  /** ✅ pode devolver false (vaga tomada por outro aparelho): o formulário continua aberto */
+  onAddPet: (pet: Omit<Pet, 'id' | 'checkInTime'>) => void | Promise<boolean>;
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void;
   onDeletePet: (petId: string) => void;
   onCheckout: (petId: string, tipo: 'entregue' | 'avisado') => void;
@@ -153,15 +154,25 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     }
   };
 
-  const handleRegister = (petData: Omit<Pet, 'id' | 'checkInTime' | 'slotNumber' | 'status'>) => {
-    if (selectedSlot !== null) {
-      onAddPet({
+  // ✅ evita cadastro duplo por toque repetido enquanto salva
+  const salvandoRef = useRef(false);
+
+  const handleRegister = async (petData: Omit<Pet, 'id' | 'checkInTime' | 'slotNumber' | 'status'>) => {
+    if (selectedSlot === null || salvandoRef.current) return;
+    salvandoRef.current = true;
+    try {
+      const ok = await onAddPet({
         ...petData,
         slotNumber: selectedSlot,
         status: 'espera',
       });
-      setIsDialogOpen(false);
-      setSelectedSlot(null);
+      // ✅ só fecha se cadastrou; se a vaga foi tomada, mantém o formulário preenchido
+      if (ok !== false) {
+        setIsDialogOpen(false);
+        setSelectedSlot(null);
+      }
+    } finally {
+      salvandoRef.current = false;
     }
   };
 

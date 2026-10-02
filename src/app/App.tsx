@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
@@ -18,6 +18,11 @@ import {
   updatePet,
   marcarComoAvisado,
   getPetsPendentes,
+  SLOT_OCUPADO,
+  SLOT_USADO,
+  JA_ENCERRADO,
+  CAMPOS_OBRIGATORIOS,
+  garantirReservasDeVaga,
 } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
 import {
@@ -276,6 +281,23 @@ export default function App() {
     return () => unsubscribe();
   }, [uid, dia]);
 
+  // ✅ Reserva a vaga de pets que já estavam na fila antes desta versão.
+  //    Confere cada pet uma única vez por dia/conta; pets novos já chegam reservados.
+  const reservasConferidas = useRef(new Set<string>());
+  useEffect(() => {
+    reservasConferidas.current = new Set();
+  }, [uid, dia]);
+  useEffect(() => {
+    if (!uid) return;
+    const aConferir = pets.filter((p) => p.dia === dia && !reservasConferidas.current.has(p.id));
+    if (aConferir.length === 0) return;
+    aConferir.forEach((p) => reservasConferidas.current.add(p.id));
+    garantirReservasDeVaga(dia, aConferir).catch((err) => {
+      console.error('[reservas de vaga]', err);
+      aConferir.forEach((p) => reservasConferidas.current.delete(p.id)); // tenta de novo depois
+    });
+  }, [pets, uid, dia]);
+
   // ✅ Busca pendentes ao entrar e a cada virada de dia
   const carregarPendentes = async () => {
     try {
@@ -327,8 +349,12 @@ export default function App() {
           : `${pet.nomePet} removido da fila antiga.`,
       );
     } catch (err) {
-      console.error('[handleEncerrarPendente]', err);
-      toast.error('Erro ao encerrar o pet. Tente novamente.');
+      if (err instanceof Error && err.message === JA_ENCERRADO) {
+        toast.info(`${pet.nomePet} já tinha sido encerrado em outro aparelho.`);
+      } else {
+        console.error('[handleEncerrarPendente]', err);
+        toast.error('Erro ao encerrar o pet. Tente novamente.');
+      }
     } finally {
       await carregarPendentes();
     }
@@ -384,16 +410,29 @@ export default function App() {
     }
   };
 
-  const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>) => {
+  /** ✅ Retorna true se cadastrou; false mantém o formulário aberto (dados preservados) */
+  const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>): Promise<boolean> => {
     try {
-      const { petNumber, isNovo } = await addPet(petData);
+      const { petNumber, isNovo } = await addPet(petData, dia);
       setDailyCounter((c) => c + 1);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
       }
-    } catch {
-      toast.error('Erro ao cadastrar pet. Tente novamente.');
+      return true;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg === SLOT_OCUPADO) {
+        toast.error(`O slot ${petData.slotNumber} acabou de ser ocupado em outro aparelho. Escolha outro slot.`);
+      } else if (msg === SLOT_USADO) {
+        toast.error(`O slot ${petData.slotNumber} já foi usado hoje. Escolha outro slot.`);
+      } else if (msg === CAMPOS_OBRIGATORIOS) {
+        toast.error('Preencha espécie, porte e raça antes de finalizar o cadastro.');
+      } else {
+        console.error('[handleAddPet]', err);
+        toast.error('Erro ao cadastrar pet. Tente novamente.');
+      }
+      return false;
     }
   };
 
@@ -414,8 +453,13 @@ export default function App() {
         if (slot && (!pet.dia || pet.dia === dia)) await marcarUsado(slot);
         toast.success(`${pet.nomePet} entregue ao tutor! 🐾`);
       }
-    } catch {
-      toast.error('Erro ao atualizar pet. Tente novamente.');
+    } catch (err) {
+      if (err instanceof Error && err.message === JA_ENCERRADO) {
+        // toque duplo ou outro aparelho já entregou: nada a fazer
+        toast.info(`${pet.nomePet} já tinha sido encerrado.`);
+      } else {
+        toast.error('Erro ao atualizar pet. Tente novamente.');
+      }
     }
   };
 
@@ -436,8 +480,12 @@ export default function App() {
       await encerrarPet(pet, 'removido');
       toast.success(`${pet.nomePet} removido da fila.`);
     } catch (err) {
-      console.error('[handleDeletePet] Erro ao remover pet:', err);
-      toast.error('Erro ao remover o pet. Tente novamente.');
+      if (err instanceof Error && err.message === JA_ENCERRADO) {
+        toast.info(`${pet.nomePet} já tinha sido encerrado.`);
+      } else {
+        console.error('[handleDeletePet] Erro ao remover pet:', err);
+        toast.error('Erro ao remover o pet. Tente novamente.');
+      }
     }
   };
 

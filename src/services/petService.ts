@@ -16,6 +16,8 @@ import {
   setDoc,
   runTransaction,
   Timestamp,
+  arrayUnion,
+  arrayRemove,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
@@ -264,25 +266,31 @@ export async function salvarCadastroPet(
   const petNumber = petNumberExistente ?? (await gerarPetNumber());
   const ref = doc(petsCadastroCollection(), petNumber);
 
-  const telefoneDigits = (dados.telefone ?? '').replace(/\D/g, '');
-
-  await setDoc(
-    ref,
-    {
-      ...dados,
-      petNumber,
-      petNumberSeq: String(parseInt(petNumber.replace(/\D/g, ''), 10)),
-      nomePetLower: dados.nomePet.toLowerCase(),
-      telefone: telefoneDigits,
-      telefoneReverso: inverterString(telefoneDigits),
-      ...(petNumberExistente
-        ? { atualizadoEm: serverTimestamp() }
-        : { criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }),
-    },
-    { merge: true },
-  );
+  await setDoc(ref, montarFicha(dados, petNumber, !!petNumberExistente), { merge: true });
 
   return petNumber;
+}
+
+type DadosFicha = Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>;
+
+/** Monta o documento da ficha permanente (usado no cadastro avulso e na transação do addPet). */
+function montarFicha(dados: DadosFicha, petNumber: string, existente: boolean) {
+  const telefoneDigits = (dados.telefone ?? '').replace(/\D/g, '');
+  // ✅ campos vazios (undefined) ficam de fora: o Firestore recusa undefined
+  const dadosDefinidos = Object.fromEntries(
+    Object.entries(dados).filter(([, v]) => v !== undefined),
+  );
+  return {
+    ...dadosDefinidos,
+    petNumber,
+    petNumberSeq: String(parseInt(petNumber.replace(/\D/g, ''), 10)),
+    nomePetLower: dados.nomePet.toLowerCase(),
+    telefone: telefoneDigits,
+    telefoneReverso: inverterString(telefoneDigits),
+    ...(existente
+      ? { atualizadoEm: serverTimestamp() }
+      : { criadoEm: serverTimestamp(), atualizadoEm: serverTimestamp() }),
+  };
 }
 
 // ─── Cadastro — Pet ───────────────────────────────────────────────────────
@@ -293,8 +301,26 @@ export interface AddPetResult {
   isNovo: boolean;     // true = 1ª visita
 }
 
+/** ✅ Erros de vaga, para a tela mostrar a mensagem certa */
+export const SLOT_OCUPADO = 'SLOT_OCUPADO'; // outro pet já está nesta vaga hoje
+export const SLOT_USADO   = 'SLOT_USADO';   // vaga já foi usada (entregue) hoje
+export const JA_ENCERRADO = 'JA_ENCERRADO'; // pet já foi entregue/removido (outro tablet ou toque duplo)
+export const CAMPOS_OBRIGATORIOS = 'CAMPOS_OBRIGATORIOS'; // faltou espécie, porte ou raça
+
+/**
+ * Cadastra o pet na fila do dia.
+ *
+ * ✅ Tudo numa única TRANSAÇÃO: confere a vaga, reserva a vaga, gera o
+ * código (1ª visita), grava a ficha e coloca o pet na fila. Se dois tablets
+ * tentarem a mesma vaga ao mesmo tempo, só um consegue; o outro recebe
+ * Error(SLOT_OCUPADO) e NADA é gravado (nem ficha, nem código gasto).
+ *
+ * As vagas ocupadas ficam no campo `slotsOcupados` do documento do dia
+ * (`dias/{dia}`), que a regra do Firestore já permite a funcionários.
+ */
 export async function addPet(
   petData: Omit<Pet, 'id' | 'checkInTime'>,
+  dia: string = getTodayKey(),
 ): Promise<AddPetResult> {
   const auth = getAuth();
   const user = auth.currentUser;
@@ -310,36 +336,114 @@ export async function addPet(
     }
   }
 
+  // ✅ Segunda barreira (a primeira é o formulário): espécie, porte e raça
+  // são obrigatórios. Nada é gravado se faltar algum.
+  if (!petData.especie || !petData.porte || !petData.raca) {
+    throw new Error(CAMPOS_OBRIGATORIOS);
+  }
+
   const petNumberExistente = (petData as any).petNumber as string | undefined;
   const isNovo = !petNumberExistente;
-
-  const petNumber = await salvarCadastroPet(
-    {
-      nomePet:   petData.nomePet,
-      nomeTutor: petData.nomeTutor,
-      telefone:  (petData as any).telefone ?? '',
-      especie:   petData.especie,
-      raca:      petData.raca,
-      porte:     petData.porte,
-      foto:      petData.foto,
-    },
-    petNumberExistente,
-  );
+  const slot = petData.slotNumber;
 
   const petDataLimpo = Object.fromEntries(
     Object.entries(petData).filter(([k, v]) => v !== undefined && k !== 'dia'),
   );
 
-  const ref = await addDoc(petsCollection(), {
-    ...petDataLimpo,
-    petNumber,
-    checkInTime:        serverTimestamp(),
-    historicoReversoes: [],
-    cadastradoPorId,
-    cadastradoPorNome,
+  const dadosFicha: DadosFicha = {
+    nomePet:   petData.nomePet,
+    nomeTutor: petData.nomeTutor,
+    telefone:  (petData as any).telefone ?? '',
+    especie:   petData.especie,
+    raca:      petData.raca,
+    porte:     petData.porte,
+    foto:      petData.foto,
+  };
+
+  const diaRef      = doc(db, 'dias', dia);
+  const usadosRef   = doc(db, 'slotsUsados', dia);
+  const contadorRef = doc(db, 'contadores', 'petNumber');
+  const petRef      = doc(collection(db, 'dias', dia, 'pets')); // id gerado aqui
+
+  const petNumber = await runTransaction(db, async (tx) => {
+    // 1️⃣ Leituras (a transação exige todas antes de qualquer escrita)
+    const diaSnap    = await tx.get(diaRef);
+    const usadosSnap = await tx.get(usadosRef);
+    const contSnap   = isNovo ? await tx.get(contadorRef) : null;
+
+    const ocupados: number[] = diaSnap.exists() ? (diaSnap.data().slotsOcupados ?? []) : [];
+    const usados: number[]   = usadosSnap.exists() ? (usadosSnap.data().slots ?? []) : [];
+
+    // 2️⃣ A vaga ainda está livre?
+    if (ocupados.includes(slot)) throw new Error(SLOT_OCUPADO);
+    if (usados.includes(slot))   throw new Error(SLOT_USADO);
+
+    // 3️⃣ Código do pet (só na 1ª visita)
+    let numero = petNumberExistente;
+    if (!numero) {
+      const atual = contSnap?.exists() ? (contSnap.data().valor ?? 0) : 0;
+      const proximo = atual + 1;
+      tx.set(contadorRef, { valor: proximo }, { merge: true });
+      numero = `PET-${String(proximo).padStart(6, '0')}`;
+    }
+
+    // 4️⃣ Ficha, reserva da vaga e pet na fila — tudo junto
+    tx.set(
+      doc(petsCadastroCollection(), numero),
+      montarFicha(dadosFicha, numero, !isNovo),
+      { merge: true },
+    );
+    tx.set(diaRef, { slotsOcupados: arrayUnion(slot) }, { merge: true });
+    tx.set(petRef, {
+      ...petDataLimpo,
+      petNumber:          numero,
+      checkInTime:        serverTimestamp(),
+      historicoReversoes: [],
+      cadastradoPorId,
+      cadastradoPorNome,
+    });
+
+    return numero;
   });
 
-  return { id: ref.id, petNumber, isNovo };
+  return { id: petRef.id, petNumber, isNovo };
+}
+
+/**
+ * ✅ Reserva a vaga de pets que JÁ estavam na fila antes desta versão
+ * (eles não passaram pela reserva do addPet). Assim o deploy pode ser feito
+ * com a loja funcionando: em segundos as vagas deles ficam protegidas.
+ *
+ * Seguro contra corrida: cada reserva é uma transação que confere se o pet
+ * AINDA está na fila. Se outro aparelho acabou de entregar/remover o pet,
+ * nada é reservado (a vaga nunca fica "presa" sem pet).
+ * Devolve quantas vagas foram reservadas agora.
+ */
+export async function garantirReservasDeVaga(dia: string, pets: Pet[]): Promise<number> {
+  if (pets.length === 0) return 0;
+
+  const diaRef = doc(db, 'dias', dia);
+  const diaSnap = await getDoc(diaRef);
+  const ocupados: number[] = diaSnap.exists() ? (diaSnap.data().slotsOcupados ?? []) : [];
+  const semReserva = pets.filter((p) => !ocupados.includes(p.slotNumber));
+
+  let reservadas = 0;
+  for (const p of semReserva) {
+    const petRef = doc(db, 'dias', dia, 'pets', p.id);
+    const reservou = await runTransaction(db, async (tx) => {
+      const petSnap = await tx.get(petRef);
+      const diaAtual = await tx.get(diaRef);
+      if (!petSnap.exists()) return false; // já saiu da fila: não reserva
+      const slot = petSnap.data().slotNumber;
+      if (!Number.isInteger(slot)) return false;
+      const atuais: number[] = diaAtual.exists() ? (diaAtual.data().slotsOcupados ?? []) : [];
+      if (atuais.includes(slot)) return false;
+      tx.set(diaRef, { slotsOcupados: arrayUnion(slot) }, { merge: true });
+      return true;
+    });
+    if (reservou) reservadas++;
+  }
+  return reservadas;
 }
 
 // ─── Cadastro — Profissional ──────────────────────────────────────────────
@@ -432,8 +536,8 @@ export async function encerrarPet(
     ? Timestamp.fromDate(new Date(pet.checkInTime))
     : serverTimestamp();
 
-  // 1️⃣ Grava log
-  await addDoc(collection(db, 'dias', diaKey, 'logs'), {
+  // 1️⃣ Monta o log
+  const log = {
     tipo,
     petId:               pet.id,
     petNumber:           (pet as any).petNumber       ?? null,
@@ -474,11 +578,23 @@ export async function encerrarPet(
     problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
-  });
+  };
 
-  // 2️⃣ Deleta o pet da fila ativa
+  // 2️⃣ ✅ TRANSAÇÃO: confere que o pet ainda está na fila, grava o log,
+  // tira o pet da fila e libera a vaga — tudo junto ou nada. Um toque duplo
+  // (ou dois tablets) não gera log repetido: o segundo recebe JA_ENCERRADO.
   const petRef = doc(db, 'dias', diaKey, 'pets', pet.id);
-  await deleteDoc(petRef);
+  const logRef = doc(collection(db, 'dias', diaKey, 'logs'));
+  const diaRef = doc(db, 'dias', diaKey);
+
+  await runTransaction(db, async (tx) => {
+    const petSnap = await tx.get(petRef);
+    if (!petSnap.exists()) throw new Error(JA_ENCERRADO);
+
+    tx.set(logRef, log);
+    tx.delete(petRef);
+    tx.set(diaRef, { slotsOcupados: arrayRemove(pet.slotNumber) }, { merge: true });
+  });
 }
 
 // ─── Marcar como Avisado (NÃO remove da fila) ─────────────────────────────

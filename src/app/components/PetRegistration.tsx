@@ -398,6 +398,22 @@ export function PetRegistration({
       return
     }
 
+    // ✅ Espécie, porte e raça são obrigatórios.
+    // Na edição de um pet já em atendimento esses campos ficam travados,
+    // então só exigimos quando a pessoa consegue preenchê-los.
+    const camposEditaveis = !(isEditing && initialData?.atendimentoIniciado)
+    if (camposEditaveis) {
+      const faltando = [
+        !especie && "Espécie",
+        !porte && "Porte",
+        !raca && "Raça",
+      ].filter(Boolean)
+      if (faltando.length > 0) {
+        toast.error(`Preencha antes de finalizar: ${faltando.join(", ")}.`)
+        return
+      }
+    }
+
     if (petNumber && verificarPetEmProducao(petNumber)) {
       toast.error(
         "Este pet já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.",
