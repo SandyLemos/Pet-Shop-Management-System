@@ -17,6 +17,7 @@ import { Button } from './ui/button';
 import { PetDetailModal } from './PetDetailModal';
 import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import type { Pet, SlotStatus } from '../types/pet';
+import { estaParado, minutosNaLoja, formatarTempo, LIMITE_ESPERA_MIN, LIMITE_ATENDIMENTO_MIN } from '../../utils/parado';
 
 interface SlotGridProps {
   pets: Pet[];
@@ -87,6 +88,14 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   }, [pets, selectedPet?.id]);
 
   // ── helpers de slot ──────────────────────────────────────────────────────────
+
+  // ✅ relógio da Grade: atualiza a cada minuto para o alerta de pet parado
+  const [agora, setAgora] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setAgora(Date.now()), 60_000);
+    return () => clearInterval(t);
+  }, []);
+  const parados = useMemo(() => pets.filter((p) => estaParado(p, agora)).length, [pets, agora]);
 
   const getSlotStatus = (slotNumber: number): { status: SlotStatus; pet?: Pet } => {
     const pet = pets.find(p => p.slotNumber === slotNumber);
@@ -226,11 +235,21 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 <span className="font-semibold">{freeSlotsInVisibleRange}</span> slots livres visíveis
               </div>
             </div>
-            {usados.size > 0 && (
-              <Badge variant="secondary" className="bg-slate-200 text-slate-600 text-xs">
-                {usados.size} usados hoje
-              </Badge>
-            )}
+            <div className="flex items-center gap-2">
+              {parados > 0 && (
+                <Badge
+                  className="bg-red-500 text-white text-xs animate-pulse"
+                  title={`Aguardando há mais de ${LIMITE_ESPERA_MIN} min ou em atendimento há mais de ${formatarTempo(LIMITE_ATENDIMENTO_MIN)}`}
+                >
+                  ⏱ {parados} {parados === 1 ? 'pet parado' : 'pets parados'}
+                </Badge>
+              )}
+              {usados.size > 0 && (
+                <Badge variant="secondary" className="bg-slate-200 text-slate-600 text-xs">
+                  {usados.size} usados hoje
+                </Badge>
+              )}
+            </div>
           </div>
 
           {/* Controles */}
@@ -309,6 +328,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         const { status, pet } = getSlotStatus(slotNumber);
         const avisado = !!pet?.avisado;
         const slotUsado = usados.has(slotNumber) && !pet; // ✅ NOVO
+        const parado = !!pet && estaParado(pet, agora);
 
         // 🆕 com filtro ativo, renderiza só os slots cujo serviço bate
         if (filter !== 'all' && (!pet || pet.servico !== filter)) {
@@ -336,6 +356,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                   ${slotUsado ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
                   ${getStatusColor(status, avisado, slotUsado)}
                   ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
+                  ${parado ? 'ring-2 ring-red-500 ring-offset-1' : ''}
                 `}
                 title={
                   pet
@@ -350,6 +371,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 {pet && (
                   <span className="text-[8px] font-medium truncate w-full px-1 text-center">
                     {pet.nomePet}
+                  </span>
+                )}
+                {parado && pet && (
+                  <span className="text-[8px] font-bold text-red-600 leading-none" title="Pet parado há muito tempo">
+                    ⏱ {formatarTempo(minutosNaLoja(pet, agora))}
                   </span>
                 )}
               </button>
