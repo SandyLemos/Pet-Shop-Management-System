@@ -1,0 +1,2 @@
+{ "compilerOptions": { "target":"ES2022","module":"ESNext","moduleResolution":"bundler","jsx":"react-jsx","strict":true,"noEmit":true,"skipLibCheck":true,"allowJs":true,"checkJs":false,"allowImportingTsExtensions":true,"esModuleInterop":true,"lib":["ES2022","DOM","DOM.Iterable"],"types":["vite/client","vite-plugin-pwa/client"] },
+  "include":["src/main.tsx","src/app/App.tsx","src/app/components/*.tsx","src/hooks/*.ts","src/services/*.ts","src/lib/*.ts","src/utils/*.ts","src/pwa.ts","src/vite-env.d.ts"] }

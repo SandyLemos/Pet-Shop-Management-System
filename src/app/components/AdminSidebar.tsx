@@ -24,6 +24,7 @@ import type { LogEntry, RelatorioServicos } from '../../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SecaoPetsCadastro } from './PetsRegistrationSection';
+import { BackupButton } from './BackupButton';
 import { idDoDia, idDoDiaDe } from '../../utils/dias';
 
 
@@ -1205,6 +1206,7 @@ export default function AdminSidebar({
                     <FileText size={16} /> Gerar Relatório
                   </button>
                 </div>
+                <BackupButton />
               </div>
             )}
           </div>

@@ -6,11 +6,14 @@
   "scripts": {
     "build": "vite build",
     "dev": "vite",
-    "deploy": "vite build && firebase deploy --only hosting",
-    "reset:dias": "firebase firestore:delete dias --recursive --force",
-    "reset:pets": "firebase firestore:delete petsCadastro --recursive --force",
-    "reset:contadores": "firebase firestore:delete contadores --recursive --force",
-    "reset:profissionais": "firebase firestore:delete profissionais --recursive --force",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.check.json",
+    "check": "npm run typecheck && npm test",
+    "deploy": "npm run check && vite build && firebase deploy --only hosting",
+    "reset:dias": "powershell -ExecutionPolicy Bypass -File ./reset.ps1 dias",
+    "reset:pets": "powershell -ExecutionPolicy Bypass -File ./reset.ps1 petsCadastro",
+    "reset:contadores": "powershell -ExecutionPolicy Bypass -File ./reset.ps1 contadores",
+    "reset:profissionais": "powershell -ExecutionPolicy Bypass -File ./reset.ps1 profissionais",
     "reset": "powershell -ExecutionPolicy Bypass -File ./reset.ps1"
   },
   "dependencies": {
@@ -73,13 +76,17 @@
   },
   "devDependencies": {
     "@tailwindcss/vite": "4.1.12",
+    "@testing-library/dom": "10.4.2",
+    "@testing-library/react": "16.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "4.7.0",
+    "jsdom": "25.0.1",
     "tailwindcss": "4.1.12",
     "typescript": "^7.0.2",
     "vite": "6.3.5",
-    "vite-plugin-pwa": "^1.3.0"
+    "vite-plugin-pwa": "^1.3.0",
+    "vitest": "3.2.7"
   },
   "peerDependencies": {
     "react": "18.3.1",
