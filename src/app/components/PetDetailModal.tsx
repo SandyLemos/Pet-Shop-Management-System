@@ -397,11 +397,11 @@ export function PetDetailModal({
                 </Button>
               )}
               {canDelete && confirmarExclusao && (
-                <div className="flex-1 min-w-[200px] flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1">
-                  <span className="text-xs font-semibold text-red-700 flex-1">Confirmar exclusão?</span>
+                <div className="basis-full order-last flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-2 py-1.5">
+                  <span className="text-xs font-semibold text-red-700 flex-1 min-w-0">Confirmar exclusão?</span>
                   <Button
                     size="sm"
-                    className="h-7 text-xs bg-red-600 hover:bg-red-700 text-white"
+                    className="h-7 text-xs shrink-0 bg-red-600 hover:bg-red-700 text-white"
                     onClick={() => { onDelete(pet.id); onClose(); }}
                   >
                     Sim, excluir
@@ -409,7 +409,7 @@ export function PetDetailModal({
                   <Button
                     size="sm"
                     variant="outline"
-                    className="h-7 text-xs"
+                    className="h-7 text-xs shrink-0"
                     onClick={() => setConfirmarExclusao(false)}
                   >
                     Cancelar
