@@ -25,7 +25,7 @@ const abrir = (pet = base) => {
 describe('Avisar pergunta antes de abrir o WhatsApp', () => {
   it('só pergunta no primeiro toque', () => {
     const { onCheckout, open } = abrir();
-    expect(screen.getByText('Avisar o tutor pelo WhatsApp?')).toBeTruthy();
+    expect(screen.getByText('Avisar o tutor')).toBeTruthy();
     expect(onCheckout).not.toHaveBeenCalled(); expect(open).not.toHaveBeenCalled();
   });
   it('Sim: abre o WhatsApp e marca avisado', () => {

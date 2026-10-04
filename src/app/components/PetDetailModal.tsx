@@ -368,48 +368,6 @@ export function PetDetailModal({
                     {jaAvisado ? '✓ Já Avisado' : 'Avisar'}
                   </Button>
                 </div>
-                {escolhendoAviso && !jaAvisado && (() => {
-                  const linkWhats = linkWhatsAppPetPronto(pet.telefone, pet.nomeTutor, pet.nomePet);
-                  return (
-                    <div className="rounded-lg border border-blue-200 bg-white p-2 space-y-2">
-                      <p className="text-xs font-semibold text-blue-700">Avisar o tutor pelo WhatsApp?</p>
-                      {!linkWhats && (
-                        <p className="text-[11px] text-orange-600">Este pet não tem telefone válido cadastrado.</p>
-                      )}
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          className="flex-1 min-w-[120px] h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
-                          disabled={!linkWhats}
-                          onClick={() => {
-                            // abre o WhatsApp no próprio toque (senão o navegador bloqueia)
-                            if (linkWhats) window.open(linkWhats, '_blank', 'noopener');
-                            setEscolhendoAviso(false);
-                            onCheckout(pet.id, 'avisado');
-                          }}
-                        >
-                          Sim, abrir WhatsApp
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="flex-1 min-w-[120px] h-8 text-xs"
-                          onClick={() => { setEscolhendoAviso(false); onCheckout(pet.id, 'avisado'); }}
-                        >
-                          Não, só marcar avisado
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-8 text-xs"
-                          onClick={() => setEscolhendoAviso(false)}
-                        >
-                          Cancelar
-                        </Button>
-                      </div>
-                    </div>
-                  );
-                })()}
                 {jaAvisado && (
                   <p className="text-[11px] text-blue-500 text-center break-words">
                     📞 Tutor já foi avisado. Clique em <strong>Entregue</strong> quando retirar o pet.
@@ -468,6 +426,57 @@ export function PetDetailModal({
 
           </DialogBody>
 
+        </DialogContent>
+      </Dialog>
+
+      {/* ── Modal aninhado: avisar o tutor (obriga a escolher uma opção) ── */}
+      <Dialog open={escolhendoAviso && !pet.avisado} onOpenChange={(o) => { if (!o) setEscolhendoAviso(false); }}>
+        <DialogContent
+          className="sm:max-w-sm"
+          onPointerDownOutside={(e) => e.preventDefault()}
+          onInteractOutside={(e) => e.preventDefault()}
+        >
+          {(() => {
+            const linkWhats = linkWhatsAppPetPronto(pet.telefone, pet.nomeTutor, pet.nomePet);
+            const marcarAvisado = () => { setEscolhendoAviso(false); onCheckout?.(pet.id, 'avisado'); };
+            return (
+              <>
+                <DialogHeader>
+                  <DialogTitle className="flex items-center gap-2">
+                    <PhoneCall className="w-5 h-5 text-blue-500" />
+                    Avisar o tutor
+                  </DialogTitle>
+                  <DialogDescription>
+                    Deseja avisar {pet.nomeTutor || 'o tutor'} pelo WhatsApp que {pet.nomePet} está pronto(a)?
+                  </DialogDescription>
+                </DialogHeader>
+                {!linkWhats && (
+                  <p className="text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
+                    Este pet não tem telefone válido cadastrado. Avise o tutor de outra forma e toque em "Não, só marcar avisado".
+                  </p>
+                )}
+                <div className="flex flex-col gap-2 pt-2">
+                  <Button
+                    className="h-11 bg-green-600 hover:bg-green-700 text-white"
+                    disabled={!linkWhats}
+                    onClick={() => {
+                      // abre o WhatsApp no próprio toque (senão o navegador bloqueia)
+                      if (linkWhats) window.open(linkWhats, '_blank', 'noopener');
+                      marcarAvisado();
+                    }}
+                  >
+                    Sim, abrir WhatsApp
+                  </Button>
+                  <Button variant="outline" className="h-11" onClick={marcarAvisado}>
+                    Não, só marcar avisado
+                  </Button>
+                  <Button className="h-11 bg-red-600 hover:bg-red-700 text-white" onClick={() => setEscolhendoAviso(false)}>
+                    Cancelar
+                  </Button>
+                </div>
+              </>
+            );
+          })()}
         </DialogContent>
       </Dialog>
 
