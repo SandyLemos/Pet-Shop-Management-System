@@ -7,6 +7,7 @@ import {
   DialogBody,
   DialogTitle,
   DialogDescription,
+  DialogFooter,
 } from './ui/dialog';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
@@ -429,10 +430,10 @@ export function PetDetailModal({
         </DialogContent>
       </Dialog>
 
-      {/* ── Modal aninhado: avisar o tutor (obriga a escolher uma opção) ── */}
+      {/* ── Modal aninhado: avisar o tutor (mesmo padrão do "Finalizar" do Fluxo) ── */}
       <Dialog open={escolhendoAviso && !pet.avisado} onOpenChange={(o) => { if (!o) setEscolhendoAviso(false); }}>
         <DialogContent
-          className="sm:max-w-sm"
+          className="max-w-[calc(100%-4rem)] sm:max-w-[420px]"
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
         >
@@ -442,22 +443,27 @@ export function PetDetailModal({
             return (
               <>
                 <DialogHeader>
-                  <DialogTitle className="flex items-center gap-2">
-                    <PhoneCall className="w-5 h-5 text-blue-500" />
+                  <DialogTitle className="flex items-center gap-2 text-blue-700">
+                    <PhoneCall className="w-5 h-5" />
                     Avisar o tutor
                   </DialogTitle>
-                  <DialogDescription>
-                    Deseja avisar {pet.nomeTutor || 'o tutor'} pelo WhatsApp que {pet.nomePet} está pronto(a)?
+                  <DialogDescription className="pt-1">
+                    <strong className="text-gray-800">{pet.nomePet}</strong> está pronto(a) para retirada.
+                    Deseja avisar <strong className="text-gray-800">{pet.nomeTutor || 'o tutor'}</strong> pelo WhatsApp?
                   </DialogDescription>
                 </DialogHeader>
                 {!linkWhats && (
-                  <p className="text-sm text-orange-600 bg-orange-50 border border-orange-200 rounded-lg p-2">
-                    Este pet não tem telefone válido cadastrado. Avise o tutor de outra forma e toque em "Não, só marcar avisado".
-                  </p>
+                  <DialogBody className="pb-0">
+                    <div className="rounded-lg border border-orange-200 bg-orange-50 px-3 py-2">
+                      <p className="text-xs font-medium text-orange-700">
+                        ⚠️ Este pet não tem telefone válido cadastrado. Avise o tutor de outra forma e toque em "Só marcar avisado".
+                      </p>
+                    </div>
+                  </DialogBody>
                 )}
-                <div className="flex flex-col gap-2 pt-2">
+                <DialogFooter className="grid grid-cols-2 gap-2 sm:gap-2">
                   <Button
-                    className="h-11 bg-green-600 hover:bg-green-700 text-white"
+                    className="col-span-2 w-full bg-green-500 hover:bg-green-600 text-white"
                     disabled={!linkWhats}
                     onClick={() => {
                       // abre o WhatsApp no próprio toque (senão o navegador bloqueia)
@@ -465,15 +471,19 @@ export function PetDetailModal({
                       marcarAvisado();
                     }}
                   >
-                    Sim, abrir WhatsApp
+                    <PhoneCall className="w-4 h-4 mr-2" />
+                    Abrir WhatsApp
                   </Button>
-                  <Button variant="outline" className="h-11" onClick={marcarAvisado}>
-                    Não, só marcar avisado
-                  </Button>
-                  <Button className="h-11 bg-red-600 hover:bg-red-700 text-white" onClick={() => setEscolhendoAviso(false)}>
+                  <Button
+                    className="w-full bg-red-500 hover:bg-red-600 text-white"
+                    onClick={() => setEscolhendoAviso(false)}
+                  >
                     Cancelar
                   </Button>
-                </div>
+                  <Button variant="outline" className="w-full" onClick={marcarAvisado}>
+                    Só marcar avisado
+                  </Button>
+                </DialogFooter>
               </>
             );
           })()}

@@ -30,13 +30,13 @@ describe('Avisar pergunta antes de abrir o WhatsApp', () => {
   });
   it('Sim: abre o WhatsApp e marca avisado', () => {
     const { onCheckout, open } = abrir();
-    fireEvent.click(screen.getByText('Sim, abrir WhatsApp'));
+    fireEvent.click(screen.getByText('Abrir WhatsApp'));
     expect(open.mock.calls[0][0]).toContain('https://wa.me/5524999991234');
     expect(onCheckout).toHaveBeenCalledWith('p1', 'avisado');
   });
   it('Não: só marca avisado, sem abrir nada', () => {
     const { onCheckout, open } = abrir();
-    fireEvent.click(screen.getByText('Não, só marcar avisado'));
+    fireEvent.click(screen.getByText('Só marcar avisado'));
     expect(open).not.toHaveBeenCalled();
     expect(onCheckout).toHaveBeenCalledWith('p1', 'avisado');
   });
@@ -47,6 +47,6 @@ describe('Avisar pergunta antes de abrir o WhatsApp', () => {
   });
   it('sem telefone: botão do WhatsApp desativado', () => {
     abrir({ ...base, telefone: '' });
-    expect((screen.getByText('Sim, abrir WhatsApp').closest('button') as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByText('Abrir WhatsApp').closest('button') as HTMLButtonElement).disabled).toBe(true);
   });
 });
