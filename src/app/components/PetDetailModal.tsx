@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { linkWhatsAppPetPronto } from '../../utils/whatsapp';
 import {
   Dialog,
   DialogContent,
@@ -50,7 +51,9 @@ export function PetDetailModal({
   const [isEditOpen, setIsEditOpen] = useState(false);
   // ✅ exclusão pede confirmação (2 toques)
   const [confirmarExclusao, setConfirmarExclusao] = useState(false);
-  useEffect(() => { setConfirmarExclusao(false); }, [pet?.id, open]);
+  // ✅ Avisar pergunta se é para abrir o WhatsApp
+  const [escolhendoAviso, setEscolhendoAviso] = useState(false);
+  useEffect(() => { setConfirmarExclusao(false); setEscolhendoAviso(false); }, [pet?.id, open]);
 
   if (!pet) return null;
 
@@ -359,12 +362,54 @@ export function PetDetailModal({
                         : 'bg-blue-500 hover:bg-blue-600 text-white'
                     }`}
                     disabled={jaAvisado}
-                    onClick={() => { if (!jaAvisado) onCheckout(pet.id, 'avisado'); }}
+                    onClick={() => { if (!jaAvisado) setEscolhendoAviso(true); }}
                   >
                     <PhoneCall className="w-3.5 h-3.5 mr-1" />
                     {jaAvisado ? '✓ Já Avisado' : 'Avisar'}
                   </Button>
                 </div>
+                {escolhendoAviso && !jaAvisado && (() => {
+                  const linkWhats = linkWhatsAppPetPronto(pet.telefone, pet.nomeTutor, pet.nomePet);
+                  return (
+                    <div className="rounded-lg border border-blue-200 bg-white p-2 space-y-2">
+                      <p className="text-xs font-semibold text-blue-700">Avisar o tutor pelo WhatsApp?</p>
+                      {!linkWhats && (
+                        <p className="text-[11px] text-orange-600">Este pet não tem telefone válido cadastrado.</p>
+                      )}
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          className="flex-1 min-w-[120px] h-8 text-xs bg-green-600 hover:bg-green-700 text-white"
+                          disabled={!linkWhats}
+                          onClick={() => {
+                            // abre o WhatsApp no próprio toque (senão o navegador bloqueia)
+                            if (linkWhats) window.open(linkWhats, '_blank', 'noopener');
+                            setEscolhendoAviso(false);
+                            onCheckout(pet.id, 'avisado');
+                          }}
+                        >
+                          Sim, abrir WhatsApp
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 min-w-[120px] h-8 text-xs"
+                          onClick={() => { setEscolhendoAviso(false); onCheckout(pet.id, 'avisado'); }}
+                        >
+                          Não, só marcar avisado
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-8 text-xs"
+                          onClick={() => setEscolhendoAviso(false)}
+                        >
+                          Cancelar
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })()}
                 {jaAvisado && (
                   <p className="text-[11px] text-blue-500 text-center break-words">
                     📞 Tutor já foi avisado. Clique em <strong>Entregue</strong> quando retirar o pet.

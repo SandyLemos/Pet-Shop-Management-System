@@ -9,7 +9,6 @@ import PawBackground from './components/PawBackground';
 import { toast, Toaster } from 'sonner';
 import { useAuth } from '../hooks/useAuth';
 import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
-import { linkWhatsAppPetPronto } from '../utils/whatsapp';
 import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
 import {
@@ -445,14 +444,6 @@ export default function App() {
     if (!pet) return;
 
     const slot = pet.slotNumber;
-
-    // ✅ Avisar abre o WhatsApp com a mensagem pronta. Precisa ser feito AQUI,
-    //    antes de qualquer espera, senão o navegador bloqueia a janela.
-    if (tipo === 'avisado') {
-      const link = linkWhatsAppPetPronto(pet.telefone, pet.nomeTutor, pet.nomePet);
-      if (link) window.open(link, '_blank', 'noopener');
-      else toast.warning(`${pet.nomePet} não tem telefone válido cadastrado. Avise o tutor de outra forma.`);
-    }
 
     try {
       if (tipo === 'avisado') {
