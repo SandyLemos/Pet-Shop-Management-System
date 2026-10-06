@@ -19,3 +19,12 @@ export function linkWhatsAppPetPronto(telefone: string | null | undefined, nomeT
   if (!numero) return null;
   return `https://wa.me/${numero}?text=${encodeURIComponent(mensagemPetPronto(nomeTutor, nomePet))}`;
 }
+
+/** Mensagem para chamar de volta um cliente que não aparece há tempo. */
+export function linkWhatsAppSaudade(telefone: string | null | undefined, nomeTutor: string, nomePet: string): string | null {
+  const numero = telefoneWhatsApp(telefone);
+  if (!numero) return null;
+  const tutor = (nomeTutor || '').trim().split(/\s+/)[0];
+  const msg = `Olá${tutor ? `, ${tutor}` : ''}! 🐾 Estamos com saudade do(a) ${nomePet} aqui no Elite Pet Shop. Que tal agendar um banho? Estamos te esperando!`;
+  return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
+}

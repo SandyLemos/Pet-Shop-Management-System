@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, lazy, Suspense } from 'react';
 import {
   X, Users, Plus, Pencil, Trash2, AlertTriangle,
   UserCircle2, ShieldCheck, User, Briefcase, PawPrint,
@@ -25,6 +25,8 @@ import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { SecaoPetsCadastro } from './PetsRegistrationSection';
 import { BackupButton } from './BackupButton';
+// ✅ Análises: carregado só quando aberto (não pesa no app dos tablets)
+const AnalyticsModal = lazy(() => import('./AnalyticsModal'));
 import { idDoDia, idDoDiaDe } from '../../utils/dias';
 
 
@@ -1093,10 +1095,16 @@ export default function AdminSidebar({
 }) {
   const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios'>('usuarios');
   const [showRelatorios, setShowRelatorios] = useState(false);
+  const [showAnalises, setShowAnalises]     = useState(false);
 
   return (
     <>
       {showRelatorios && <ModalRelatorios onClose={() => setShowRelatorios(false)} />}
+      {showAnalises && (
+        <Suspense fallback={null}>
+          <AnalyticsModal onClose={() => setShowAnalises(false)} />
+        </Suspense>
+      )}
 
       <div className="fixed inset-0 z-50 flex">
         {/* Overlay */}
@@ -1204,6 +1212,23 @@ export default function AdminSidebar({
                     className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
                   >
                     <FileText size={16} /> Gerar Relatório
+                  </button>
+                </div>
+                <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">
+                  <div className="bg-indigo-100 p-4 rounded-2xl">
+                    <BarChart3 className="w-8 h-8 text-indigo-500" />
+                  </div>
+                  <div>
+                    <h3 className="font-bold text-gray-800 text-base">Análises</h3>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Gráficos com atendimentos, horários de pico, serviços, produção por profissional e clientes fiéis e sumidos.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setShowAnalises(true)}
+                    className="w-full py-3 rounded-xl bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white text-sm font-bold shadow-md transition-all flex items-center justify-center gap-2"
+                  >
+                    <BarChart3 size={16} /> Abrir Análises
                   </button>
                 </div>
                 <BackupButton />
