@@ -1,5 +1,5 @@
 // src/app/components/EntreguesTab.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle2, RefreshCw, Search, PawPrint } from 'lucide-react';
 import { getLogsByDate, getTodayKey, type LogEntry } from '../../services/petService';
 

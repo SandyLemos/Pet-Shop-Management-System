@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Plus,
   Settings2,
+  ShieldCheck,
 } from "lucide-react"
 import type { Pet, SlotStatus } from "../types/pet"
 import { useCloudinaryUpload } from "../../hooks/useCloudinaryUpload"
@@ -23,48 +24,7 @@ import { buscarPetsCadastro, type PetCadastro } from "../../services/petService"
 import { useRacas } from "../../hooks/useRacas"
 import { GerenciarRacas } from "./GerenciarRacas"
 import { useAuth } from "../../hooks/useAuth"
-
-const RACAS_CAO = [
-  "SRD (Sem Raça Definida)",
-  "Akita",
-  "Beagle",
-  "Border Collie",
-  "Boxer",
-  "Bulldog Francês",
-  "Bulldog Inglês",
-  "Chihuahua",
-  "Cocker Spaniel",
-  "Dachshund",
-  "Dálmata",
-  "Dobermann",
-  "Golden Retriever",
-  "Husky Siberiano",
-  "Labrador",
-  "Lhasa Apso",
-  "Maltês",
-  "Pastor Alemão",
-  "Pinscher",
-  "Pitbull",
-  "Pomerânia",
-  "Poodle",
-  "Pug",
-  "Rottweiler",
-  "Schnauzer",
-  "Shih Tzu",
-  "Yorkshire",
-]
-
-const RACAS_GATO = [
-  "SRD (Sem Raça Definida)",
-  "Angorá",
-  "Bengal",
-  "British Shorthair",
-  "Maine Coon",
-  "Persa",
-  "Ragdoll",
-  "Siamês",
-  "Sphynx",
-]
+import { RACAS_CAO, RACAS_GATO } from "../constants/racas"
 
 // ✅ Status considerados "em produção" (pet ativo em algum slot)
 const STATUS_ATIVOS: SlotStatus[] = ["espera", "banho", "escovar", "tosa"]
@@ -136,6 +96,14 @@ const NativeSelect = ({
   </div>
 )
 
+/** Converte a data da autorização gravada na ficha (Timestamp do Firestore ou texto) */
+function dataDoConsentimento(valor: any): Date | null {
+  if (!valor) return null
+  if (typeof valor.toDate === "function") return valor.toDate()
+  const d = new Date(valor)
+  return isNaN(d.getTime()) ? null : d
+}
+
 export function PetRegistration({
   onSubmit,
   defaultSlot,
@@ -174,6 +142,11 @@ export function PetRegistration({
   const [buscando, setBuscando] = useState(false)
   const [jaBuscou, setJaBuscou] = useState(false)
   const [petVinculado, setPetVinculado] = useState(!!(initialData as any)?.petNumber)
+
+  // ✅ LGPD: autorização do tutor para guardar nome e telefone
+  const [consentimento, setConsentimento] = useState(false)
+  // data em que a ficha vinculada já registrou a autorização (null = ficha antiga, sem autorização)
+  const [consentimentoFicha, setConsentimentoFicha] = useState<Date | null>(null)
 
   // ✅ modal de aviso de telefone vazio
   const [showTelefoneAviso, setShowTelefoneAviso] = useState(false)
@@ -359,6 +332,8 @@ export function PetRegistration({
     setFoto(p.foto || "")
     setPetNumber(p.petNumber)
     setPetVinculado(true)
+    setConsentimentoFicha(dataDoConsentimento(p.consentimentoEm))
+    setConsentimento(false)
     setResultados([])
     setTermoBusca("")
     setJaBuscou(false)
@@ -368,6 +343,7 @@ export function PetRegistration({
   const limparVinculo = () => {
     setPetVinculado(false)
     setPetNumber("")
+    setConsentimentoFicha(null)
     setJaBuscou(false)
   }
 
@@ -384,6 +360,7 @@ export function PetRegistration({
       servico: servico as any,
       observacoes,
       slotNumber: selectedSlot || defaultSlot,
+      consentimentoLgpd: consentimento || undefined,
     } as any)
     setShowTelefoneAviso(false)
   }
@@ -414,6 +391,12 @@ export function PetRegistration({
       }
     }
 
+    // ✅ LGPD: no cadastro, o tutor precisa autorizar (1ª visita ou ficha antiga sem autorização)
+    if (precisaConsentimento && !consentimento) {
+      toast.error("Marque a autorização do tutor (LGPD) antes de finalizar.")
+      return
+    }
+
     if (petNumber && verificarPetEmProducao(petNumber)) {
       toast.error(
         "Este pet já está em atendimento (espera/banho/tosa/escovar). Finalize o atendimento atual antes de cadastrá-lo novamente.",
@@ -441,6 +424,9 @@ export function PetRegistration({
     "h-11 rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
 
   const racaBloqueada = isEditing && initialData?.atendimentoIniciado
+
+  // ✅ LGPD: só pede a autorização no cadastro, quando a ficha ainda não tem
+  const precisaConsentimento = !isEditing && !(petVinculado && consentimentoFicha)
 
   return (
     <form
@@ -728,6 +714,36 @@ export function PetRegistration({
               onChange={(e) => setTelefone(e.target.value)}
             />
           </div>
+
+          {/* 4c. AUTORIZAÇÃO DO TUTOR (LGPD) */}
+          {!isEditing && (
+            precisaConsentimento ? (
+              <div className="rounded-xl border border-indigo-100 bg-indigo-50 p-3 space-y-2">
+                {petVinculado && (
+                  <p className="text-xs font-semibold text-orange-600">
+                    Ficha antiga: confirme a autorização com o tutor nesta visita.
+                  </p>
+                )}
+                <label htmlFor="consentimentoLgpd" className="flex items-start gap-3 cursor-pointer">
+                  <input
+                    id="consentimentoLgpd"
+                    type="checkbox"
+                    checked={consentimento}
+                    onChange={(e) => setConsentimento(e.target.checked)}
+                    className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-indigo-700"
+                  />
+                  <span className="text-sm font-medium text-slate-700">
+                    O tutor autorizou guardar nome e telefone para os avisos do atendimento. *
+                  </span>
+                </label>
+              </div>
+            ) : (
+              <div className="flex items-center gap-2 rounded-xl bg-emerald-50 px-3 py-2 text-sm font-semibold text-emerald-700">
+                <ShieldCheck className="w-4 h-4 shrink-0" />
+                Tutor já autorizou (LGPD) em {consentimentoFicha!.toLocaleDateString("pt-BR")}
+              </div>
+            )
+          )}
 
           {/* 5. SERVIÇO */}
           <div className="space-y-2">

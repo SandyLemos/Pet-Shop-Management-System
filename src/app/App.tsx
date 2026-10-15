@@ -1,6 +1,5 @@
-import React, { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
-import { Button } from './components/ui/button';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
 import AdminSidebar from './components/AdminSidebar';
@@ -11,232 +10,13 @@ import { useAuth } from '../hooks/useAuth';
 import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
-import {
-  addPet,
-  subscribeToPets,
-  encerrarPet,
-  updatePet,
-  marcarComoAvisado,
-  getPetsPendentes,
-  SLOT_OCUPADO,
-  SLOT_USADO,
-  JA_ENCERRADO,
-  CAMPOS_OBRIGATORIOS,
-  garantirReservasDeVaga,
-  atualizarFichaComEdicao,
-  CAMPOS_FICHA,
-} from '../services/petService';
+import { addPet, subscribeToPets, encerrarPet, updatePet, marcarComoAvisado, getPetsPendentes, SLOT_OCUPADO, SLOT_USADO, JA_ENCERRADO, CAMPOS_OBRIGATORIOS, garantirReservasDeVaga, atualizarFichaComEdicao, CAMPOS_FICHA } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
-import {
-  LayoutGrid, LayoutList, Filter,
-  LogIn, Eye, EyeOff, LogOut, AlertTriangle, Settings,
-  PackageCheck,
-} from 'lucide-react';
+import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck } from 'lucide-react';
 import { EntreguesTab } from './components/EntreguesTab';
 
-
-// ─── Modal de Confirmação de Logout ──────────────────────────────────────────
-function LogoutModal({
-  onConfirm,
-  onCancel,
-}: {
-  onConfirm: () => void;
-  onCancel: () => void;
-}) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center px-4">
-      <div
-        className="absolute inset-0 bg-black/40 backdrop-blur-sm"
-        onClick={onCancel}
-      />
-      <div className="relative bg-white rounded-2xl shadow-2xl border border-slate-100 w-full max-w-sm p-8 flex flex-col items-center gap-5 animate-in fade-in zoom-in-95 duration-200">
-        <div className="bg-gradient-to-br from-red-100 to-orange-100 p-4 rounded-2xl">
-          <AlertTriangle className="w-8 h-8 text-red-500" />
-        </div>
-        <div className="text-center space-y-1">
-          <h2 className="text-lg font-bold text-gray-900">Deseja sair realmente?</h2>
-          <p className="text-sm text-gray-500">
-            Sua sessão será encerrada e você precisará fazer login novamente para acessar o sistema.
-          </p>
-        </div>
-        <div className="flex gap-3 w-full mt-1">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={onConfirm}
-            className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2"
-          >
-            <LogOut size={15} />
-            Sair
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ─── Tela de Login ────────────────────────────────────────────────────────────
-function LoginScreen({
-  onLogin,
-  error,
-}: {
-  onLogin: (email: string, password: string) => Promise<boolean>;
-  /** ✅ motivo real vindo do useAuth (senha errada, conta não liberada, sem internet...) */
-  error: string | null;
-}) {
-  const [email, setEmail]               = useState('');
-  const [password, setPassword]         = useState('');
-  const [showPassword, setShowPassword] = useState(false);
-  const [loading, setLoading]           = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setLoading(true);
-    await onLogin(email, password);
-    setLoading(false);
-  };
-
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center px-4 relative overflow-hidden"
-      style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 40%, #E8192C 100%)' }}
-    >
-      <div className="absolute inset-0 overflow-hidden pointer-events-none">
-        <div className="absolute -top-24 -left-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#E8192C' }} />
-        <div className="absolute -bottom-24 -right-24 w-96 h-96 rounded-full opacity-10" style={{ background: '#3B2FBE' }} />
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full opacity-5" style={{ background: '#ffffff' }} />
-      </div>
-
-      <div className="relative w-full max-w-md z-10">
-        <div className="bg-white rounded-3xl shadow-2xl overflow-hidden">
-
-          <div
-            className="flex flex-col items-center gap-2 px-8 pt-10 pb-6"
-            style={{ background: 'linear-gradient(160deg, #1a1560 0%, #3B2FBE 60%, #E8192C 100%)' }}
-          >
-            <div className="bg-white rounded-2xl px-6 py-4 shadow-lg">
-              <img
-                src="/logo-elite.png"
-                alt="Elite Pet Shop"
-                width={126}
-                height={80}
-                className="h-20 w-auto object-contain"
-              />
-            </div>
-            <p className="text-white/70 text-xs mt-2 tracking-widest uppercase font-semibold">
-              Sistema de Gestão
-            </p>
-          </div>
-
-          <form onSubmit={handleSubmit} className="px-8 py-8 space-y-5">
-            <div className="text-center mb-1">
-              <h2 className="text-lg font-bold text-gray-800">Acesse sua conta</h2>
-              <p className="text-sm text-gray-400">Informe suas credenciais para continuar</p>
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-sm font-semibold text-gray-600">E-mail</label>
-              <input
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                placeholder="seu@email.com"
-                required
-                autoComplete="email"
-                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none transition"
-                onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #3B2FBE55')}
-                onBlur={(e)  => (e.target.style.boxShadow = '')}
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-sm font-semibold text-gray-600">Senha</label>
-              <div className="relative">
-                <input
-                  type={showPassword ? 'text' : 'password'}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="••••••••"
-                  required
-                  autoComplete="current-password"
-                  className="w-full px-4 py-2.5 pr-11 rounded-xl border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none transition"
-                  onFocus={(e) => (e.target.style.boxShadow = '0 0 0 2px #3B2FBE55')}
-                  onBlur={(e)  => (e.target.style.boxShadow = '')}
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 transition"
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            {error && (
-              <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-xl flex items-center gap-2">
-                <AlertTriangle size={15} className="flex-shrink-0" />
-                {error}
-              </div>
-            )}
-
-            <button
-              type="submit"
-              disabled={loading}
-              className="w-full flex items-center justify-center gap-2 text-white font-bold py-3 rounded-xl transition-all shadow-lg hover:shadow-xl disabled:opacity-70 disabled:cursor-not-allowed active:scale-[0.98]"
-              style={{
-                background: loading
-                  ? '#aaa'
-                  : 'linear-gradient(135deg, #3B2FBE 0%, #E8192C 100%)',
-              }}
-            >
-              {loading ? (
-                <span className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
-              ) : (
-                <>
-                  <LogIn size={18} />
-                  Entrar
-                </>
-              )}
-            </button>
-          </form>
-        </div>
-
-        <p className="text-center text-xs text-white/50 mt-5">
-          © {new Date().getFullYear()} Elite Pet Shop · Desenvolvido por Studio3D Criativo
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// ─── Tela de Loading inicial ──────────────────────────────────────────────────
-function SplashScreen() {
-  return (
-    <div
-      className="min-h-screen flex items-center justify-center"
-      style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 40%, #E8192C 100%)' }}
-    >
-      <div className="flex flex-col items-center gap-5">
-        <div className="bg-white rounded-2xl px-6 py-4 shadow-xl">
-          <img
-            src="/logo-elite.png"
-            alt="Elite Pet Shop"
-            width={101}
-            height={64}
-            className="h-16 w-auto object-contain"
-          />
-        </div>
-        <span className="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin" />
-        <p className="text-sm text-white/60 tracking-widest uppercase">Verificando sessão...</p>
-      </div>
-    </div>
-  );
-}
+import { LogoutModal } from './components/LogoutModal';
+import { LoginScreen, SplashScreen } from './components/TelaLogin';
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
@@ -247,10 +27,8 @@ export default function App() {
 
   const [pets, setPets]                         = useState<Pet[]>([]);
   const [filter, setFilter]                     = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
-  const [dailyCounter, setDailyCounter]         = useState<number>(1);
   const [showLogoutModal, setShowLogoutModal]   = useState(false);
   const [showAdminSidebar, setShowAdminSidebar] = useState(false);
-  const [adminActivePage, setAdminActivePage]   = useState<'criar' | 'deletar' | 'editar' | null>(null);
 
   const [codigoModal, setCodigoModal] = useState<{
     petNumber: string;
@@ -416,7 +194,6 @@ export default function App() {
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>): Promise<boolean> => {
     try {
       const { petNumber, isNovo } = await addPet(petData, dia);
-      setDailyCounter((c) => c + 1);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
@@ -583,7 +360,6 @@ export default function App() {
     await logout();
     setShowLogoutModal(false);
     setPets([]);
-    setDailyCounter(1);
     toast.success('Sessão encerrada com sucesso.');
   };
 
@@ -635,7 +411,7 @@ export default function App() {
               </div>
               <div className="hidden sm:block">
                 <p className="text-white/60 text-xs capitalize">
-                  {user?.email?.split('@')[0] ?? 'Sistema de Gestão'}
+                  {user?.email?.split('@')[0] ?? 'Pata & Gestão'}
                 </p>
               </div>
             </div>

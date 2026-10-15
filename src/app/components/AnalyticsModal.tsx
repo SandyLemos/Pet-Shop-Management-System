@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid, PieChart, Pie, Cell } from 'recharts';
 import {
-  BarChart3, X, PackageCheck, Clock, UserPlus, Repeat, CalendarDays, Users, PawPrint, Heart, UserX,
+  BarChart3, X, PackageCheck, Clock, UserPlus, Repeat, PawPrint, Heart, UserX,
   MessageCircle, RefreshCw, TrendingUp, TrendingDown, LayoutDashboard, Sparkles, Trash2,
   Lightbulb, AlertTriangle, Target, PartyPopper, ChevronRight,
 } from 'lucide-react';

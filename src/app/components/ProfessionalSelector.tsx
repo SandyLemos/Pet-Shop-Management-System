@@ -1,12 +1,11 @@
 // src/app/components/ProfessionalSelector.tsx
 
-import React, { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ChevronDown, Briefcase, Loader2 } from 'lucide-react';
 import { subscribeToProfissionais } from '../../services/petService';
 import type { Profissional, Pet } from '../types/pet';
 import { Button } from './ui/button';
 import { HealthIssuesSelector } from './HealthIssuesSelector';
-import { NO_ISSUES_ID } from '../constants/healthIssues';
 
 
 // ── Tipos ────────────────────────────────────────────────────────────────────

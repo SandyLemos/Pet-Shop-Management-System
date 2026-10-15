@@ -21,6 +21,7 @@ const preencherBasico = () => {
   fireEvent.change(document.getElementById('nomeTutor')!, { target: { value: 'Ana' } });
   fireEvent.change(document.getElementById('telefone')!, { target: { value: '24999991234' } });
   fireEvent.change(selects()[3], { target: { value: 'banho' } });
+  fireEvent.click(document.getElementById('consentimentoLgpd')!);
 };
 const finalizar = async () => { await act(async () => { fireEvent.click(screen.getByText('Finalizar e Cadastrar')); }); };
 

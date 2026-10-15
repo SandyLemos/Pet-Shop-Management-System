@@ -21,8 +21,9 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
-import type { Pet, Profissional } from '../app/types/pet';
+import type { Pet, PetCadastro, Profissional } from '../app/types/pet';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
+import { TUTOR_REMOVIDO } from '../utils/lgpd';
 
 /** Reexporta para quem já importava daqui */
 export { idDoDia, idDoDiaDe };
@@ -35,14 +36,6 @@ export { idDoDia, idDoDiaDe };
 export function getTodayKey(): string {
   return idDoDia();
 }
-
-/** Referência da coleção de pets ativos do dia */
-const petsCollection = () =>
-  collection(db, 'dias', getTodayKey(), 'pets');
-
-/** Referência da coleção de logs do dia */
-const logsCollection = () =>
-  collection(db, 'dias', getTodayKey(), 'logs');
 
 /** Referência da coleção global de profissionais */
 const profissionaisCollection = () =>
@@ -135,21 +128,8 @@ export function subscribeToProfissionais(
 // CADASTRO PERMANENTE DE PETS + petNumber sequencial
 // ═══════════════════════════════════════════════════════════════════════════
 
-/** Ficha permanente do pet (coleção petsCadastro) */
-export interface PetCadastro {
-  petNumber: string;          // Ex: "PET-000123"
-  petNumberSeq?: string;      // número puro sem zeros, ex: "123"
-  nomePet: string;
-  nomeTutor: string;
-  telefone: string;
-  telefoneReverso?: string;   // telefone (só dígitos) invertido, p/ busca por final
-  especie?: 'cao' | 'gato';
-  raca?: string;
-  porte?: 'pequeno' | 'medio' | 'grande';
-  foto?: string;
-  criadoEm?: any;
-  atualizadoEm?: any;
-}
+/** Ficha permanente do pet: o tipo fica em types/pet (reexportado aqui) */
+export type { PetCadastro };
 
 /**
  * Gera um petNumber sequencial e ATÔMICO via transaction.
@@ -247,6 +227,51 @@ export async function deletePetCadastro(petNumber: string): Promise<void> {
   await deleteDoc(ref);
 }
 
+export { TUTOR_REMOVIDO };
+export const PET_NA_FILA = 'PET_NA_FILA'; // pet ainda está na fila de algum dia
+const INICIO_DO_SISTEMA = '2026-01-01';
+
+/**
+ * ✅ LGPD: apaga os dados do tutor a pedido dele.
+ * Troca o nome do tutor por "Removido (LGPD)" nos registros de todos os dias
+ * (os atendimentos continuam contando nas Análises) e depois exclui a ficha.
+ * Se o pet ainda estiver na fila, não faz nada e lança Error(PET_NA_FILA).
+ * Devolve quantos registros do histórico foram anonimizados.
+ */
+export async function apagarDadosTutor(petNumber: string): Promise<number> {
+  // Dias com documento + todos os dias desde o início do sistema (dias antigos
+  // podem ter só as subcoleções, sem o documento do dia)
+  const comDocumento = (await getDocs(collection(db, 'dias'))).docs.map((d) => d.id);
+  const dias = [...new Set([...comDocumento, ...listarDias(INICIO_DO_SISTEMA, idDoDia())])];
+  const doPet = (snap: any) => snap.docs.filter((d: any) => d.data().petNumber === petNumber);
+  const buscar = async (sub: 'pets' | 'logs') => {
+    const achados: any[] = [];
+    // de 10 em 10 dias, para não sobrecarregar a conexão do tablet
+    for (let i = 0; i < dias.length; i += 10) {
+      const snaps = await Promise.all(dias.slice(i, i + 10).map((dia) =>
+        getDocs(query(collection(db, 'dias', dia, sub), where('petNumber', '==', petNumber))).then((s) =>
+          doPet(s).map((d: any) => ({ dia, id: d.id, data: d.data() })),
+        ),
+      ));
+      achados.push(...snaps.flat());
+    }
+    return achados;
+  };
+
+  // 1️⃣ Pet na fila (de hoje ou esquecido): primeiro precisa ser entregue/removido
+  if ((await buscar('pets')).length > 0) throw new Error(PET_NA_FILA);
+
+  // 2️⃣ Histórico: troca só o nome do tutor (a regra do Firestore só deixa mudar esse campo)
+  const logs = (await buscar('logs')).filter((l) => l.data.nomeTutor !== TUTOR_REMOVIDO);
+  await Promise.all(logs.map((l) =>
+    updateDoc(doc(db, 'dias', l.dia, 'logs', l.id), { nomeTutor: TUTOR_REMOVIDO }),
+  ));
+
+  // 3️⃣ Por último a ficha: se algo falhar antes, dá para tentar de novo
+  await deletePetCadastro(petNumber);
+  return logs.length;
+}
+
 /** Atualiza a ficha permanente do pet (reusa salvarCadastroPet). */
 export async function updatePetCadastro(
   petNumber: string,
@@ -271,7 +296,7 @@ export async function salvarCadastroPet(
   return petNumber;
 }
 
-type DadosFicha = Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>;
+type DadosFicha = Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm' | 'consentimentoEm' | 'consentimentoPorId' | 'consentimentoPorNome'>;
 
 /** Monta o documento da ficha permanente (usado no cadastro avulso e na transação do addPet). */
 function montarFicha(dados: DadosFicha, petNumber: string, existente: boolean) {
@@ -381,8 +406,11 @@ export async function addPet(
   const isNovo = !petNumberExistente;
   const slot = petData.slotNumber;
 
+  // ✅ LGPD: a autorização do tutor vai só para a ficha, não para a fila
+  const consentiu = (petData as any).consentimentoLgpd === true;
+
   const petDataLimpo = Object.fromEntries(
-    Object.entries(petData).filter(([k, v]) => v !== undefined && k !== 'dia'),
+    Object.entries(petData).filter(([k, v]) => v !== undefined && k !== 'dia' && k !== 'consentimentoLgpd'),
   );
 
   const dadosFicha: DadosFicha = {
@@ -405,6 +433,7 @@ export async function addPet(
     const diaSnap    = await tx.get(diaRef);
     const usadosSnap = await tx.get(usadosRef);
     const contSnap   = isNovo ? await tx.get(contadorRef) : null;
+    const fichaSnap  = !isNovo ? await tx.get(doc(petsCadastroCollection(), petNumberExistente!)) : null;
 
     const ocupados: number[] = diaSnap.exists() ? (diaSnap.data().slotsOcupados ?? []) : [];
     const usados: number[]   = usadosSnap.exists() ? (usadosSnap.data().slots ?? []) : [];
@@ -423,9 +452,14 @@ export async function addPet(
     }
 
     // 4️⃣ Ficha, reserva da vaga e pet na fila — tudo junto
+    // ✅ LGPD: grava a autorização só uma vez (a 1ª data não é sobrescrita)
+    const jaTinhaConsentimento = !!fichaSnap?.exists() && !!fichaSnap.data().consentimentoEm;
+    const consentimento = consentiu && !jaTinhaConsentimento
+      ? { consentimentoEm: serverTimestamp(), consentimentoPorId: cadastradoPorId, consentimentoPorNome: cadastradoPorNome }
+      : {};
     tx.set(
       doc(petsCadastroCollection(), numero),
-      montarFicha(dadosFicha, numero, !isNovo),
+      { ...montarFicha(dadosFicha, numero, !isNovo), ...consentimento },
       { merge: true },
     );
     tx.set(diaRef, { slotsOcupados: arrayUnion(slot) }, { merge: true });
@@ -791,11 +825,6 @@ export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
   return snap.docs.map((d) => logFromFirestore(d.id, d.data()));
 }
 
-/** Atalho: logs do dia de HOJE no fuso local. */
-export async function getLogsHoje(): Promise<LogEntry[]> {
-  return getLogsByDate(getTodayKey());
-}
-
 // ─── Relatório de contagem de serviços (apenas ENTREGUES) ─────────────────
 
 export interface RelatorioServicos {
@@ -841,15 +870,6 @@ export async function getRelatorioPeriodo(
   const datas = listarDias(dataInicio, dataFim);
   const resultados = await Promise.all(datas.map((d) => getLogsByDate(d)));
   return contarEntregues(resultados.flat());
-}
-
-// ─── Buscar pets ativos de um dia específico ──────────────────────────────
-
-export async function getPetsByDate(dateKey: string): Promise<Pet[]> {
-  const col  = collection(db, 'dias', dateKey, 'pets');
-  const q    = query(col, orderBy('checkInTime', 'asc'));
-  const snap = await getDocs(q);
-  return snap.docs.map((d) => fromFirestore(d.id, d.data(), dateKey));
 }
 
 // ─── Pets esquecidos em dias anteriores ───────────────────────────────────

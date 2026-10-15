@@ -123,7 +123,10 @@ service cloud.firestore {
       match /logs/{logId} {
         allow read:   if isStaff();
         allow create: if isStaff();
-        allow update: if false;
+        // NOVO (LGPD): só o admin, e só para trocar o nome do tutor por "Removido (LGPD)"
+        allow update: if isAdmin()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor'])
+                    && request.resource.data.nomeTutor == 'Removido (LGPD)';
         allow delete: if isAdmin();
       }
 

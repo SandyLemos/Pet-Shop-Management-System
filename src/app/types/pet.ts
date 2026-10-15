@@ -68,13 +68,19 @@ export interface Pet {
 // ✅ Centralizado aqui para reuso entre petService e componentes
 export interface PetCadastro {
   petNumber: string;          // Ex: "PET-000123"
+  petNumberSeq?: string;      // número puro sem zeros, ex: "123"
   nomePet: string;
   nomeTutor: string;
   telefone: string;
+  telefoneReverso?: string;   // telefone (só dígitos) invertido, p/ busca por final
   especie?: "cao" | "gato";
   raca?: string;
   porte?: "pequeno" | "medio" | "grande";
   foto?: string;
   criadoEm?: any;
   atualizadoEm?: any;
+  // ✅ LGPD: quando e quem registrou a autorização do tutor
+  consentimentoEm?: any;
+  consentimentoPorId?: string | null;
+  consentimentoPorNome?: string | null;
 }

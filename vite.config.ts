@@ -34,12 +34,12 @@ export default defineConfig({
         ],
       },
       manifest: {
-        name: 'Pet Shop Management',
-        short_name: 'Pet Shop Management',
+        name: 'Pata & Gestão',
+        short_name: 'Pata & Gestão',
         start_url: '/',
         display: 'standalone',
-        background_color: '#cde1f8',
-        theme_color: '#9ab8e0',
+        background_color: '#0B5A70',
+        theme_color: '#0B5A70',
         icons: [
           { src: '/icon-192.png', sizes: '192x192', type: 'image/png' },
           { src: '/icon-512.png', sizes: '512x512', type: 'image/png' },

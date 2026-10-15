@@ -1,5 +1,6 @@
 // ✅ Cálculos do painel de Análises (funções puras, testáveis).
 import type { LogEntry } from '../services/petService';
+import { TUTOR_REMOVIDO } from './lgpd';
 import { idDoDiaDe } from './dias';
 
 export type LogDoDia = LogEntry & { dia: string };
@@ -132,6 +133,8 @@ export function clientes(logs: LogDoDia[], fichas: FichaResumo[], hoje: string) 
   const fichaPor = new Map(fichas.map((f) => [f.petNumber, f]));
   const m = new Map<string, { chave: string; petNumber?: string | null; nomePet: string; nomeTutor: string; visitas: number; ultima: string }>();
   for (const l of entregues(logs)) {
+    // ✅ LGPD: tutor que pediu para apagar os dados não aparece nas listas de clientes
+    if (l.nomeTutor === TUTOR_REMOVIDO) continue;
     const chave = l.petNumber || `${l.nomePet}|${l.nomeTutor}`;
     const r = m.get(chave) ?? { chave, petNumber: l.petNumber, nomePet: l.nomePet, nomeTutor: l.nomeTutor, visitas: 0, ultima: l.dia };
     r.visitas++; if (l.dia > r.ultima) r.ultima = l.dia; m.set(chave, r);

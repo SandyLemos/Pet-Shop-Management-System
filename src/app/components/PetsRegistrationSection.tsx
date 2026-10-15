@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  X, Plus, Pencil, Trash2, AlertTriangle, PawPrint,
+  X, Pencil, Trash2, AlertTriangle, PawPrint,
   Dog, Cat, Phone, Hash, Search,
 } from 'lucide-react';
 import { toast } from 'sonner';
@@ -8,6 +8,8 @@ import {
   getAllPetsCadastro,
   deletePetCadastro,
   updatePetCadastro,
+  apagarDadosTutor,
+  PET_NA_FILA,
 } from '../../services/petService';
 import type { PetCadastro } from '../types/pet';
 
@@ -111,7 +113,10 @@ function InfoRow({ icon, label, value, mono }: {
 // ─── Modal Confirmar Exclusão ──────────────────────────────────────────────────
 function ModalConfirmDeletePet({
   pet, onConfirm, onCancel,
-}: { pet: PetCadastro; onConfirm: () => void; onCancel: () => void }) {
+}: { pet: PetCadastro; onConfirm: (lgpd: boolean) => void; onCancel: () => void }) {
+  // ✅ LGPD: o tutor pediu para apagar os dados dele
+  const [lgpd, setLgpd] = useState(false);
+  const [apagando, setApagando] = useState(false);
   return (
     <div className="fixed inset-0 z-[70] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onCancel} />
@@ -124,9 +129,24 @@ function ModalConfirmDeletePet({
             <span className="font-semibold text-gray-800">{pet.nomePet}</span>{' '}
             (<span className="font-mono">{pet.petNumber}</span>).
           </p>
-          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2 mt-1">
+          <label htmlFor="apagarLgpd" className="flex items-start gap-3 text-left bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 mt-1 cursor-pointer">
+            <input
+              id="apagarLgpd"
+              type="checkbox"
+              checked={lgpd}
+              onChange={(e) => setLgpd(e.target.checked)}
+              className="mt-0.5 h-5 w-5 shrink-0 cursor-pointer accent-red-600"
+            />
+            <span className="text-sm text-gray-700">
+              <span className="font-semibold">O tutor pediu para apagar os dados (LGPD).</span>{' '}
+              Tirar também o nome dele do histórico.
+            </span>
+          </label>
+          <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
             <p className="text-xs text-red-600 font-medium">
-              ⚠️ Isso remove apenas o cadastro permanente. Os atendimentos do dia e o histórico de logs NÃO são afetados.
+              {lgpd
+                ? '⚠️ O nome do tutor vira "Removido (LGPD)" em todo o histórico. Os atendimentos continuam contando nas Análises. Isso não tem volta.'
+                : '⚠️ Isso remove apenas o cadastro permanente. Os atendimentos do dia e o histórico de logs NÃO são afetados.'}
             </p>
           </div>
         </div>
@@ -134,8 +154,14 @@ function ModalConfirmDeletePet({
           <button onClick={onCancel} className="flex-1 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition">
             Cancelar
           </button>
-          <button onClick={onConfirm} className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2">
-            <Trash2 size={15} /> Excluir
+          <button
+            disabled={apagando}
+            onClick={async () => { setApagando(true); try { await onConfirm(lgpd); } finally { setApagando(false); } }}
+            className="flex-1 py-2.5 rounded-lg bg-gradient-to-r from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white text-sm font-semibold shadow transition-all flex items-center justify-center gap-2 disabled:opacity-60">
+            {apagando
+              ? <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+              : <Trash2 size={15} />}
+            {lgpd ? 'Apagar dados' : 'Excluir'}
           </button>
         </div>
       </div>
@@ -328,16 +354,25 @@ const filtrados = useMemo(() => {
 }, [pets, busca]);
 
 
-  const handleDelete = async () => {
+  const handleDelete = async (lgpd: boolean) => {
     if (!deletando) return;
     try {
-      await deletePetCadastro(deletando.petNumber);
-      toast.success(`Cadastro de ${deletando.nomePet} excluído.`);
+      if (lgpd) {
+        const n = await apagarDadosTutor(deletando.petNumber);
+        toast.success(`Dados do tutor de ${deletando.nomePet} apagados (${n} ${n === 1 ? 'registro' : 'registros'} do histórico).`);
+      } else {
+        await deletePetCadastro(deletando.petNumber);
+        toast.success(`Cadastro de ${deletando.nomePet} excluído.`);
+      }
       setDeletando(null);
       setDetalhe(null);
       carregar();
-    } catch {
-      toast.error('Erro ao excluir cadastro.');
+    } catch (err) {
+      if (err instanceof Error && err.message === PET_NA_FILA) {
+        toast.error(`${deletando.nomePet} ainda está na fila. Entregue ou remova o pet antes de apagar os dados.`);
+      } else {
+        toast.error(lgpd ? 'Erro ao apagar os dados. Tente novamente.' : 'Erro ao excluir cadastro.');
+      }
     }
   };
 
