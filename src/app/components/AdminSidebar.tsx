@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense } from 'react';
 import {
   X, Users, ShieldCheck, Briefcase, PawPrint,
-  FileText, Download, PackageCheck, PhoneCall, BarChart3,
+  FileText, Download, PackageCheck, PhoneCall, BarChart3, Palette,
 } from 'lucide-react';
 // ✅ Análises: carregado só quando aberto (não pesa no app dos tablets)
 const AnalyticsModal = lazy(() => import('./AnalyticsModal'));
@@ -11,6 +11,7 @@ import { BackupButton } from './BackupButton';
 import { ModalRelatorios } from './ModalRelatorios';
 import { SecaoUsuarios } from './AdminUsuarios';
 import { SecaoProfissionais } from './AdminProfissionais';
+import { SecaoPersonalizacao } from './AdminPersonalizacao';
 import { nomeLoja } from '../../lib/lojaAtual';
 
 // ─── AdminSidebar — Componente Principal (export default) ─────────────────────
@@ -20,7 +21,7 @@ export default function AdminSidebar({
   onClose: () => void;
   currentUserRole?: 'admin' | 'user';
 }) {
-  const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios'>('usuarios');
+  const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios' | 'personalizacao'>('usuarios');
   const [showRelatorios, setShowRelatorios] = useState(false);
   const [showAnalises, setShowAnalises]     = useState(false);
 
@@ -63,7 +64,7 @@ export default function AdminSidebar({
           <div className="flex border-b border-slate-100 bg-slate-50 flex-shrink-0">
             <button
               onClick={() => setAbaAtiva('usuarios')}
-              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'usuarios'
                   ? 'border-purple-500 text-purple-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -73,7 +74,7 @@ export default function AdminSidebar({
             </button>
             <button
               onClick={() => setAbaAtiva('profissionais')}
-              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'profissionais'
                   ? 'border-orange-500 text-orange-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -83,7 +84,7 @@ export default function AdminSidebar({
             </button>
             <button
               onClick={() => setAbaAtiva('pets')}
-              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'pets'
                   ? 'border-pink-500 text-pink-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
@@ -93,13 +94,23 @@ export default function AdminSidebar({
             </button>
             <button
               onClick={() => setAbaAtiva('relatorios')}
-              className={`flex-1 py-3 text-xs font-semibold flex items-center justify-center gap-1.5 border-b-2 transition-all ${
+              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'relatorios'
                   ? 'border-indigo-500 text-indigo-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
               <FileText size={14} /> <span className="hidden sm:inline">Relatórios</span>
+            </button>
+            <button
+              onClick={() => setAbaAtiva('personalizacao')}
+              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+                abaAtiva === 'personalizacao'
+                  ? 'border-pink-500 text-pink-700 bg-white'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+              }`}
+            >
+              <Palette size={14} /> <span className="hidden sm:inline">Personalização</span>
             </button>
           </div>
 
@@ -108,6 +119,7 @@ export default function AdminSidebar({
             {abaAtiva === 'usuarios'      && <SecaoUsuarios />}
             {abaAtiva === 'profissionais' && <SecaoProfissionais />}
             {abaAtiva === 'pets'          && <SecaoPetsCadastro />}
+            {abaAtiva === 'personalizacao' && <SecaoPersonalizacao />}
             {abaAtiva === 'relatorios'    && (
               <div className="space-y-4">
                 <div className="bg-gradient-to-br from-indigo-50 to-purple-50 border border-indigo-100 rounded-2xl p-6 flex flex-col items-center gap-4 text-center">

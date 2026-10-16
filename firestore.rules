@@ -74,6 +74,19 @@ service cloud.firestore {
       allow read: if isDono() || daLoja(lojaId);
       allow write: if isDono();
 
+      // NOVO (Personalização): o admin da loja troca SÓ a logo e as cores do topo
+      allow update: if adminDaLoja(lojaId)
+                    && request.resource.data.diff(resource.data).affectedKeys()
+                         .hasOnly(['logoUrl', 'cores', 'personalizadoEm'])
+                    && (!('logoUrl' in request.resource.data)
+                        || (request.resource.data.logoUrl is string
+                            && request.resource.data.logoUrl.size() <= 500
+                            && request.resource.data.logoUrl.matches('^https://res[.]cloudinary[.]com/.*')))
+                    && (!('cores' in request.resource.data)
+                        || (request.resource.data.cores.keys().hasOnly(['principal', 'destaque'])
+                            && request.resource.data.cores.principal.matches('^#[0-9A-Fa-f]{6}$')
+                            && request.resource.data.cores.destaque.matches('^#[0-9A-Fa-f]{6}$')));
+
       // o dono lê tudo de todas as lojas (painel) e grava na migração
       match /{documento=**} {
         allow read: if isDono();

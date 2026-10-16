@@ -20,11 +20,13 @@ import { LoginScreen, SplashScreen } from './components/TelaLogin';
 // o Painel do Dono só é baixado por quem é dono (as lojas não carregam esse código)
 const PainelDono = lazy(() => import('./components/dono/PainelDono').then((m) => ({ default: m.PainelDono })));
 import { AvisoSistema } from './components/AvisoSistema';
-import { nomeLoja, logoLoja } from '../lib/lojaAtual';
+import { nomeLoja } from '../lib/lojaAtual';
+import { useVisualLoja } from '../hooks/useVisualLoja';
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
   const { user, loading, error, isAuthenticated, login, logout, isAdmin, isDono } = useAuth();
+  const visual = useVisualLoja(); // logo e cores da Personalização
 
   // ✅ NOVO: slots já queimados hoje (compartilhado entre todos os dispositivos)
   const { marcarUsado } = useSlotsUsadosHoje();
@@ -412,15 +414,15 @@ export default function App() {
 
         <div
           className="shadow-md"
-          style={{ background: 'linear-gradient(135deg, #1a1560 0%, #3B2FBE 50%, #E8192C 100%)' }}
+          style={{ background: `linear-gradient(135deg, #1a1560 0%, ${visual.cores.principal} 50%, ${visual.cores.destaque} 100%)` }}
         >
           <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
 
             <div className="flex items-center gap-4">
               <div className="bg-white rounded-xl px-4 py-2 shadow-md">
                 <img
-                  src={logoLoja()}
-                  alt={nomeLoja()}
+                  src={visual.logo}
+                  alt={visual.nome}
                   width={63}
                   height={40}
                   className="h-10 w-auto object-contain"
@@ -435,7 +437,7 @@ export default function App() {
 
             <div className="flex-1 flex justify-center">
               <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
-                {nomeLoja()}
+                {visual.nome}
               </h1>
             </div>
 

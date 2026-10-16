@@ -3,7 +3,8 @@ import type { LogEntry } from '../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { idDoDia } from './dias';
-import { lojaId, nomeLoja } from '../lib/lojaAtual';
+import { lojaId, nomeLoja, coresLoja, lojaTemCores } from '../lib/lojaAtual';
+import { rgb } from './cores';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 // ✅ Data de hoje no fuso de São Paulo (antes usava UTC: após 21h virava "amanhã")
@@ -164,7 +165,9 @@ export function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
   const totalAvisados = linhas.filter(l => l.tipo === 'avisado').length;
 
   // Cabeçalho
-  pdf.setFillColor(88, 28, 135);
+  // cor principal da Personalização (ou o roxo de sempre)
+  const [cr, cg, cb] = lojaTemCores() ? rgb(coresLoja().principal) : [88, 28, 135];
+  pdf.setFillColor(cr, cg, cb);
   pdf.rect(0, 0, pageW, 28, 'F');
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(16);

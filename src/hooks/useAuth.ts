@@ -64,7 +64,7 @@ async function verificarAcesso(user: User): Promise<Papel> {
   if (loja.status === 'bloqueada') throw new Error('LOJA_BLOQUEADA');
   if (loja.status === 'teste' && loja.fimTeste && loja.fimTeste < idDoDia()) throw new Error('TESTE_ACABOU');
 
-  definirLoja({ id: perfil.lojaId, nome: loja.nome ?? '', logoUrl: loja.logoUrl, plano: loja.plano, status: loja.status });
+  definirLoja({ id: perfil.lojaId, nome: loja.nome ?? '', logoUrl: loja.logoUrl, plano: loja.plano, status: loja.status, cores: loja.cores });
   return perfil.role === 'admin' ? 'admin' : 'user';
 }
 

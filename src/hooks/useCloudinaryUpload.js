@@ -8,8 +8,11 @@ export const TAMANHO_MAXIMO = 5 * 1024 * 1024; // 5 MB (depois de reduzir)
 const LADO_MAXIMO = 1600; // px: suficiente para ver o pet, bem mais leve
 const REDUZIR_ACIMA_DE = 1024 * 1024; // só reduz fotos acima de 1 MB
 
-/** Reduz a foto para no máximo 1600 px em JPEG. Se não conseguir, devolve a original. */
-async function reduzirFoto(file) {
+/**
+ * Reduz a foto para no máximo 1600 px em JPEG (ou PNG, para logo com fundo transparente).
+ * Se não conseguir, devolve a original.
+ */
+async function reduzirFoto(file, formato = "image/jpeg") {
   if (file.size <= REDUZIR_ACIMA_DE || typeof createImageBitmap !== "function") return file;
   try {
     const img = await createImageBitmap(file);
@@ -19,7 +22,7 @@ async function reduzirFoto(file) {
     canvas.height = Math.round(img.height * escala);
     canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
     img.close?.();
-    const blob = await new Promise((ok) => canvas.toBlob(ok, "image/jpeg", 0.85));
+    const blob = await new Promise((ok) => canvas.toBlob(ok, formato, 0.85));
     return blob && blob.size < file.size ? blob : file;
   } catch {
     return file; // formato que o navegador não abre: segue a original (se couber no limite)
@@ -33,13 +36,14 @@ export function useCloudinaryUpload() {
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState(null);
 
-  const uploadImage = async (file) => {
+  // opcoes.manterTransparencia: logo em PNG não pode virar JPEG (o fundo ficaria preto)
+  const uploadImage = async (file, opcoes = {}) => {
     setUploading(true);
     setError(null);
 
     try {
       if (!String(file?.type || "").startsWith("image/")) throw new Error(MSG_NAO_E_FOTO);
-      const foto = await reduzirFoto(file);
+      const foto = await reduzirFoto(file, opcoes.manterTransparencia ? "image/png" : "image/jpeg");
       if (foto.size > TAMANHO_MAXIMO) throw new Error(MSG_FOTO_GRANDE);
 
       const formData = new FormData();
