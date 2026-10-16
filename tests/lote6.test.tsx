@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { definirLoja } from '../src/lib/lojaAtual';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import type { criarFirestoreFalso } from './fakeFirestore';
@@ -8,7 +9,7 @@ vi.mock('../src/lib/firebase', () => ({ db: {} }));
 vi.mock('firebase/auth', () => ({ getAuth: () => ({ currentUser: null }) }));
 vi.mock('firebase/firestore', async () => {
   const { criarFirestoreFalso: criar } = await import('./fakeFirestore');
-  ff.ref = criar();
+  ff.ref = criar({ raiz: 'lojas/elite-pet-shop' });
   return ff.ref.mod;
 });
 
@@ -16,19 +17,24 @@ import { gerarBackup, nomeArquivoBackup } from '../src/services/backupService';
 import { useCloudinaryUpload, MSG_NAO_E_FOTO, MSG_FOTO_GRANDE } from '../src/hooks/useCloudinaryUpload';
 
 const fs = () => ff.ref as ReturnType<typeof criarFirestoreFalso>;
-const put = (path: string, data: any) => fs().mod.setDoc({ path }, data);
+definirLoja({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' });
+const put = async (path: string, data: any) => fs().set(path, data);
 beforeEach(() => { fs().limpar(); });
 
 describe('Backup', () => {
   it('traz cadastros e os dias com movimento, com datas em texto', async () => {
     await put('petsCadastro/PET-000001', { nomePet: 'Rex', criadoEm: { toDate: () => new Date('2026-09-01T12:00:00Z') } });
-    await put('usuarios/u1', { nome: 'Ana', role: 'admin' });
+    await put('usuarios/u1', { nome: 'Ana', role: 'admin', lojaId: 'elite-pet-shop' });
+    await put('usuarios/u2', { nome: 'Bia', role: 'admin', lojaId: 'outra-loja' }); // de outra loja: fica de fora
+    await put('lojas/outra-loja/petsCadastro/PET-000001', { nomePet: 'Thor' });
     await put('dias/2026-10-02/pets/a', { nomePet: 'Rex' });
     await put('dias/2026-09-15/logs/l1', { tipo: 'entregue' });
     await put('dias/2026-05-01/logs/velho', { tipo: 'entregue' }); // fora dos 90 dias
     const b = await gerarBackup('2026-10-02');
     expect(b.colecoes.petsCadastro['PET-000001']).toEqual({ nomePet: 'Rex', criadoEm: '2026-09-01T12:00:00.000Z' });
     expect(b.colecoes.usuarios.u1.nome).toBe('Ana');
+    expect(b.colecoes.usuarios.u2).toBeUndefined();
+    expect(b.loja).toBe('elite-pet-shop');
     expect(Object.keys(b.dias).sort()).toEqual(['2026-09-15', '2026-10-02']);
     expect(b.dias['2026-10-02'].pets.a.nomePet).toBe('Rex');
     expect(nomeArquivoBackup('2026-10-02')).toBe('backup-elite-pet-shop-2026-10-02.json');

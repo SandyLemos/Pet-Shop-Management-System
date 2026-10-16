@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, lazy, Suspense } from 'react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from './components/ui/tabs';
 import { SlotGrid } from './components/SlotGrid';
 import { KanbanBoard } from './components/KanbanBoard';
@@ -17,10 +17,14 @@ import { EntreguesTab } from './components/EntreguesTab';
 
 import { LogoutModal } from './components/LogoutModal';
 import { LoginScreen, SplashScreen } from './components/TelaLogin';
+// o Painel do Dono só é baixado por quem é dono (as lojas não carregam esse código)
+const PainelDono = lazy(() => import('./components/dono/PainelDono').then((m) => ({ default: m.PainelDono })));
+import { AvisoSistema } from './components/AvisoSistema';
+import { nomeLoja, logoLoja } from '../lib/lojaAtual';
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
-  const { user, loading, error, isAuthenticated, login, logout, isAdmin } = useAuth();
+  const { user, loading, error, isAuthenticated, login, logout, isAdmin, isDono } = useAuth();
 
   // ✅ NOVO: slots já queimados hoje (compartilhado entre todos os dispositivos)
   const { marcarUsado } = useSlotsUsadosHoje();
@@ -44,7 +48,8 @@ export default function App() {
   // 🔥 Escuta os pets do dia em tempo real
   // ✅ Depende da CONTA (uid) e do DIA: se a conta mudar ou o dia virar
   //    sem recarregar a página, a lista é zerada e buscada de novo.
-  const uid = user?.uid ?? null;
+  // ✅ o dono do sistema não tem loja: nada da fila é carregado para ele
+  const uid = isDono ? null : user?.uid ?? null;
   useEffect(() => {
     setPets([]); // nunca mostra a lista de outra conta / de outro dia
     if (!uid) return;
@@ -106,10 +111,22 @@ export default function App() {
             const success = await login(email, password);
             // ✅ só dá boas-vindas quando o acesso foi realmente liberado;
             //    em caso de recusa, o motivo aparece na própria tela de login
-            if (success) toast.success('Bem-vindo ao Elite Pet Shop! 🐾');
+            if (success) toast.success(`Bem-vindo ao ${nomeLoja() || 'Pata & Gestão'}! 🐾`);
             return success;
           }}
         />
+      </>
+    );
+  }
+
+  // ✅ Dono do sistema: abre o Painel do Dono em vez da fila
+  if (isDono) {
+    return (
+      <>
+        <Toaster position="top-right" richColors />
+        <Suspense fallback={<SplashScreen />}>
+          <PainelDono nomeDono={user?.displayName || user?.email?.split('@')[0] || 'Dono'} onLogout={logout} />
+        </Suspense>
       </>
     );
   }
@@ -402,8 +419,8 @@ export default function App() {
             <div className="flex items-center gap-4">
               <div className="bg-white rounded-xl px-4 py-2 shadow-md">
                 <img
-                  src="/logo-elite.png"
-                  alt="Elite Pet Shop"
+                  src={logoLoja()}
+                  alt={nomeLoja()}
                   width={63}
                   height={40}
                   className="h-10 w-auto object-contain"
@@ -418,7 +435,7 @@ export default function App() {
 
             <div className="flex-1 flex justify-center">
               <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
-                Elite Pet Shop
+                {nomeLoja()}
               </h1>
             </div>
 
@@ -444,6 +461,8 @@ export default function App() {
         </div>
 
         <div className="max-w-7xl mx-auto px-6 py-8">
+          <AvisoSistema />
+
           {/* ✅ Aviso de pets esquecidos em dias anteriores */}
           {pendentes.length > 0 && (
             <div className="mb-6">

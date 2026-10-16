@@ -1,5 +1,4 @@
 import {
-  doc,
   onSnapshot,
   setDoc,
   updateDoc,
@@ -7,14 +6,14 @@ import {
   arrayRemove,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase'; // ⚠️ ajuste para o mesmo caminho usado no racaService
+import { docLoja } from '../lib/loja';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
 
 export { idDoDia, idDoDiaDe }; // mantém compatibilidade com imports existentes
 
 const COL = 'slotsUsados';
 
-const refDia = (dia: string) => doc(db, COL, dia);
+const refDia = (dia: string) => docLoja(COL, dia);
 
 /** Escuta em tempo real os slots queimados de um dia. */
 export function ouvirSlotsUsados(

@@ -15,6 +15,7 @@ import {
   formatarMinutos, gerarDicas, type Periodo, type LogDoDia, type FichaResumo, type Dica, type TipoDica,
 } from '../../utils/analytics';
 import { linkWhatsAppSaudade } from '../../utils/whatsapp';
+import { nomeLoja } from '../../lib/lojaAtual';
 
 // Paleta do painel (inspirada no modelo aprovado pelo André)
 const C = { azul: '#38a3f5', verde: '#2dd4a7', coral: '#f87e8b', roxo: '#a26cf0', laranja: '#fdb446', trilho: '#e3edf6' };
@@ -226,7 +227,7 @@ export default function AnalyticsModal({ onClose, carregar = carregarDadosAnalis
             <div className="bg-white/20 p-2 rounded-lg"><BarChart3 className="w-5 h-5 text-white" /></div>
             <div>
               <h2 className="text-white font-bold text-base">Análises</h2>
-              <p className="text-indigo-200 text-xs">Elite Pet Shop{calc ? ` · período de ${fmtDia(calc.inicio)} a ${fmtDia(calc.fim)}` : ''}</p>
+              <p className="text-indigo-200 text-xs">{nomeLoja()}{calc ? ` · período de ${fmtDia(calc.inicio)} a ${fmtDia(calc.fim)}` : ''}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white transition p-1" aria-label="Fechar"><X size={20} /></button>

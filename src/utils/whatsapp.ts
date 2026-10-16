@@ -1,4 +1,5 @@
 // ✅ Link do WhatsApp com mensagem pronta (abre o app, sem custo de envio).
+import { nomeLoja } from '../lib/lojaAtual';
 
 /** Telefone só com dígitos e com o código do Brasil (55). Null se não der para usar. */
 export function telefoneWhatsApp(telefone?: string | null): string | null {
@@ -10,7 +11,7 @@ export function telefoneWhatsApp(telefone?: string | null): string | null {
 
 export function mensagemPetPronto(nomeTutor: string, nomePet: string): string {
   const tutor = (nomeTutor || '').trim().split(/\s+/)[0];
-  return `Olá${tutor ? `, ${tutor}` : ''}! 🐾 O(a) ${nomePet} já está pronto(a) para retirada aqui no Elite Pet Shop. Estamos te esperando!`;
+  return `Olá${tutor ? `, ${tutor}` : ''}! 🐾 O(a) ${nomePet} já está pronto(a) para retirada aqui no ${nomeLoja() || 'nosso petshop'}. Estamos te esperando!`;
 }
 
 /** URL wa.me pronta, ou null se o telefone não for válido. */
@@ -25,6 +26,6 @@ export function linkWhatsAppSaudade(telefone: string | null | undefined, nomeTut
   const numero = telefoneWhatsApp(telefone);
   if (!numero) return null;
   const tutor = (nomeTutor || '').trim().split(/\s+/)[0];
-  const msg = `Olá${tutor ? `, ${tutor}` : ''}! 🐾 Estamos com saudade do(a) ${nomePet} aqui no Elite Pet Shop. Que tal agendar um banho? Estamos te esperando!`;
+  const msg = `Olá${tutor ? `, ${tutor}` : ''}! 🐾 Estamos com saudade do(a) ${nomePet} aqui no ${nomeLoja() || 'nosso petshop'}. Que tal agendar um banho? Estamos te esperando!`;
   return `https://wa.me/${numero}?text=${encodeURIComponent(msg)}`;
 }

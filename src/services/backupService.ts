@@ -1,14 +1,15 @@
 // ✅ Backup manual dos dados (o plano gratuito do Firebase não tem backup automático).
 // Lê as coleções e devolve tudo num único objeto, pronto para salvar em arquivo JSON.
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, query, where } from 'firebase/firestore';
 import { db } from '../lib/firebase';
+import { colLoja, lojaId } from '../lib/loja';
 import { idDoDia } from '../utils/dias';
 import { diasAnteriores } from './petService';
 
 /** Quantos dias de fila/entregas entram no backup (além de hoje). */
 export const DIAS_NO_BACKUP = 90;
 
-const COLECOES_FIXAS = ['usuarios', 'profissionais', 'racas', 'petsCadastro', 'contadores', 'slotsUsados'] as const;
+const COLECOES_FIXAS = ['profissionais', 'racas', 'petsCadastro', 'contadores', 'slotsUsados'] as const;
 
 type Docs = Record<string, any>;
 
@@ -24,8 +25,17 @@ function limpar(valor: any): any {
   return valor;
 }
 
+// Só os funcionários desta loja (as regras não deixam ler os das outras)
+async function lerUsuariosDaLoja(): Promise<Docs> {
+  const snap = await getDocs(query(collection(db, 'usuarios'), where('lojaId', '==', lojaId())));
+  const out: Docs = {};
+  snap.forEach((d: any) => { const u = d.data(); if (u.lojaId === lojaId()) out[d.id] = limpar(u); });
+  return out;
+}
+
+// caminho dentro da loja atual (ex.: "dias/2026-10-02/pets")
 async function lerColecao(caminho: string): Promise<Docs> {
-  const snap = await getDocs(collection(db, caminho));
+  const snap = await getDocs(colLoja(...caminho.split('/')));
   const out: Docs = {};
   snap.forEach((d: any) => { out[d.id] = limpar(d.data()); });
   return out;
@@ -33,7 +43,8 @@ async function lerColecao(caminho: string): Promise<Docs> {
 
 export async function gerarBackup(hoje: string = idDoDia()) {
   const backup: Docs = {
-    sistema: 'Elite Pet Shop',
+    sistema: 'Pata & Gestão',
+    loja: lojaId(),
     geradoEm: new Date().toISOString(),
     diasIncluidos: DIAS_NO_BACKUP + 1,
     colecoes: {} as Docs,
@@ -41,6 +52,7 @@ export async function gerarBackup(hoje: string = idDoDia()) {
   };
 
   for (const c of COLECOES_FIXAS) backup.colecoes[c] = await lerColecao(c);
+  backup.colecoes.usuarios = await lerUsuariosDaLoja();
 
   const dias = [...diasAnteriores(hoje, DIAS_NO_BACKUP), hoje];
   // de 10 em 10 dias, para não sobrecarregar a conexão do tablet
@@ -55,7 +67,7 @@ export async function gerarBackup(hoje: string = idDoDia()) {
   return backup;
 }
 
-/** Nome do arquivo: backup-elite-pet-shop-2026-10-02.json */
+/** Nome do arquivo: backup-elite-pet-shop-2026-10-02.json (id da loja + dia) */
 export function nomeArquivoBackup(hoje: string = idDoDia()) {
-  return `backup-elite-pet-shop-${hoje}.json`;
+  return `backup-${lojaId()}-${hoje}.json`;
 }

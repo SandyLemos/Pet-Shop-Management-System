@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Users, Plus, Pencil, Trash2, AlertTriangle, UserCircle2, ShieldCheck, User } from 'lucide-react';
-import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc, Timestamp, query, where } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
 import { firebaseConfig, db } from '../../lib/firebase';
+import { lojaId } from '../../lib/loja';
 import { toast } from 'sonner';
 import { initializeApp, deleteApp } from 'firebase/app';
 
@@ -71,7 +72,7 @@ function CardCriarUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
     try {
       const cred = await createUserWithEmailAndPassword(authSecundario, email, senha);
       await setDoc(doc(db, 'usuarios', cred.user.uid), {
-        id: cred.user.uid, nome, sobrenome, funcao, role, email, criadoEm: Timestamp.now(),
+        id: cred.user.uid, nome, sobrenome, funcao, role, email, lojaId: lojaId(), criadoEm: Timestamp.now(),
       });
       toast.success(`Usuário ${nome} criado com sucesso! 🎉`);
       onSuccess();
@@ -254,8 +255,9 @@ export function SecaoUsuarios() {
   const carregarUsuarios = async () => {
     setLoading(true);
     try {
-      const snapshot = await getDocs(collection(db, 'usuarios'));
-      setUsuarios(snapshot.docs.map(d => ({ id: d.id, ...d.data() })) as UsuarioFirestore[]);
+      // ✅ só os funcionários desta loja
+      const snapshot = await getDocs(query(collection(db, 'usuarios'), where('lojaId', '==', lojaId())));
+      setUsuarios(snapshot.docs.map(d => ({ id: d.id, ...d.data() })).filter((u: any) => u.lojaId === lojaId()) as UsuarioFirestore[]);
     } catch {
       toast.error('Erro ao carregar usuários.');
     } finally {

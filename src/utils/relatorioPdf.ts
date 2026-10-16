@@ -3,6 +3,7 @@ import type { LogEntry } from '../services/petService';
 import jsPDF from 'jspdf';
 import autoTable from 'jspdf-autotable';
 import { idDoDia } from './dias';
+import { lojaId, nomeLoja } from '../lib/lojaAtual';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 // ✅ Data de hoje no fuso de São Paulo (antes usava UTC: após 21h virava "amanhã")
@@ -168,7 +169,7 @@ export function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
   pdf.setTextColor(255, 255, 255);
   pdf.setFontSize(16);
   pdf.setFont('helvetica', 'bold');
-  pdf.text('ELITE PET SHOP', pageW / 2, 12, { align: 'center' });
+  pdf.text(nomeLoja().toUpperCase(), pageW / 2, 12, { align: 'center' });
   pdf.setFontSize(9);
   pdf.setFont('helvetica', 'normal');
   pdf.text('Relatório de Atendimentos', pageW / 2, 19, { align: 'center' });
@@ -263,12 +264,12 @@ export function gerarPDF(logs: LogEntry[], labelPeriodo: string) {
     pdf.setFontSize(7);
     pdf.setTextColor(150);
     pdf.text(
-      `Elite Pet Shop — Página ${i} de ${pageCount}`,
+      `${nomeLoja()} — Página ${i} de ${pageCount}`,
       pageW / 2,
       pdf.internal.pageSize.getHeight() - 5,
       { align: 'center' },
     );
   }
 
-  pdf.save(`relatorio-elite-pet-shop-${labelPeriodo.replace(/\//g, '-')}.pdf`);
+  pdf.save(`relatorio-${lojaId()}-${labelPeriodo.replace(/\//g, '-')}.pdf`);
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import { getRacas, addRaca, updateRaca, deleteRaca, type Raca, type Especie } from '../services/racaService';
+import { aoTrocarDeLoja } from '../lib/lojaAtual';
 
 /* ------------------------------------------------------------------ *
  * Store compartilhado: todas as instâncias de useRacas() leem e
@@ -16,6 +17,13 @@ const subscribe = (l: () => void) => {
   return () => { listeners.delete(l); };
 };
 const getSnapshot = () => cache;
+
+// ✅ Cada loja tem suas raças: trocou de loja, busca de novo
+aoTrocarDeLoja(() => {
+  carregado = false;
+  cache = [];
+  listeners.forEach(l => l());
+});
 
 const ordenar = (l: Raca[]) => [...l].sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
 

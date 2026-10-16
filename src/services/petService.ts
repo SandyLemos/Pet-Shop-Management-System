@@ -1,6 +1,5 @@
 // src/services/petService.ts
 import {
-  collection,
   addDoc,
   onSnapshot,
   query,
@@ -21,6 +20,7 @@ import {
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
+import { colLoja, docLoja } from '../lib/loja';
 import type { Pet, PetCadastro, Profissional } from '../app/types/pet';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
 import { TUTOR_REMOVIDO } from '../utils/lgpd';
@@ -39,11 +39,11 @@ export function getTodayKey(): string {
 
 /** Referência da coleção global de profissionais */
 const profissionaisCollection = () =>
-  collection(db, 'profissionais');
+  colLoja('profissionais');
 
 /** Referência da coleção global de cadastros permanentes de pets */
 const petsCadastroCollection = () =>
-  collection(db, 'petsCadastro');
+  colLoja('petsCadastro');
 
 // ─── Helper: inverte uma string de dígitos ────────────────────────────────
 function inverterString(str: string): string {
@@ -86,7 +86,7 @@ export function subscribeToPets(
   /** ✅ dia da fila a escutar; o App troca este valor na virada do dia */
   dia: string = getTodayKey(),
 ): () => void {
-  const q = query(collection(db, 'dias', dia, 'pets'), orderBy('checkInTime', 'asc'));
+  const q = query(colLoja('dias', dia, 'pets'), orderBy('checkInTime', 'asc'));
 
   return onSnapshot(
     q,
@@ -136,7 +136,7 @@ export type { PetCadastro };
  * Formato: "PET-000123"
  */
 export async function gerarPetNumber(): Promise<string> {
-  const contadorRef = doc(db, 'contadores', 'petNumber');
+  const contadorRef = docLoja('contadores', 'petNumber');
 
   const numero = await runTransaction(db, async (tx) => {
     const snap = await tx.get(contadorRef);
@@ -241,7 +241,7 @@ const INICIO_DO_SISTEMA = '2026-01-01';
 export async function apagarDadosTutor(petNumber: string): Promise<number> {
   // Dias com documento + todos os dias desde o início do sistema (dias antigos
   // podem ter só as subcoleções, sem o documento do dia)
-  const comDocumento = (await getDocs(collection(db, 'dias'))).docs.map((d) => d.id);
+  const comDocumento = (await getDocs(colLoja('dias'))).docs.map((d) => d.id);
   const dias = [...new Set([...comDocumento, ...listarDias(INICIO_DO_SISTEMA, idDoDia())])];
   const doPet = (snap: any) => snap.docs.filter((d: any) => d.data().petNumber === petNumber);
   const buscar = async (sub: 'pets' | 'logs') => {
@@ -249,7 +249,7 @@ export async function apagarDadosTutor(petNumber: string): Promise<number> {
     // de 10 em 10 dias, para não sobrecarregar a conexão do tablet
     for (let i = 0; i < dias.length; i += 10) {
       const snaps = await Promise.all(dias.slice(i, i + 10).map((dia) =>
-        getDocs(query(collection(db, 'dias', dia, sub), where('petNumber', '==', petNumber))).then((s) =>
+        getDocs(query(colLoja('dias', dia, sub), where('petNumber', '==', petNumber))).then((s) =>
           doPet(s).map((d: any) => ({ dia, id: d.id, data: d.data() })),
         ),
       ));
@@ -264,7 +264,7 @@ export async function apagarDadosTutor(petNumber: string): Promise<number> {
   // 2️⃣ Histórico: troca só o nome do tutor (a regra do Firestore só deixa mudar esse campo)
   const logs = (await buscar('logs')).filter((l) => l.data.nomeTutor !== TUTOR_REMOVIDO);
   await Promise.all(logs.map((l) =>
-    updateDoc(doc(db, 'dias', l.dia, 'logs', l.id), { nomeTutor: TUTOR_REMOVIDO }),
+    updateDoc(docLoja('dias', l.dia, 'logs', l.id), { nomeTutor: TUTOR_REMOVIDO }),
   ));
 
   // 3️⃣ Por último a ficha: se algo falhar antes, dá para tentar de novo
@@ -423,10 +423,10 @@ export async function addPet(
     foto:      petData.foto,
   };
 
-  const diaRef      = doc(db, 'dias', dia);
-  const usadosRef   = doc(db, 'slotsUsados', dia);
-  const contadorRef = doc(db, 'contadores', 'petNumber');
-  const petRef      = doc(collection(db, 'dias', dia, 'pets')); // id gerado aqui
+  const diaRef      = docLoja('dias', dia);
+  const usadosRef   = docLoja('slotsUsados', dia);
+  const contadorRef = docLoja('contadores', 'petNumber');
+  const petRef      = doc(colLoja('dias', dia, 'pets')); // id gerado aqui
 
   const petNumber = await runTransaction(db, async (tx) => {
     // 1️⃣ Leituras (a transação exige todas antes de qualquer escrita)
@@ -491,14 +491,14 @@ export async function addPet(
 export async function garantirReservasDeVaga(dia: string, pets: Pet[]): Promise<number> {
   if (pets.length === 0) return 0;
 
-  const diaRef = doc(db, 'dias', dia);
+  const diaRef = docLoja('dias', dia);
   const diaSnap = await getDoc(diaRef);
   const ocupados: number[] = diaSnap.exists() ? (diaSnap.data().slotsOcupados ?? []) : [];
   const semReserva = pets.filter((p) => !ocupados.includes(p.slotNumber));
 
   let reservadas = 0;
   for (const p of semReserva) {
-    const petRef = doc(db, 'dias', dia, 'pets', p.id);
+    const petRef = docLoja('dias', dia, 'pets', p.id);
     const reservou = await runTransaction(db, async (tx) => {
       const petSnap = await tx.get(petRef);
       const diaAtual = await tx.get(diaRef);
@@ -538,7 +538,7 @@ export async function updatePet(
   /** ✅ dia da fila do pet (pet.dia). Sem ele, usa hoje (comportamento antigo). */
   dia: string = getTodayKey(),
 ): Promise<void> {
-  const petRef = doc(db, 'dias', dia, 'pets', petId);
+  const petRef = docLoja('dias', dia, 'pets', petId);
 
   // Remove campos undefined — o Firestore rejeita undefined no updateDoc
   // ✅ e os campos que são só do app (id, dia), que não vão para o banco
@@ -557,14 +557,14 @@ export async function updateProfissional(
   id: string,
   data: Partial<Omit<Profissional, 'id'>>,
 ): Promise<void> {
-  const ref = doc(db, 'profissionais', id);
+  const ref = docLoja('profissionais', id);
   await updateDoc(ref, { ...data });
 }
 
 // ─── Exclusão — Profissional ──────────────────────────────────────────────
 
 export async function deleteProfissional(id: string): Promise<void> {
-  const ref = doc(db, 'profissionais', id);
+  const ref = docLoja('profissionais', id);
   await deleteDoc(ref);
 }
 
@@ -652,9 +652,9 @@ export async function encerrarPet(
   // 2️⃣ ✅ TRANSAÇÃO: confere que o pet ainda está na fila, grava o log,
   // tira o pet da fila e libera a vaga — tudo junto ou nada. Um toque duplo
   // (ou dois tablets) não gera log repetido: o segundo recebe JA_ENCERRADO.
-  const petRef = doc(db, 'dias', diaKey, 'pets', pet.id);
-  const logRef = doc(collection(db, 'dias', diaKey, 'logs'));
-  const diaRef = doc(db, 'dias', diaKey);
+  const petRef = docLoja('dias', diaKey, 'pets', pet.id);
+  const logRef = doc(colLoja('dias', diaKey, 'logs'));
+  const diaRef = docLoja('dias', diaKey);
 
   await runTransaction(db, async (tx) => {
     const petSnap = await tx.get(petRef);
@@ -690,7 +690,7 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     : serverTimestamp();
 
   // 1️⃣ Grava log do aviso
-  await addDoc(collection(db, 'dias', diaKey, 'logs'), {
+  await addDoc(colLoja('dias', diaKey, 'logs'), {
     tipo:                'avisado',
     petId:               pet.id,
     petNumber:           (pet as any).petNumber       ?? null,
@@ -725,7 +725,7 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
   });
 
   // 2️⃣ Atualiza o pet — salva quem avisou direto no documento
-  const petRef = doc(db, 'dias', diaKey, 'pets', pet.id);
+  const petRef = docLoja('dias', diaKey, 'pets', pet.id);
   await updateDoc(petRef, {
     avisado:       true,
     avisadoEm:     new Date().toISOString(),
@@ -819,7 +819,7 @@ function logFromFirestore(id: string, data: any): LogEntry {
 // ─── Buscar logs de um dia específico ─────────────────────────────────────
 
 export async function getLogsByDate(dateKey: string): Promise<LogEntry[]> {
-  const col  = collection(db, 'dias', dateKey, 'logs');
+  const col  = colLoja('dias', dateKey, 'logs');
   const q    = query(col, orderBy('checkInTime', 'asc'));
   const snap = await getDocs(q);
   return snap.docs.map((d) => logFromFirestore(d.id, d.data()));
@@ -896,7 +896,7 @@ export async function getPetsPendentes(
   const dias = diasAnteriores(hoje, quantidade);
   const porDia = await Promise.all(
     dias.map(async (d) => {
-      const snap = await getDocs(collection(db, 'dias', d, 'pets'));
+      const snap = await getDocs(colLoja('dias', d, 'pets'));
       return snap.docs.map((doc) => fromFirestore(doc.id, doc.data(), d));
     }),
   );

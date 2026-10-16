@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(npx firebase deploy:*)",
+      "Bash(npx firebase deploy:*)"
+    ]
+  }
+}

@@ -1,3 +1,4 @@
+import { definirLoja } from '../src/lib/lojaAtual';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { criarFirestoreFalso } from './fakeFirestore';
 
@@ -6,7 +7,7 @@ vi.mock('../src/lib/firebase', () => ({ db: {} }));
 vi.mock('firebase/auth', () => ({ getAuth: () => ({ currentUser: null }) }));
 vi.mock('firebase/firestore', async () => {
   const { criarFirestoreFalso: criar } = await import('./fakeFirestore');
-  ff.ref = criar();
+  ff.ref = criar({ raiz: 'lojas/elite-pet-shop' });
   return ff.ref.mod;
 });
 
@@ -15,6 +16,7 @@ import {
 } from '../src/services/petService';
 
 const fs = () => ff.ref as ReturnType<typeof criarFirestoreFalso>;
+definirLoja({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' });
 
 const petDeOntem: any = {
   id: 'p9', dia: '2026-10-01', slotNumber: 7, nomePet: 'Bidu', nomeTutor: 'Ana',

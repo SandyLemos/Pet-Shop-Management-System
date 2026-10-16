@@ -5,6 +5,7 @@ import {
   liberarSlotUsado,
 } from '../services/slotUsageService';
 import { idDoDia } from '../utils/dias';
+import { aoTrocarDeLoja } from '../lib/lojaAtual';
 
 /* Store global único: um só listener no Firestore para toda a app,
    compartilhado por SlotGrid, KanbanBoard e PetRegistration. */
@@ -18,11 +19,24 @@ const emit = () => listeners.forEach(l => l());
 
 function conectar() {
   unsub?.();
-  unsub = ouvirSlotsUsados(dia, slots => {
-    cache = new Set(slots);
-    emit();
-  });
+  unsub = null;
+  try {
+    unsub = ouvirSlotsUsados(dia, slots => {
+      cache = new Set(slots);
+      emit();
+    });
+  } catch {
+    // ✅ ninguém entrou ainda (sem loja): conecta quando a loja for definida
+  }
 }
+
+// ✅ Trocou de loja/conta: zera e escuta a loja nova
+aoTrocarDeLoja(() => {
+  cache = new Set();
+  emit();
+  if (listeners.size > 0) conectar();
+  else { unsub?.(); unsub = null; }
+});
 
 /** Vira o dia: novo doc, cache zerado. */
 function sincronizarDia() {

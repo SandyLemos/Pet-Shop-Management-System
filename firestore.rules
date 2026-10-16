@@ -7,7 +7,11 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // NOVO: funcionário = está logado E tem registro em /usuarios.
+    function perfil() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    // Funcionário = está logado E tem registro em /usuarios.
     // Conta criada por estranho (sem registro) não acessa nada.
     function isStaff() {
       return isAuthenticated() &&
@@ -15,97 +19,244 @@ service cloud.firestore {
     }
 
     function isAdmin() {
+      return isStaff() && perfil().role == 'admin';
+    }
+
+    // NOVO: dono do sistema (Pata & Gestão). Marcado SÓ pelo console do Firebase.
+    function isDono() {
       return isAuthenticated() &&
-        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.role == 'admin';
+        exists(/databases/$(database)/documents/donos/$(request.auth.uid));
+    }
+
+    // NOVO: funcionário DESTA loja / admin DESTA loja
+    function daLoja(lojaId) {
+      return isStaff() && perfil().lojaId == lojaId;
+    }
+
+    function adminDaLoja(lojaId) {
+      return daLoja(lojaId) && perfil().role == 'admin';
+    }
+
+    // —— Dono do sistema —————————————————————————————————————————
+    match /donos/{uid} {
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      allow write: if false; // só pelo console
     }
 
     // —— Usuários ————————————————————————————————————————————————
     match /usuarios/{userId} {
-      // cada um lê o próprio registro (necessário no login);
-      // a lista completa só para funcionários
-      allow read: if isAuthenticated() && (request.auth.uid == userId || isStaff());
+      // cada um lê o próprio registro (login); o admin lê os da loja dele; o dono lê todos
+      allow read: if isAuthenticated() && (
+                    request.auth.uid == userId
+                    || isDono()
+                    || (isStaff() && resource.data.lojaId == perfil().lojaId));
 
-      // MUDOU: só o admin cria registro (é o que o painel Admin faz).
-      // Antes qualquer conta podia criar o próprio registro como 'user'.
-      allow create: if isAdmin()
-                    && request.resource.data.role in ['admin', 'user'];
+      // admin cria funcionário só na loja dele; o dono cria o admin de uma loja nova
+      allow create: if request.resource.data.role in ['admin', 'user']
+                    && (isDono() || adminDaLoja(request.resource.data.lojaId));
 
-      // admin edita qualquer um, mas não muda o próprio papel
-      allow update: if isAdmin()
-                    && request.resource.data.role in ['admin', 'user']
-                    && (userId != request.auth.uid
-                        || request.resource.data.role == resource.data.role);
+      // admin edita os da loja dele (sem trocar de loja nem o próprio papel);
+      // o dono pode ligar um funcionário a uma loja (migração)
+      allow update: if request.resource.data.role in ['admin', 'user']
+                    && (isDono()
+                        || (adminDaLoja(resource.data.lojaId)
+                            && request.resource.data.lojaId == resource.data.lojaId
+                            && (userId != request.auth.uid
+                                || request.resource.data.role == resource.data.role)));
 
-      // admin exclui qualquer um, menos a si mesmo
-      allow delete: if isAdmin() && userId != request.auth.uid;
+      // admin exclui os da loja dele, menos a si mesmo
+      allow delete: if userId != request.auth.uid
+                    && (isDono() || adminDaLoja(resource.data.lojaId));
     }
 
-    // —— Profissionais ———————————————————————————————————————————
+    // —— Lojas (NOVO: cada loja tem seu espaço) ——————————————————
+    match /lojas/{lojaId} {
+      allow read: if isDono() || daLoja(lojaId);
+      allow write: if isDono();
+
+      // o dono lê tudo de todas as lojas (painel) e grava na migração
+      match /{documento=**} {
+        allow read: if isDono();
+        allow create, update: if isDono();
+      }
+
+      match /profissionais/{profissionalId} {
+        allow read: if daLoja(lojaId);
+        allow create, update, delete: if adminDaLoja(lojaId);
+      }
+
+      match /petsCadastro/{petNumber} {
+        allow read: if daLoja(lojaId);
+        allow create, update: if daLoja(lojaId)
+                      && request.resource.data.petNumber == petNumber
+                      && request.resource.data.nomePet is string
+                      && request.resource.data.nomePet.size() > 0
+                      && request.resource.data.nomePet.size() <= 100
+                      && request.resource.data.nomeTutor is string
+                      && request.resource.data.nomeTutor.size() <= 100;
+        allow delete: if adminDaLoja(lojaId);
+      }
+
+      match /racas/{racaId} {
+        allow read: if daLoja(lojaId);
+        allow create: if daLoja(lojaId)
+                      && request.resource.data.keys().hasOnly(['nome', 'especie', 'criadoEm'])
+                      && request.resource.data.nome is string
+                      && request.resource.data.nome.size() > 0
+                      && request.resource.data.nome.size() <= 60
+                      && request.resource.data.especie in ['cao', 'gato'];
+        allow update: if adminDaLoja(lojaId)
+                      && request.resource.data.diff(resource.data)
+                           .affectedKeys().hasOnly(['nome', 'atualizadoEm'])
+                      && request.resource.data.nome is string
+                      && request.resource.data.nome.size() > 0
+                      && request.resource.data.nome.size() <= 60;
+        allow delete: if adminDaLoja(lojaId);
+      }
+
+      // o contador só começa em 1 e sobe de 1 em 1 (ninguém volta o número)
+      match /contadores/{contadorId} {
+        allow read:   if daLoja(lojaId);
+        allow create: if daLoja(lojaId) && request.resource.data.valor == 1;
+        allow update: if daLoja(lojaId)
+                      && request.resource.data.valor == resource.data.valor + 1;
+        allow delete: if false;
+      }
+
+      match /slotsUsados/{dia} {
+        allow read:           if daLoja(lojaId);
+        allow create, update: if daLoja(lojaId) && request.resource.data.slots is list;
+        allow delete:         if adminDaLoja(lojaId);
+      }
+
+      match /dias/{diaId} {
+        allow read, create, update: if daLoja(lojaId);
+        allow delete: if adminDaLoja(lojaId);
+
+        match /pets/{petId} {
+          allow read:   if daLoja(lojaId);
+          allow create, update: if daLoja(lojaId)
+                      && request.resource.data.slotNumber is int
+                      && request.resource.data.slotNumber >= 1
+                      && request.resource.data.slotNumber <= 100
+                      && request.resource.data.status in
+                           ['espera', 'banho', 'escovar', 'tosa', 'finalizado']
+                      && request.resource.data.servico in
+                           ['banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao']
+                      && request.resource.data.nomePet is string
+                      && request.resource.data.nomePet.size() > 0
+                      && request.resource.data.nomePet.size() <= 100;
+          allow delete: if daLoja(lojaId);
+        }
+
+        match /logs/{logId} {
+          allow read:   if daLoja(lojaId);
+          allow create: if daLoja(lojaId);
+          // LGPD: só o admin, e só para trocar o nome do tutor por "Removido (LGPD)"
+          allow update: if adminDaLoja(lojaId)
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor'])
+                      && request.resource.data.nomeTutor == 'Removido (LGPD)';
+          allow delete: if adminDaLoja(lojaId);
+        }
+      }
+    }
+
+    // —— Mensalidades (só o dono) —————————————————————————————————
+    match /cobrancas/{cobrancaId} {
+      allow read, write: if isDono();
+    }
+
+    // —— Comunicados do dono para as lojas ————————————————————————
+    match /comunicados/{comunicadoId} {
+      allow read: if isDono() || isStaff();
+      allow write: if isDono();
+    }
+
+    // ════════════════════════════════════════════════════════════
+    // FORMATO ANTIGO (antes das várias lojas) — fica só durante a mudança.
+    // O dono lê tudo para copiar; depois da migração esta parte sai.
+    // ════════════════════════════════════════════════════════════
+    match /{colecao}/{documento=**} {
+      allow read: if isDono()
+                  && colecao in ['petsCadastro', 'profissionais', 'racas', 'contadores', 'slotsUsados', 'dias'];
+    }
+
+    // Funcionário ainda NÃO ligado a uma loja (versão antiga do app).
+    // Depois da migração todos têm loja, e a versão antiga para de gravar aqui.
+    function semLoja() {
+      return isStaff() && !('lojaId' in perfil());
+    }
+
+    function adminSemLoja() {
+      return semLoja() && perfil().role == 'admin';
+    }
+
+    // —— Profissionais (antigo) ——————————————————————————————————
     match /profissionais/{profissionalId} {
-      allow read: if isStaff();
-      allow create, update, delete: if isAdmin();
+      allow read: if semLoja();
+      allow create, update, delete: if adminSemLoja();
     }
 
     // —— Pets Cadastro (ficha permanente) ————————————————————————
     match /petsCadastro/{petNumber} {
-      allow read: if isStaff();
-      allow create, update: if isStaff()
+      allow read: if semLoja();
+      allow create, update: if semLoja()
                     && request.resource.data.petNumber == petNumber
                     && request.resource.data.nomePet is string
                     && request.resource.data.nomePet.size() > 0
                     && request.resource.data.nomePet.size() <= 100
                     && request.resource.data.nomeTutor is string
                     && request.resource.data.nomeTutor.size() <= 100;
-      allow delete: if isAdmin();
+      allow delete: if adminSemLoja();
     }
 
     // —— Raças (catálogo customizável) ————————————————————————————
     match /racas/{racaId} {
-      allow read: if isStaff();
+      allow read: if semLoja();
 
-      allow create: if isStaff()
+      allow create: if semLoja()
                     && request.resource.data.keys().hasOnly(['nome', 'especie', 'criadoEm'])
                     && request.resource.data.nome is string
                     && request.resource.data.nome.size() > 0
                     && request.resource.data.nome.size() <= 60
                     && request.resource.data.especie in ['cao', 'gato'];
 
-      allow update: if isAdmin()
+      allow update: if adminSemLoja()
                     && request.resource.data.diff(resource.data)
                          .affectedKeys().hasOnly(['nome', 'atualizadoEm'])
                     && request.resource.data.nome is string
                     && request.resource.data.nome.size() > 0
                     && request.resource.data.nome.size() <= 60;
 
-      allow delete: if isAdmin();
+      allow delete: if adminSemLoja();
     }
 
     // —— Contadores (petNumber sequencial) ———————————————————————
     // MUDOU: o contador só pode começar em 1 e subir de 1 em 1,
     // para ninguém voltar o número e sobrescrever fichas.
     match /contadores/{contadorId} {
-      allow read:   if isStaff();
-      allow create: if isStaff() && request.resource.data.valor == 1;
-      allow update: if isStaff()
+      allow read:   if semLoja();
+      allow create: if semLoja() && request.resource.data.valor == 1;
+      allow update: if semLoja()
                     && request.resource.data.valor == resource.data.valor + 1;
       allow delete: if false;
     }
 
     // —— Slots já usados no dia (grade compartilhada) ————————————
     match /slotsUsados/{dia} {
-      allow read:           if isStaff();
-      allow create, update: if isStaff() && request.resource.data.slots is list;
-      allow delete:         if isAdmin();
+      allow read:           if semLoja();
+      allow create, update: if semLoja() && request.resource.data.slots is list;
+      allow delete:         if adminSemLoja();
     }
 
-    // —— Dias ————————————————————————————————————————————————————
+    // —— Dias (antigo) ————————————————————————————————————————————————————
     match /dias/{diaId} {
-      allow read, create, update: if isStaff();
-      allow delete: if isAdmin();
+      allow read, create, update: if semLoja();
+      allow delete: if adminSemLoja();
 
       match /pets/{petId} {
-        allow read:   if isStaff();
-        allow create, update: if isStaff()
+        allow read:   if semLoja();
+        allow create, update: if semLoja()
                     && request.resource.data.slotNumber is int
                     && request.resource.data.slotNumber >= 1
                     && request.resource.data.slotNumber <= 100
@@ -116,18 +267,18 @@ service cloud.firestore {
                     && request.resource.data.nomePet is string
                     && request.resource.data.nomePet.size() > 0
                     && request.resource.data.nomePet.size() <= 100;
-        allow delete: if isStaff();
+        allow delete: if semLoja();
       }
 
       // aba "Entregues" lê para todos os funcionários; log não se edita
       match /logs/{logId} {
-        allow read:   if isStaff();
-        allow create: if isStaff();
+        allow read:   if semLoja();
+        allow create: if semLoja();
         // NOVO (LGPD): só o admin, e só para trocar o nome do tutor por "Removido (LGPD)"
-        allow update: if isAdmin()
+        allow update: if adminSemLoja()
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor'])
                     && request.resource.data.nomeTutor == 'Removido (LGPD)';
-        allow delete: if isAdmin();
+        allow delete: if adminSemLoja();
       }
 
       // REMOVIDO: /deletados — o app não usa mais (cai no bloqueio abaixo)

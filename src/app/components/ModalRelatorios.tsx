@@ -6,6 +6,7 @@ import type { RelatorioServicos } from '../../services/petService';
 import { idDoDiaDe } from '../../utils/dias';
 
 import { getTodayKeyLocal, formatDateBR, labelServico, gerarPDF } from '../../utils/relatorioPdf';
+import { nomeLoja } from '../../lib/lojaAtual';
 
 // ─── Modal de Relatórios ──────────────────────────────────────────────────────
 export function ModalRelatorios({ onClose }: { onClose: () => void }) {
@@ -125,7 +126,7 @@ export function ModalRelatorios({ onClose }: { onClose: () => void }) {
             <div className="bg-white/20 p-2 rounded-lg"><FileText className="w-5 h-5 text-white" /></div>
             <div>
               <h2 className="text-white font-bold text-base">Relatórios</h2>
-              <p className="text-indigo-200 text-xs">Elite Pet Shop</p>
+              <p className="text-indigo-200 text-xs">{nomeLoja()}</p>
             </div>
           </div>
           <button onClick={onClose} className="text-white/70 hover:text-white transition p-1"><X size={20} /></button>

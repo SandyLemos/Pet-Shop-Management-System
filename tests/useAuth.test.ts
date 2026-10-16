@@ -5,7 +5,7 @@ import { renderHook, act, waitFor } from '@testing-library/react';
 // ---------- Firebase falso ----------
 const fb = vi.hoisted(() => ({
   listener: null as null | ((u: any) => void),
-  docs: {} as Record<string, any>,          // uid -> dados de /usuarios
+  docs: {} as Record<string, any>,          // 'colecao/id' -> dados
   getDocError: null as any,                  // simula falta de internet
   signInResult: null as any,                 // user ou erro
   signOut: null as any,
@@ -23,15 +23,16 @@ vi.mock('firebase/auth', () => ({
   signOut: (...a: any[]) => fb.signOut(...a),
 }));
 vi.mock('firebase/firestore', () => ({
-  doc: (_db: any, _col: string, uid: string) => uid,
-  getDoc: async (uid: string) => {
+  doc: (_db: any, col: string, id: string) => `${col}/${id}`,
+  getDoc: async (caminho: string) => {
     if (fb.getDocError) throw fb.getDocError;
-    const d = fb.docs[uid];
+    const d = fb.docs[caminho];
     return { exists: () => !!d, data: () => d };
   },
 }));
 
-import { useAuth, MSG_ACESSO_NEGADO } from '../src/hooks/useAuth';
+import { useAuth, MSG_ACESSO_NEGADO, MSG_SEM_LOJA, MSG_LOJA_BLOQUEADA, MSG_TESTE_ACABOU } from '../src/hooks/useAuth';
+import { lojaId, nomeLoja } from '../src/lib/lojaAtual';
 
 const funcionario = { uid: 'func1', email: 'func@loja.com' };
 const admin = { uid: 'adm1', email: 'adm@loja.com' };
@@ -39,7 +40,11 @@ const estranho = { uid: 'xxx', email: 'teste.semacesso@x.com' };
 
 beforeEach(() => {
   fb.listener = null;
-  fb.docs = { func1: { role: 'user' }, adm1: { role: 'admin' } };
+  fb.docs = {
+    'usuarios/func1': { role: 'user', lojaId: 'elite' },
+    'usuarios/adm1': { role: 'admin', lojaId: 'elite' },
+    'lojas/elite': { nome: 'Elite Pet Shop', status: 'ativa' },
+  };
   fb.getDocError = null;
   fb.signInResult = null;
   fb.signOut = vi.fn(async () => { setTimeout(() => fb.listener?.(null), 0); });
@@ -142,5 +147,56 @@ describe('useAuth', () => {
     await act(async () => { await new Promise(r => setTimeout(r, 20)); });
     expect(result.current.isAuthenticated).toBe(true);
     expect(result.current.error).toBeNull();
+  });
+
+  describe('várias lojas', () => {
+    const entrar = async (user: any) => {
+      const { result } = renderHook(() => useAuth());
+      await act(async () => { fb.listener!(null); });
+      fb.signInResult = user;
+      let ok: any;
+      await act(async () => { ok = await result.current.login('x@x.com', '123456'); });
+      return { result, ok };
+    };
+
+    it('funcionário entra na loja dele: o sistema passa a usar a loja e o nome dela', async () => {
+      const { result, ok } = await entrar({ uid: 'func1', email: 'f@x.com' });
+      expect(ok).toBe(true);
+      expect(result.current.role).toBe('user');
+      expect(lojaId()).toBe('elite');
+      expect(nomeLoja()).toBe('Elite Pet Shop');
+    });
+
+    it('dono do sistema entra no Painel do Dono, sem loja', async () => {
+      fb.docs['donos/dono1'] = { nome: 'André' };
+      const { result, ok } = await entrar({ uid: 'dono1', email: 'dono@x.com' });
+      expect(ok).toBe(true);
+      expect(result.current.isDono).toBe(true);
+      expect(() => lojaId()).toThrow();
+    });
+
+    it('conta sem loja ligada é recusada com o motivo', async () => {
+      fb.docs['usuarios/sem'] = { role: 'user' };
+      const { result, ok } = await entrar({ uid: 'sem', email: 's@x.com' });
+      expect(ok).toBe(false);
+      expect(result.current.error).toBe(MSG_SEM_LOJA);
+      expect(fb.signOut).toHaveBeenCalled();
+    });
+
+    it('loja bloqueada não entra', async () => {
+      fb.docs['lojas/elite'].status = 'bloqueada';
+      const { result, ok } = await entrar({ uid: 'func1', email: 'f@x.com' });
+      expect(ok).toBe(false);
+      expect(result.current.error).toBe(MSG_LOJA_BLOQUEADA);
+    });
+
+    it('loja em teste: entra no prazo e é recusada depois que o teste acaba', async () => {
+      fb.docs['lojas/elite'] = { nome: 'Elite Pet Shop', status: 'teste', fimTeste: '2999-12-31' };
+      expect((await entrar({ uid: 'func1', email: 'f@x.com' })).ok).toBe(true);
+      fb.docs['lojas/elite'].fimTeste = '2020-01-01';
+      const { result, ok } = await entrar({ uid: 'func1', email: 'f@x.com' });
+      expect(ok).toBe(false);
+      expect(result.current.error).toBe(MSG_TESTE_ACABOU);
+    });
   });
 });

@@ -1,15 +1,13 @@
 import {
-  collection,
   addDoc,
   getDocs,
   query,
   where,
   orderBy,
   deleteDoc,
-  doc,
   serverTimestamp,
 } from 'firebase/firestore';
-import { db } from '../lib/firebase';
+import { colLoja, docLoja } from '../lib/loja';
 import { updateDoc } from 'firebase/firestore';
 
 export type Especie = 'cao' | 'gato';
@@ -24,7 +22,7 @@ const COL = 'racas';
 
 /** Lista todas as raças customizadas salvas no Firestore. */
 export async function getRacas(): Promise<Raca[]> {
-  const snap = await getDocs(query(collection(db, COL), orderBy('nome')));
+  const snap = await getDocs(query(colLoja(COL), orderBy('nome')));
   return snap.docs.map(d => {
     const data = d.data();
     return {
@@ -41,14 +39,14 @@ export async function addRaca(nome: string, especie: Especie): Promise<Raca> {
   if (!nomeLimpo) throw new Error('NOME_VAZIO');
 
   const snap = await getDocs(
-    query(collection(db, COL), where('especie', '==', especie))
+    query(colLoja(COL), where('especie', '==', especie))
   );
   const existe = snap.docs.some(
     d => String(d.data().nome ?? '').toLowerCase() === nomeLimpo.toLowerCase()
   );
   if (existe) throw new Error('DUPLICADA');
 
-  const ref = await addDoc(collection(db, COL), {
+  const ref = await addDoc(colLoja(COL), {
     nome: nomeLimpo,
     especie,
     criadoEm: serverTimestamp(),
@@ -59,7 +57,7 @@ export async function addRaca(nome: string, especie: Especie): Promise<Raca> {
 
 /** Remove uma raça (só admin, conforme as regras do Firestore). */
 export async function deleteRaca(id: string): Promise<void> {
-  await deleteDoc(doc(db, COL, id));
+  await deleteDoc(docLoja(COL, id));
 }
 
 /** Renomeia uma raça. Lança Error('DUPLICADA') se o nome já existir na espécie. */
@@ -72,7 +70,7 @@ export async function updateRaca(
   if (!nomeLimpo) throw new Error('NOME_VAZIO');
 
   const snap = await getDocs(
-    query(collection(db, COL), where('especie', '==', especie))
+    query(colLoja(COL), where('especie', '==', especie))
   );
   const existe = snap.docs.some(
     d =>
@@ -81,7 +79,7 @@ export async function updateRaca(
   );
   if (existe) throw new Error('DUPLICADA');
 
-  await updateDoc(doc(db, COL, id), {
+  await updateDoc(docLoja(COL, id), {
     nome: nomeLimpo,
     atualizadoEm: serverTimestamp(),
   });

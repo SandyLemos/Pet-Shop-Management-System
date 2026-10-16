@@ -2,7 +2,11 @@
 // se um documento lido mudou antes do commit, a transação é refeita.
 type Data = Record<string, any>;
 
-export function criarFirestoreFalso() {
+/** raiz: prefixo dos caminhos relativos usados em get/set/lista (ex.: 'lojas/elite-pet-shop').
+ *  Caminhos que já começam em usuarios/, donos/, lojas/, cobrancas/ ou comunicados/ não recebem prefixo. */
+export function criarFirestoreFalso(opcoes: { raiz?: string } = {}) {
+  const absoluto = (p: string) =>
+    !opcoes.raiz || /^(usuarios|donos|lojas|cobrancas|comunicados)(\/|$)/.test(p) ? p : `${opcoes.raiz}/${p}`;
   const store = new Map<string, { data: Data; v: number }>();
   let auto = 0;
   let commits = 0;
@@ -39,7 +43,10 @@ export function criarFirestoreFalso() {
       const path = a?.kind === 'col' ? `${a.path}/${p[0] ?? `auto${++auto}`}` : p.join('/');
       return { path, id: path.split('/').at(-1) }; // igual ao real: referência tem .id
     },
-    query: (c: any) => c, orderBy: () => ({}), where: () => ({}), limit: () => ({}),
+    // where com '==' filtra de verdade; orderBy e limit são ignorados
+    query: (c: any, ...f: any[]) => ({ ...c, filtros: [...(c.filtros ?? []), ...f.filter((x) => x?.campo)] }),
+    orderBy: () => ({}), limit: () => ({}),
+    where: (campo: string, op: string, valor: any) => ({ campo, op, valor }),
     onSnapshot: () => () => {},
     serverTimestamp: () => 'TS',
     Timestamp: { fromDate: (d: Date) => d.toISOString() },
@@ -49,8 +56,13 @@ export function criarFirestoreFalso() {
     getDocs: async (c: any) => {
       const docs = [...store.keys()]
         .filter((k) => k.startsWith(c.path + '/') && !k.slice(c.path.length + 1).includes('/'))
-        .map((k) => snap(k));
+        .map((k) => snap(k))
+        .filter((d) => (c.filtros ?? []).every((f: any) => f.op !== '==' || d.data()?.[f.campo] === f.valor));
       return { docs, forEach: (f: any) => docs.forEach(f), empty: docs.length === 0 };
+    },
+    getCountFromServer: async (c: any) => {
+      const n = (await mod.getDocs(c)).docs.length;
+      return { data: () => ({ count: n }) };
     },
     setDoc: async (r: any, d: Data, o?: any) => gravar(r.path, d, !!o?.merge),
     updateDoc: async (r: any, d: Data) => {
@@ -87,9 +99,12 @@ export function criarFirestoreFalso() {
   return {
     mod,
     store,
-    get: (path: string) => store.get(path)?.data,
-    set: (path: string, data: Data) => gravar(path, data),
-    lista: (prefixo: string) => [...store.keys()].filter((k) => k.startsWith(prefixo + '/') && !k.slice(prefixo.length + 1).includes('/')),
+    get: (path: string) => store.get(absoluto(path))?.data,
+    set: (path: string, data: Data) => gravar(absoluto(path), data),
+    lista: (prefixo: string) => {
+      const p = absoluto(prefixo);
+      return [...store.keys()].filter((k) => k.startsWith(p + '/') && !k.slice(p.length + 1).includes('/'));
+    },
     commits: () => commits,
     limpar: () => { store.clear(); auto = 0; commits = 0; },
   };

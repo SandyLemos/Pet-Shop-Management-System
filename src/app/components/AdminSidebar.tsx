@@ -11,6 +11,7 @@ import { BackupButton } from './BackupButton';
 import { ModalRelatorios } from './ModalRelatorios';
 import { SecaoUsuarios } from './AdminUsuarios';
 import { SecaoProfissionais } from './AdminProfissionais';
+import { nomeLoja } from '../../lib/lojaAtual';
 
 // ─── AdminSidebar — Componente Principal (export default) ─────────────────────
 export default function AdminSidebar({
@@ -47,7 +48,7 @@ export default function AdminSidebar({
               </div>
               <div>
                 <h2 className="text-white font-bold text-base">Painel Admin</h2>
-                <p className="text-purple-200 text-xs">Elite Pet Shop</p>
+                <p className="text-purple-200 text-xs">{nomeLoja()}</p>
               </div>
             </div>
             <button

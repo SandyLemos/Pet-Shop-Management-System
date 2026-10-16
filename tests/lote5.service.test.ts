@@ -1,3 +1,4 @@
+import { definirLoja } from '../src/lib/lojaAtual';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { criarFirestoreFalso } from './fakeFirestore';
 
@@ -6,7 +7,7 @@ vi.mock('../src/lib/firebase', () => ({ db: {} }));
 vi.mock('firebase/auth', () => ({ getAuth: () => ({ currentUser: null }) }));
 vi.mock('firebase/firestore', async () => {
   const { criarFirestoreFalso: criar } = await import('./fakeFirestore');
-  ff.ref = criar();
+  ff.ref = criar({ raiz: 'lojas/elite-pet-shop' });
   return ff.ref.mod;
 });
 
@@ -14,6 +15,7 @@ import { marcarSlotUsado } from '../src/services/slotUsageService';
 import { atualizarFichaComEdicao } from '../src/services/petService';
 
 const fs = () => ff.ref as ReturnType<typeof criarFirestoreFalso>;
+definirLoja({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' });
 beforeEach(() => { fs().limpar(); });
 
 describe('Bug 5: slots usados nunca são apagados', () => {
@@ -27,7 +29,7 @@ describe('Bug 5: slots usados nunca são apagados', () => {
 
 describe('Bug 11: edição atualiza a ficha permanente', () => {
   it('atualiza só os campos informados, com busca por nome/telefone', async () => {
-    await fs().mod.setDoc({ path: 'petsCadastro/PET-000001' }, {
+    await fs().mod.setDoc({ path: 'lojas/elite-pet-shop/petsCadastro/PET-000001' }, {
       petNumber: 'PET-000001', nomePet: 'Rex', nomePetLower: 'rex', nomeTutor: 'Ana',
       telefone: '24999991234', telefoneReverso: '43219999942', raca: 'SRD', observacoes: 'manter',
     });
