@@ -26,7 +26,7 @@ export default function AdminSidebar({
   const [showAnalises, setShowAnalises]     = useState(false);
 
   return (
-    <>
+    <div className="painel-admin">
       {showRelatorios && <ModalRelatorios onClose={() => setShowRelatorios(false)} />}
       {showAnalises && (
         <Suspense fallback={null}>
@@ -42,7 +42,7 @@ export default function AdminSidebar({
         <div className="relative ml-auto w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
 
           {/* Header */}
-          <div className="bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-5 flex items-center justify-between flex-shrink-0">
+          <div className="topo-admin bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-5 flex items-center justify-between flex-shrink-0">
             <div className="flex items-center gap-3">
               <div className="bg-white/20 p-2 rounded-xl">
                 <ShieldCheck className="w-5 h-5 text-white" />
@@ -176,6 +176,6 @@ export default function AdminSidebar({
           </div>
         </div>
       </div>
-    </>
+    </div>
   );
 }

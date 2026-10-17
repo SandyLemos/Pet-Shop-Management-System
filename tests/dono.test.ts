@@ -23,7 +23,10 @@ import {
   linhasFinanceiro, situacaoDaLoja, alertasDoDono, resumoUso, idParaLoja, vencimentoNoMes,
   primeiroMesCobrado, comunicadoParaLoja, receitaPorMes, type Loja, type Cobranca, type DadosDono,
 } from '../src/utils/dono';
-import { carregarDadosDono, criarLoja, registrarPagamento, EMAIL_EM_USO } from '../src/services/donoService';
+import {
+  carregarDadosDono, criarLoja, registrarPagamento, EMAIL_EM_USO,
+  excluirLoja, nomeConfere, cadastrarProprietario, listarProprietarios, removerProprietario, NAO_PODE_REMOVER_A_SI,
+} from '../src/services/donoService';
 import { migrarDadosAntigos, JA_MIGRADO } from '../src/services/migracaoService';
 
 const fs = () => ff.ref as ReturnType<typeof criarFirestoreFalso>;
@@ -194,5 +197,65 @@ describe('Migração do formato antigo', () => {
     expect((await carregarDadosDono(HOJE)).migracaoPendente).toBe(true);
     await migrarDadosAntigos({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' }, HOJE);
     expect((await carregarDadosDono(HOJE)).migracaoPendente).toBe(false);
+  });
+});
+
+describe('Painel do Proprietário: excluir loja', () => {
+  it('só confirma com o nome exatamente igual ao do cadastro', () => {
+    expect(nomeConfere('Loja Teste 01', 'Loja Teste 01')).toBe(true);
+    expect(nomeConfere('  Loja Teste 01 ', 'Loja Teste 01')).toBe(true);
+    expect(nomeConfere('loja teste 01', 'Loja Teste 01')).toBe(false);
+    expect(nomeConfere('Loja Teste 1', 'Loja Teste 01')).toBe(false);
+    expect(nomeConfere('', 'Loja Teste 01')).toBe(false);
+  });
+
+  it('apaga a loja e tudo dela, sem tocar nas outras lojas', async () => {
+    const f = fs();
+    const l = loja({ id: 't1', nome: 'Loja Teste 01', criadaEm: '2026-10-10' });
+    f.set('lojas/t1', { nome: l.nome });
+    f.set('lojas/t1/petsCadastro/PET-1', { nomePet: 'Rex' });
+    f.set('lojas/t1/profissionais/p1', { nome: 'Ana' });
+    f.set('lojas/t1/contadores/petNumber', { valor: 3 });
+    f.set('lojas/t1/dias/2026-10-12', { aberto: true });
+    f.set('lojas/t1/dias/2026-10-12/pets/a', { nomePet: 'Rex' });
+    f.set('lojas/t1/dias/2026-10-14/logs/b', { tipo: 'entregue' }); // dia sem documento
+    f.set('usuarios/u1', { lojaId: 't1', role: 'admin' });
+    f.set('cobrancas/t1_2026-10', { lojaId: 't1' });
+    // outra loja: não pode ser tocada
+    f.set('lojas/elite', { nome: 'Elite' });
+    f.set('lojas/elite/petsCadastro/PET-1', { nomePet: 'Thor' });
+    f.set('usuarios/u2', { lojaId: 'elite', role: 'user' });
+    f.set('cobrancas/elite_2026-10', { lojaId: 'elite' });
+
+    const passos: string[] = [];
+    await excluirLoja(l, HOJE, (t) => passos.push(t));
+
+    const resto = [...f.store.keys()].sort();
+    expect(resto).toEqual(['cobrancas/elite_2026-10', 'lojas/elite', 'lojas/elite/petsCadastro/PET-1', 'usuarios/u2']);
+    expect(passos.length).toBeGreaterThan(0);
+  });
+});
+
+describe('Painel do Proprietário: acessos', () => {
+  it('cadastra outro proprietário, manda o e-mail de senha e aparece na lista', async () => {
+    fs().set('donos/eu', { nome: 'André', email: 'andre@x.com' });
+    const p = await cadastrarProprietario(' Maria Souza ', 'Maria@X.com', HOJE);
+    expect(fs().get(`donos/${p.uid}`)).toEqual({ nome: 'Maria Souza', email: 'maria@x.com', criadoEm: HOJE });
+    expect(ff.resetEnviado).toEqual(['maria@x.com']);
+    expect((await listarProprietarios()).map((x) => x.nome)).toEqual(['André', 'Maria Souza']);
+  });
+
+  it('e-mail que já tem conta não grava nada', async () => {
+    ff.contas = ['maria@x.com'];
+    await expect(cadastrarProprietario('Maria', 'maria@x.com', HOJE)).rejects.toThrow(EMAIL_EM_USO);
+    expect(await listarProprietarios()).toEqual([]);
+  });
+
+  it('remove o acesso de outro, mas ninguém remove o próprio', async () => {
+    fs().set('donos/eu', { nome: 'André' });
+    fs().set('donos/socio', { nome: 'Sócio' });
+    await expect(removerProprietario('eu', 'eu')).rejects.toThrow(NAO_PODE_REMOVER_A_SI);
+    await removerProprietario('socio', 'eu');
+    expect((await listarProprietarios()).map((x) => x.uid)).toEqual(['eu']);
   });
 });

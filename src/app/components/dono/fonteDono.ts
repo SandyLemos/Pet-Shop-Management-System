@@ -12,9 +12,13 @@ export interface FonteDono {
   publicarComunicado(titulo: string, texto: string, alvo: AlvoComunicado, hoje: string): Promise<void>;
   encerrarComunicado(id: string): Promise<void>;
   migrar(hoje: string, aoAvancar: (t: string) => void): Promise<ResultadoMigracao>;
+  excluirLoja(loja: Loja, hoje: string, aoAvancar: (t: string) => void): Promise<void>;
+  listarProprietarios(): Promise<dono.Proprietario[]>;
+  cadastrarProprietario(nome: string, email: string, hoje: string): Promise<dono.Proprietario>;
+  removerProprietario(uid: string, meuUid: string): Promise<void>;
 }
 
-export { EMAIL_EM_USO } from '../../../services/donoService';
+export { EMAIL_EM_USO, NAO_PODE_REMOVER_A_SI, nomeConfere, type Proprietario } from '../../../services/donoService';
 
 /** Loja que recebe os dados do formato antigo */
 export const LOJA_DA_MIGRACAO = { id: 'elite-pet-shop', nome: 'Elite Pet Shop', logoUrl: '/logo-elite.png' };
@@ -28,4 +32,8 @@ export const fonteFirestore: FonteDono = {
   publicarComunicado: dono.publicarComunicado,
   encerrarComunicado: dono.encerrarComunicado,
   migrar: (hoje, aoAvancar) => migrarDadosAntigos(LOJA_DA_MIGRACAO, hoje, aoAvancar),
+  excluirLoja: dono.excluirLoja,
+  listarProprietarios: dono.listarProprietarios,
+  cadastrarProprietario: dono.cadastrarProprietario,
+  removerProprietario: dono.removerProprietario,
 };

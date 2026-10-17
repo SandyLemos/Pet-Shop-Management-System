@@ -1,0 +1,72 @@
+/* ✅ Cores do sistema. O App liga isto ao abrir (data-cores-loja).
+   - Mudam com a Personalização da loja: só o topo da tela e o Painel Admin.
+   - Padrão do sistema, igual em todas as lojas: fundo da tela principal (azul da marca),
+     colunas do Fluxo (laranja e petróleo da marca) e as vagas/cards (cores de sempre). */
+:root {
+  --loja-principal: #0B5A70;
+  --loja-destaque: #1A90D0;
+  /* marca Pata & Gestão (fixas) */
+  --marca-azul: #1A90D0;
+  --marca-laranja: #F7931E;
+  --marca-petroleo: #0B5A70;
+  --marca-fundo-1: color-mix(in srgb, var(--marca-azul) 24%, white);
+  --marca-fundo-2: color-mix(in srgb, var(--marca-azul) 10%, white);
+}
+
+/* Painel Admin (e as janelas dele): cores da loja */
+:root[data-cores-loja] .painel-admin {
+  --color-purple-50: color-mix(in srgb, var(--loja-principal) 6%, white);
+  --color-purple-100: color-mix(in srgb, var(--loja-principal) 12%, white);
+  --color-purple-200: color-mix(in srgb, var(--loja-principal) 25%, white);
+  --color-purple-300: color-mix(in srgb, var(--loja-principal) 40%, white);
+  --color-purple-400: color-mix(in srgb, var(--loja-principal) 60%, white);
+  --color-purple-500: color-mix(in srgb, var(--loja-principal) 80%, white);
+  --color-purple-600: var(--loja-principal);
+  --color-purple-700: color-mix(in srgb, var(--loja-principal) 85%, black);
+  --color-purple-800: color-mix(in srgb, var(--loja-principal) 70%, black);
+  --color-purple-900: color-mix(in srgb, var(--loja-principal) 55%, black);
+  --color-purple-950: color-mix(in srgb, var(--loja-principal) 40%, black);
+  --color-indigo-50: color-mix(in srgb, var(--loja-principal) 6%, white);
+  --color-indigo-100: color-mix(in srgb, var(--loja-principal) 12%, white);
+  --color-indigo-200: color-mix(in srgb, var(--loja-principal) 25%, white);
+  --color-indigo-300: color-mix(in srgb, var(--loja-principal) 40%, white);
+  --color-indigo-400: color-mix(in srgb, var(--loja-principal) 60%, white);
+  --color-indigo-500: color-mix(in srgb, var(--loja-principal) 80%, white);
+  --color-indigo-600: var(--loja-principal);
+  --color-indigo-700: color-mix(in srgb, var(--loja-principal) 85%, black);
+  --color-indigo-800: color-mix(in srgb, var(--loja-principal) 70%, black);
+  --color-indigo-900: color-mix(in srgb, var(--loja-principal) 55%, black);
+  --color-indigo-950: color-mix(in srgb, var(--loja-principal) 40%, black);
+  --color-violet-50: color-mix(in srgb, var(--loja-principal) 6%, white);
+  --color-violet-100: color-mix(in srgb, var(--loja-principal) 12%, white);
+  --color-violet-200: color-mix(in srgb, var(--loja-principal) 25%, white);
+  --color-violet-300: color-mix(in srgb, var(--loja-principal) 40%, white);
+  --color-violet-400: color-mix(in srgb, var(--loja-principal) 60%, white);
+  --color-violet-500: color-mix(in srgb, var(--loja-principal) 80%, white);
+  --color-violet-600: var(--loja-principal);
+  --color-violet-700: color-mix(in srgb, var(--loja-principal) 85%, black);
+  --color-violet-800: color-mix(in srgb, var(--loja-principal) 70%, black);
+  --color-violet-900: color-mix(in srgb, var(--loja-principal) 55%, black);
+  --color-violet-950: color-mix(in srgb, var(--loja-principal) 40%, black);
+  --color-pink-50: color-mix(in srgb, var(--loja-destaque) 6%, white);
+  --color-pink-100: color-mix(in srgb, var(--loja-destaque) 12%, white);
+  --color-pink-200: color-mix(in srgb, var(--loja-destaque) 25%, white);
+  --color-pink-300: color-mix(in srgb, var(--loja-destaque) 40%, white);
+  --color-pink-400: color-mix(in srgb, var(--loja-destaque) 60%, white);
+  --color-pink-500: color-mix(in srgb, var(--loja-destaque) 80%, white);
+  --color-pink-600: var(--loja-destaque);
+  --color-pink-700: color-mix(in srgb, var(--loja-destaque) 85%, black);
+  --color-pink-800: color-mix(in srgb, var(--loja-destaque) 70%, black);
+  --color-pink-900: color-mix(in srgb, var(--loja-destaque) 55%, black);
+  --color-pink-950: color-mix(in srgb, var(--loja-destaque) 40%, black);
+}
+
+/* topo do Painel Admin igual ao topo da tela: da cor principal para a de destaque */
+:root[data-cores-loja] .topo-admin {
+  background-image: linear-gradient(90deg, var(--loja-principal), var(--loja-destaque));
+}
+
+/* fundo da tela principal: azul da marca, igual em todas as lojas */
+.bg-pet-pattern {
+  background-color: var(--marca-fundo-2);
+}

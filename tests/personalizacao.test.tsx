@@ -31,6 +31,8 @@ import { coresDosPixels, sugerirCores, coresValidas, corMuitoClara, CORES_PADRAO
 import { definirLoja, coresLoja, lojaTemCores, logoLoja, aoMudarLoja } from '../src/lib/lojaAtual';
 import { salvarPersonalizacao } from '../src/services/personalizacaoService';
 import { SecaoPersonalizacao } from '../src/app/components/AdminPersonalizacao';
+import { renderHook } from '@testing-library/react';
+import { useVisualLoja, useAplicarCoresLoja } from '../src/hooks/useVisualLoja';
 
 const px = (...lista: [number, number, number, number, number][]) => {
   const out: number[] = [];
@@ -105,6 +107,13 @@ describe('loja atual', () => {
     expect(lojaTemCores()).toBe(false);
   });
 
+  it('loja com logo antiga (fora do Cloudinary) consegue salvar só as cores', async () => {
+    definirLoja({ id: 'elite', nome: 'Elite', logoUrl: '/logo-elite.png' });
+    await salvarPersonalizacao({ logoUrl: '/logo-elite.png', cores: { principal: '#0B5A70', destaque: '#1A90D0' } });
+    expect(fb.updates[0].dados.logoUrl).toBe('/logo-elite.png');
+    expect(fb.updates[0].dados.cores).toEqual({ principal: '#0B5A70', destaque: '#1A90D0' });
+  });
+
   it('recusa logo que não veio do envio', async () => {
     await expect(salvarPersonalizacao({ logoUrl: 'https://outro.site/x.png', cores: null })).rejects.toThrow();
     expect(fb.updates).toEqual([]);
@@ -138,5 +147,50 @@ describe('aba Personalização', () => {
     expect((screen.getByLabelText('Cor principal') as HTMLInputElement).value).toBe(CORES_PADRAO.principal.toLowerCase());
     await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Salvar personalização/ })); });
     expect(fb.updates[0].dados.cores).toBe('__apagar__');
+  });
+
+  it('logo já enviada e sem cores escolhidas: abre com as cores da logo preenchidas', async () => {
+    definirLoja({ id: 'elite', nome: 'Elite', logoUrl: 'https://res.cloudinary.com/x/antiga.png' });
+    render(<SecaoPersonalizacao />);
+    await waitFor(() => expect(screen.getByText('Cores que combinam com a sua logo')).toBeTruthy());
+    expect((screen.getByLabelText('Cor principal') as HTMLInputElement).value).toBe('#0b5a70');
+    expect(screen.getByText(/Preenchemos as cores com as da sua logo/)).toBeTruthy();
+    await act(async () => { fireEvent.click(screen.getByRole('button', { name: /Salvar personalização/ })); });
+    expect(fb.updates[0].dados.cores).toEqual({ principal: '#0B5A70', destaque: '#F7931E' });
+  });
+
+  it('cores já escolhidas não são trocadas pelas da logo ao abrir', async () => {
+    definirLoja({ id: 'elite', nome: 'Elite', logoUrl: 'https://res.cloudinary.com/x/a.png', cores: { principal: '#111111', destaque: '#222222' } });
+    render(<SecaoPersonalizacao />);
+    await waitFor(() => expect(screen.getByText('Cores que combinam com a sua logo')).toBeTruthy());
+    expect((screen.getByLabelText('Cor principal') as HTMLInputElement).value).toBe('#111111');
+  });
+});
+
+describe('cores no sistema', () => {
+  it('sem personalização usa as cores da Pata & Gestão; com personalização, as da loja', () => {
+    const raiz = document.documentElement;
+    const { rerender } = renderHook(() => useAplicarCoresLoja(useVisualLoja()));
+    expect(raiz.hasAttribute('data-cores-loja')).toBe(true);
+    expect(raiz.style.getPropertyValue('--loja-principal')).toBe('#0B5A70');
+    act(() => { definirLoja({ id: 'elite', nome: 'Elite', cores: { principal: '#123456', destaque: '#F7931E' } }); });
+    rerender();
+    expect(raiz.style.getPropertyValue('--loja-principal')).toBe('#123456');
+    act(() => { definirLoja({ id: 'elite', nome: 'Elite' }); });
+    rerender();
+    expect(raiz.style.getPropertyValue('--loja-principal')).toBe('#0B5A70');
+  });
+});
+
+describe('topo ao sair da conta', () => {
+  it('não volta para a logo da Pata & Gestão enquanto a conta está saindo', () => {
+    definirLoja({ id: 'teste', nome: 'Loja Teste 01', logoUrl: 'https://res.cloudinary.com/x/t.jpg', cores: { principal: '#2859A2', destaque: '#EB3237' } });
+    const { result } = renderHook(() => useVisualLoja());
+    expect(result.current.logo).toBe('https://res.cloudinary.com/x/t.jpg');
+    act(() => { definirLoja(null); }); // clicou em Sair
+    expect(result.current.logo).toBe('https://res.cloudinary.com/x/t.jpg');
+    expect(result.current.nome).toBe('Loja Teste 01');
+    act(() => { definirLoja({ id: 'elite', nome: 'Elite', logoUrl: '/logo-elite.png' }); }); // outra loja entra
+    expect(result.current.logo).toBe('/logo-elite.png');
   });
 });

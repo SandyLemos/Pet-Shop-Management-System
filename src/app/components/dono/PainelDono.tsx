@@ -1,4 +1,4 @@
-// ✅ Painel do Dono do sistema (Pata & Gestão).
+// ✅ Painel do Proprietário do sistema (Pata & Gestão). No código e no banco segue "dono".
 // Abre no lugar da fila quando quem entra é a conta marcada em /donos.
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Store, Wallet, Package, Megaphone, Settings, LogOut, Plus, Search,
   AlertTriangle, TrendingUp, CalendarCheck, Ban, CheckCircle2, Clock, MessageCircle,
   ChevronRight, ChevronLeft, X, Sparkles, ShieldCheck, Lock, Send, Pencil, RefreshCw,
-  Database, Loader2, Undo2, PlayCircle,
+  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import {
@@ -17,12 +17,17 @@ import {
 import { telefoneWhatsApp } from '../../../utils/whatsapp';
 import { idDoDia } from '../../../utils/dias';
 import type { ResultadoMigracao } from '../../../services/migracaoService';
-import { fonteFirestore, LOJA_DA_MIGRACAO, EMAIL_EM_USO, type FonteDono } from './fonteDono';
+import { fonteFirestore, LOJA_DA_MIGRACAO, EMAIL_EM_USO, nomeConfere, type FonteDono, type Proprietario } from './fonteDono';
 
 const COR = { petroleo: '#0B5A70', escuro: '#04394A', azul: '#1A90D0', laranja: '#F7931E' };
 const GRADIENTE = `linear-gradient(135deg, ${COR.petroleo}, ${COR.azul})`;
 
-type Aba = 'geral' | 'lojas' | 'financeiro' | 'planos' | 'comunicados' | 'config';
+/** Como o painel chama quem administra o sistema (troque aqui para mudar em todas as telas) */
+export const PAPEL = 'Proprietário';
+/** Nome da aba de quem acessa o painel */
+const ABA_ACESSOS = 'Usuários';
+
+type Aba = 'geral' | 'lojas' | 'financeiro' | 'planos' | 'comunicados' | 'acessos' | 'config';
 
 const MENU: { id: Aba; nome: string; icone: React.ElementType }[] = [
   { id: 'geral', nome: 'Visão geral', icone: LayoutDashboard },
@@ -30,6 +35,7 @@ const MENU: { id: Aba; nome: string; icone: React.ElementType }[] = [
   { id: 'financeiro', nome: 'Financeiro', icone: Wallet },
   { id: 'planos', nome: 'Planos', icone: Package },
   { id: 'comunicados', nome: 'Comunicados', icone: Megaphone },
+  { id: 'acessos', nome: ABA_ACESSOS, icone: Users },
   { id: 'config', nome: 'Configurações', icone: Settings },
 ];
 
@@ -280,6 +286,7 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
   { d: DadosDono; loja: Loja; fonte: FonteDono; fechar: () => void; editar: () => void; recarregar: () => Promise<void> }) {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmarBloqueio, setConfirmarBloqueio] = useState(false);
+  const [excluir, setExcluir] = useState(false);
   const { situacao, diasAtraso } = situacaoDaLoja(loja, d.cobrancas, d.hoje);
   const uso = resumoUso(d.atividade[loja.id], d.hoje);
   const mes = mesDe(d.hoje);
@@ -383,8 +390,175 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
               </Botao>
             )}
           </div>
+
+          <div className="space-y-2 pt-2 border-t border-slate-100">
+            <p className="text-xs font-bold uppercase tracking-wide text-rose-400">Zona de perigo</p>
+            <Botao id="excluir" icone={Trash2} perigo onClick={() => setExcluir(true)}>Excluir a loja</Botao>
+          </div>
         </div>
       </div>
+      {excluir && (
+        <ExcluirLoja d={d} loja={loja} fonte={fonte} fechar={() => setExcluir(false)}
+          aoExcluir={async () => { setExcluir(false); fechar(); await recarregar(); }} />
+      )}
+    </div>
+  );
+}
+
+// ─── Excluir loja (confirmação digitando o nome) ──────────────────────────────
+function ExcluirLoja({ d, loja, fonte, fechar, aoExcluir }:
+  { d: DadosDono; loja: Loja; fonte: FonteDono; fechar: () => void; aoExcluir: () => Promise<void> }) {
+  const [digitado, setDigitado] = useState('');
+  const [progresso, setProgresso] = useState<string | null>(null);
+  const confere = nomeConfere(digitado, loja.nome);
+  const uso = resumoUso(d.atividade[loja.id], d.hoje);
+
+  const confirmar = async () => {
+    if (!confere || progresso) return;
+    setProgresso('Começando...');
+    try {
+      await fonte.excluirLoja(loja, d.hoje, setProgresso);
+      toast.success(`A loja ${loja.nome} foi excluída.`);
+      await aoExcluir();
+    } catch (e) {
+      console.error('[excluir loja]', e);
+      toast.error('A exclusão parou no meio. A loja continua na lista: confira a internet e tente de novo.');
+      setProgresso(null);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={progresso ? undefined : fechar} />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+        <div className="bg-rose-600 px-6 py-5 flex items-center gap-3">
+          <div className="bg-white/20 p-2 rounded-lg"><AlertTriangle className="w-6 h-6 text-white" /></div>
+          <div>
+            <h2 className="text-white font-bold text-lg">Excluir a loja?</h2>
+            <p className="text-white/80 text-xs">{loja.nome}</p>
+          </div>
+        </div>
+        <div className="p-6 space-y-4">
+          <div className="rounded-xl bg-rose-50 ring-2 ring-rose-300 p-4 text-sm text-rose-900 space-y-2">
+            <p className="font-bold flex items-center gap-2"><AlertTriangle size={16} /> Esta ação NÃO pode ser desfeita.</p>
+            <p>Ao excluir, você perde <b>todas as informações</b> da loja para sempre:</p>
+            <ul className="list-disc pl-5 space-y-0.5">
+              <li>fila do dia e todo o histórico de atendimentos</li>
+              <li>fichas dos pets e dos tutores</li>
+              <li>profissionais, raças e funcionários ({uso.usuarios} com acesso)</li>
+              <li>mensalidades registradas</li>
+            </ul>
+            <p>Se a ideia é só impedir o acesso, use <b>Bloquear a loja</b>: os dados ficam guardados.</p>
+          </div>
+          <label className="block space-y-1.5">
+            <span className="text-sm text-slate-700">Para confirmar, digite o nome da loja exatamente como está no cadastro: <b className="select-none">{loja.nome}</b></span>
+            <input value={digitado} onChange={(e) => setDigitado(e.target.value)} disabled={!!progresso}
+              onPaste={(e) => e.preventDefault()} autoComplete="off" aria-label="Nome da loja para confirmar"
+              className={`${campo} ${digitado && !confere ? 'ring-2 ring-rose-300 border-rose-300' : ''}`} placeholder={loja.nome} />
+            {digitado && !confere && <span className="text-xs text-rose-600">O nome não confere. Confira maiúsculas, acentos e espaços.</span>}
+          </label>
+          {progresso && <p className="flex items-center gap-2 text-sm font-semibold text-rose-700"><Loader2 size={16} className="animate-spin" /> {progresso}</p>}
+        </div>
+        <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3">
+          <button onClick={fechar} disabled={!!progresso} className="px-4 py-2.5 rounded-xl bg-white ring-1 ring-slate-200 text-sm font-semibold text-slate-600 disabled:opacity-60">Cancelar</button>
+          <button onClick={confirmar} disabled={!confere || !!progresso}
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold disabled:opacity-40 disabled:cursor-not-allowed">
+            <Trash2 size={16} /> Excluir para sempre
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── Proprietários (quem acessa este painel) ──────────────────────────────────
+function Acessos({ fonte, meuUid, hoje }: { fonte: FonteDono; meuUid?: string; hoje: string }) {
+  const [lista, setLista] = useState<Proprietario[] | null>(null);
+  const [erro, setErro] = useState(false);
+  const [nome, setNome] = useState('');
+  const [email, setEmail] = useState('');
+  const [salvando, setSalvando] = useState(false);
+  const [remover, setRemover] = useState<Proprietario | null>(null);
+
+  const carregar = useCallback(async () => {
+    try { setLista(await fonte.listarProprietarios()); setErro(false); }
+    catch (e) { console.error('[proprietários]', e); setErro(true); }
+  }, [fonte]);
+  useEffect(() => { void carregar(); }, [carregar]);
+
+  const emailOk = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  const cadastrar = async () => {
+    if (!nome.trim() || !emailOk || salvando) return;
+    setSalvando(true);
+    try {
+      await fonte.cadastrarProprietario(nome, email, hoje);
+      toast.success(`Acesso criado. ${email.trim()} vai receber um e-mail para criar a senha.`);
+      setNome(''); setEmail('');
+      await carregar();
+    } catch (e: any) {
+      console.error('[proprietários]', e);
+      toast.error(e?.message === EMAIL_EM_USO
+        ? 'Este e-mail já tem conta no sistema. Use outro e-mail.'
+        : 'Não foi possível criar o acesso. Confira a internet e tente de novo.');
+    } finally { setSalvando(false); }
+  };
+
+  const confirmarRemocao = async () => {
+    if (!remover) return;
+    try {
+      await fonte.removerProprietario(remover.uid, meuUid ?? '');
+      toast.success(`${remover.nome || remover.email} não acessa mais o painel.`);
+      setRemover(null);
+      await carregar();
+    } catch (e) {
+      console.error('[proprietários]', e);
+      toast.error('Não foi possível remover o acesso. Confira a internet e tente de novo.');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <Secao titulo='Novo usuário do painel'>
+        <p className="text-sm text-slate-500 mb-4">Para um sócio ou desenvolvedor. A pessoa terá os mesmos acessos que você neste painel e recebe por e-mail o link para criar a senha.</p>
+        <div className="grid md:grid-cols-[1fr_1fr_auto] gap-3 items-end">
+          <label className="space-y-1.5"><span className={rotulo}>Nome</span>
+            <input value={nome} onChange={(e) => setNome(e.target.value)} className={campo} placeholder="Ex.: Maria Souza" /></label>
+          <label className="space-y-1.5"><span className={rotulo}>E-mail</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} className={campo} placeholder="maria@email.com" /></label>
+          <button onClick={cadastrar} disabled={!nome.trim() || !emailOk || salvando} className={botaoMarca} style={{ background: GRADIENTE }}>
+            {salvando ? <Loader2 size={16} className="animate-spin" /> : <UserPlus size={16} />} Dar acesso
+          </button>
+        </div>
+      </Secao>
+
+      <Secao titulo={`Quem acessa este painel`}>
+        {erro ? <Vazio texto="Não foi possível carregar. Confira a internet e clique em Atualizar." />
+          : !lista ? <div className="flex items-center justify-center gap-2 py-6 text-slate-500 text-sm"><Loader2 size={16} className="animate-spin" /> Carregando...</div>
+          : lista.length === 0 ? <Vazio texto="Ninguém cadastrado ainda." />
+          : (
+            <ul className="divide-y divide-slate-100">
+              {lista.map((p) => (
+                <li key={p.uid} className="flex items-center gap-3 py-3">
+                  <div className="w-9 h-9 rounded-full grid place-items-center font-bold uppercase text-white shrink-0" style={{ background: COR.petroleo }}>{(p.nome || p.email || '?')[0]}</div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-slate-800 truncate">{p.nome || 'Sem nome'}{p.uid === meuUid && <span className="ml-2 text-xs font-medium text-slate-400">(você)</span>}</p>
+                    <p className="text-xs text-slate-500 truncate">{p.email}{p.criadoEm && ` · desde ${fmtDia(p.criadoEm)}/${p.criadoEm.slice(0, 4)}`}</p>
+                  </div>
+                  {p.uid !== meuUid && (
+                    remover?.uid === p.uid ? (
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => setRemover(null)} className="px-3 py-1.5 rounded-lg bg-white ring-1 ring-slate-200 text-xs font-semibold text-slate-600">Cancelar</button>
+                        <button onClick={confirmarRemocao} className="px-3 py-1.5 rounded-lg bg-rose-600 text-white text-xs font-semibold">Tirar acesso</button>
+                      </div>
+                    ) : (
+                      <button onClick={() => setRemover(p)} className="px-3 py-1.5 rounded-lg ring-1 ring-rose-200 bg-rose-50 text-rose-700 text-xs font-semibold hover:bg-rose-100">Remover</button>
+                    )
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+      </Secao>
     </div>
   );
 }
@@ -681,9 +855,9 @@ function Configuracoes({ d, fonte, recarregar }: { d: DadosDono; fonte: FonteDon
   };
 
   const itens = [
-    { icone: Lock, titulo: 'Acesso do dono', texto: 'Sua conta é marcada como dono só no console do Firebase (coleção "donos"). Pelo app ninguém consegue virar dono.' },
+    { icone: Lock, titulo: `Acesso de ${PAPEL.toLowerCase()}`, texto: `Só quem já é ${PAPEL.toLowerCase()} dá esse acesso a outra pessoa, na aba ${ABA_ACESSOS}. Funcionário e admin de loja não conseguem.` },
     { icone: Wallet, titulo: 'Regras de cobrança', texto: `Loja em teste não paga. Depois do vencimento, a mensalidade aparece como atrasada; com ${DIAS_PARA_BLOQUEIO} dias o painel sugere bloquear. O bloqueio é sempre você que faz.` },
-    { icone: Store, titulo: 'Logo e cores de cada loja', texto: 'Próxima etapa: cada loja vai poder trocar a logo e as cores no Painel Admin dela.' },
+    { icone: Store, titulo: 'Logo e cores de cada loja', texto: 'Cada loja troca a logo e as cores do topo no Painel Admin dela, na aba Personalização.' },
     { icone: Sparkles, titulo: 'Termos e privacidade', texto: 'Ainda falta: termos de uso e política de privacidade que cada loja aceita ao entrar pela primeira vez.' },
   ];
 
@@ -750,8 +924,8 @@ function Configuracoes({ d, fonte, recarregar }: { d: DadosDono; fonte: FonteDon
 }
 
 // ─── Painel ───────────────────────────────────────────────────────────────────
-export function PainelDono({ nomeDono = 'Dono', onLogout, fonte = fonteFirestore, hoje: hojeFixo, abaInicial = 'geral', lojaAberta, novaAberta = false }:
-  { nomeDono?: string; onLogout?: () => void; fonte?: FonteDono; hoje?: string; abaInicial?: Aba; lojaAberta?: string; novaAberta?: boolean }) {
+export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFirestore, hoje: hojeFixo, abaInicial = 'geral', lojaAberta, novaAberta = false }:
+  { nomeDono?: string; meuUid?: string; onLogout?: () => void; fonte?: FonteDono; hoje?: string; abaInicial?: Aba; lojaAberta?: string; novaAberta?: boolean }) {
   const [aba, setAba] = useState<Aba>(abaInicial);
   const [dados, setDados] = useState<DadosDono | null>(null);
   const [erro, setErro] = useState(false);
@@ -774,7 +948,7 @@ export function PainelDono({ nomeDono = 'Dono', onLogout, fonte = fonteFirestore
       <aside className="w-64 shrink-0 flex flex-col text-white sticky top-0 h-screen" style={{ background: `linear-gradient(180deg, ${COR.escuro} 0%, ${COR.petroleo} 100%)` }}>
         <div className="p-5">
           <div className="bg-white rounded-2xl px-4 py-3"><img src="/logo-pata-gestao.png" alt="Pata & Gestão" className="h-12 w-auto mx-auto object-contain" /></div>
-          <p className="text-[11px] text-center uppercase tracking-widest text-white/60 mt-3 font-semibold">Painel do dono</p>
+          <p className="text-[11px] text-center uppercase tracking-widest text-white/60 mt-3 font-semibold">Painel do {PAPEL.toLowerCase()}</p>
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {MENU.map((m) => (
@@ -787,7 +961,7 @@ export function PainelDono({ nomeDono = 'Dono', onLogout, fonte = fonteFirestore
         </nav>
         <div className="p-4 border-t border-white/10 flex items-center gap-3">
           <div className="w-9 h-9 rounded-full grid place-items-center font-bold uppercase" style={{ background: COR.laranja }}>{nomeDono[0]}</div>
-          <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate capitalize">{nomeDono}</p><p className="text-xs text-white/60">Dono do sistema</p></div>
+          <div className="flex-1 min-w-0"><p className="text-sm font-semibold truncate capitalize">{nomeDono}</p><p className="text-xs text-white/60">{PAPEL} do sistema</p></div>
           <button onClick={onLogout} className="text-white/60 hover:text-white" aria-label="Sair"><LogOut size={18} /></button>
         </div>
       </aside>
@@ -816,6 +990,7 @@ export function PainelDono({ nomeDono = 'Dono', onLogout, fonte = fonteFirestore
             {aba === 'financeiro' && <Financeiro d={dados} fonte={fonte} recarregar={recarregar} />}
             {aba === 'planos' && <Planos d={dados} />}
             {aba === 'comunicados' && <Comunicados d={dados} fonte={fonte} recarregar={recarregar} />}
+            {aba === 'acessos' && <Acessos fonte={fonte} meuUid={meuUid} hoje={hoje} />}
             {aba === 'config' && <Configuracoes d={dados} fonte={fonte} recarregar={recarregar} />}
           </>)}
         </div>

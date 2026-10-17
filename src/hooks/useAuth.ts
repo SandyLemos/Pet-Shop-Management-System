@@ -7,7 +7,7 @@ import {
 } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
-import { definirLoja } from '../lib/lojaAtual';
+import { definirLoja, lojaAtual } from '../lib/lojaAtual';
 import { idDoDia } from '../utils/dias';
 
 export type Papel = 'admin' | 'user' | 'dono';
@@ -74,6 +74,13 @@ async function verificarAcesso(user: User): Promise<Papel> {
  */
 let erroPendente: string | null = null;
 
+/**
+ * Conta já conferida nesta sessão. Outros componentes também usam useAuth (ex.: o cadastro
+ * de pet, para saber se é admin); sem isto cada um refazia a conferência, que zera a loja
+ * por um instante (o topo voltava para a logo da Pata & Gestão e os dados recomeçavam).
+ */
+let conferida: { uid: string; role: Papel } | null = null;
+
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
     user: null,
@@ -85,6 +92,7 @@ export function useAuth() {
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
+        conferida = null;
         definirLoja(null);
         setAuthState((prev) => ({
           user: null,
@@ -96,10 +104,17 @@ export function useAuth() {
         return;
       }
 
+      if (conferida?.uid === user.uid && (conferida.role === 'dono' || lojaAtual())) {
+        setAuthState({ user, role: conferida.role, loading: false, error: null });
+        return;
+      }
+
       try {
         const role = await verificarAcesso(user);
+        conferida = { uid: user.uid, role };
         setAuthState({ user, role, loading: false, error: null });
       } catch (err: any) {
+        conferida = null;
         if (RECUSAS[err?.message]) {
           // conta recusada: desconecta e mostra o motivo no login
           erroPendente = RECUSAS[err.message];
@@ -119,9 +134,11 @@ export function useAuth() {
     // ✅ não liga o "loading" global: a tela de login continua montada
     //    (mantém o e-mail digitado) e usa o próprio spinner do botão
     setAuthState((prev) => ({ ...prev, error: null }));
+    conferida = null;
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
       const role = await verificarAcesso(cred.user);
+      conferida = { uid: cred.user.uid, role };
       setAuthState({ user: cred.user, role, loading: false, error: null });
       return true;
     } catch (err: any) {
@@ -142,6 +159,7 @@ export function useAuth() {
 
   const logout = async () => {
     erroPendente = null;
+    conferida = null;
     definirLoja(null);
     await signOut(auth);
     setAuthState({ user: null, role: null, loading: false, error: null });

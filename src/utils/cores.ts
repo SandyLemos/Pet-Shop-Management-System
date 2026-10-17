@@ -6,8 +6,15 @@ export interface CoresLoja {
   destaque: string;  // #RRGGBB
 }
 
-/** Visual de hoje: quem não personalizar continua com ele */
-export const CORES_PADRAO: CoresLoja = { principal: '#3B2FBE', destaque: '#E8192C' };
+/** Cores da marca Pata & Gestão */
+export const MARCA = { petroleo: '#0B5A70', escuro: '#04394A', azul: '#1A90D0', laranja: '#F7931E' };
+
+/** Padrão de quem não personalizar: as cores da Pata & Gestão */
+export const CORES_PADRAO: CoresLoja = { principal: MARCA.petroleo, destaque: MARCA.azul };
+
+/** Fundo do topo: da cor principal bem escura, passando por ela, até a de destaque */
+export const fundoTopo = (cores: CoresLoja) =>
+  `linear-gradient(135deg, color-mix(in srgb, ${cores.principal} 55%, black) 0%, ${cores.principal} 50%, ${cores.destaque} 100%)`;
 
 export const ehCorValida = (cor: unknown): cor is string =>
   typeof cor === 'string' && /^#[0-9a-fA-F]{6}$/.test(cor);
@@ -80,21 +87,34 @@ export function sugerirCores(cores: string[]): CoresLoja | null {
   return { principal, destaque };
 }
 
-/** Lê as cores de um arquivo de imagem no próprio aparelho (antes do envio) */
-export async function coresDaImagem(file: Blob): Promise<string[]> {
+/** Abre a imagem (arquivo do aparelho ou endereço da logo já enviada) para ler os pixels */
+function abrirImagem(fonte: Blob | string): Promise<HTMLImageElement> {
+  return new Promise((ok, falhou) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous'; // a logo fica no Cloudinary, que permite a leitura
+    const url = typeof fonte === 'string' ? fonte : URL.createObjectURL(fonte);
+    img.onload = () => { if (typeof fonte !== 'string') URL.revokeObjectURL(url); ok(img); };
+    img.onerror = () => { if (typeof fonte !== 'string') URL.revokeObjectURL(url); falhou(new Error('imagem')); };
+    img.src = url;
+  });
+}
+
+/** Lê as cores de uma imagem: o arquivo escolhido ou o endereço da logo atual */
+export async function coresDaImagem(fonte: Blob | string): Promise<string[]> {
   try {
-    const img = await createImageBitmap(file);
+    const img = await abrirImagem(fonte);
+    const w = img.naturalWidth || img.width, h = img.naturalHeight || img.height;
+    if (!w || !h) return [];
     const largura = 80;
-    const altura = Math.max(1, Math.round((largura * img.height) / img.width));
+    const altura = Math.max(1, Math.round((largura * h) / w));
     const canvas = document.createElement('canvas');
     canvas.width = largura;
     canvas.height = altura;
     const ctx = canvas.getContext('2d');
     if (!ctx) return [];
     ctx.drawImage(img, 0, 0, largura, altura);
-    img.close?.();
     return coresDosPixels(ctx.getImageData(0, 0, largura, altura).data);
   } catch {
-    return []; // formato que o navegador não abre: sem sugestão
+    return []; // formato que o navegador não abre ou logo fora do ar: sem sugestão
   }
 }

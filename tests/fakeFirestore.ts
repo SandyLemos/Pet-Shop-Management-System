@@ -34,7 +34,7 @@ export function criarFirestoreFalso(opcoes: { raiz?: string } = {}) {
   };
   const snap = (path: string) => {
     const e = store.get(path);
-    return { id: path.split('/').at(-1)!, exists: () => !!e, data: () => (e ? { ...e.data } : undefined) };
+    return { id: path.split('/').at(-1)!, ref: { path, id: path.split('/').at(-1)! }, exists: () => !!e, data: () => (e ? { ...e.data } : undefined) };
   };
 
   const mod = {

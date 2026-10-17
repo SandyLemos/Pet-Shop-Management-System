@@ -21,12 +21,14 @@ import { LoginScreen, SplashScreen } from './components/TelaLogin';
 const PainelDono = lazy(() => import('./components/dono/PainelDono').then((m) => ({ default: m.PainelDono })));
 import { AvisoSistema } from './components/AvisoSistema';
 import { nomeLoja } from '../lib/lojaAtual';
-import { useVisualLoja } from '../hooks/useVisualLoja';
+import { useVisualLoja, useAplicarCoresLoja } from '../hooks/useVisualLoja';
+import { fundoTopo } from '../utils/cores';
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
   const { user, loading, error, isAuthenticated, login, logout, isAdmin, isDono } = useAuth();
   const visual = useVisualLoja(); // logo e cores da Personalização
+  useAplicarCoresLoja(visual);    // e as mesmas cores no Painel Admin
 
   // ✅ NOVO: slots já queimados hoje (compartilhado entre todos os dispositivos)
   const { marcarUsado } = useSlotsUsadosHoje();
@@ -127,7 +129,7 @@ export default function App() {
       <>
         <Toaster position="top-right" richColors />
         <Suspense fallback={<SplashScreen />}>
-          <PainelDono nomeDono={user?.displayName || user?.email?.split('@')[0] || 'Dono'} onLogout={logout} />
+          <PainelDono nomeDono={user?.displayName || user?.email?.split('@')[0] || 'Proprietário'} meuUid={user?.uid} onLogout={logout} />
         </Suspense>
       </>
     );
@@ -414,7 +416,7 @@ export default function App() {
 
         <div
           className="shadow-md"
-          style={{ background: `linear-gradient(135deg, #1a1560 0%, ${visual.cores.principal} 50%, ${visual.cores.destaque} 100%)` }}
+          style={{ background: fundoTopo(visual.cores) }}
         >
           <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
 

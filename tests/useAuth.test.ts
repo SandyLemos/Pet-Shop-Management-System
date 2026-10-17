@@ -32,7 +32,7 @@ vi.mock('firebase/firestore', () => ({
 }));
 
 import { useAuth, MSG_ACESSO_NEGADO, MSG_SEM_LOJA, MSG_LOJA_BLOQUEADA, MSG_TESTE_ACABOU } from '../src/hooks/useAuth';
-import { lojaId, nomeLoja } from '../src/lib/lojaAtual';
+import { lojaId, nomeLoja, aoTrocarDeLoja } from '../src/lib/lojaAtual';
 
 const funcionario = { uid: 'func1', email: 'func@loja.com' };
 const admin = { uid: 'adm1', email: 'adm@loja.com' };
@@ -198,5 +198,24 @@ describe('useAuth', () => {
       expect(ok).toBe(false);
       expect(result.current.error).toBe(MSG_TESTE_ACABOU);
     });
+  });
+});
+
+describe('useAuth em mais de um componente', () => {
+  it('abrir o cadastro de pet (outro useAuth) não reinicia a loja de quem já entrou', async () => {
+    await new Promise((r) => setTimeout(r, 20)); // deixa terminar o sair do teste anterior
+    const tela = renderHook(() => useAuth());
+    await act(async () => { fb.listener!(admin); });
+    await waitFor(() => expect(tela.result.current.isAdmin).toBe(true));
+    expect(lojaId()).toBe('elite');
+
+    const trocas = vi.fn();
+    const parar = aoTrocarDeLoja(trocas);
+    const cadastro = renderHook(() => useAuth());
+    await act(async () => { fb.listener!(admin); }); // o Firebase avisa o novo componente
+    await waitFor(() => expect(cadastro.result.current.isAdmin).toBe(true));
+    parar();
+    expect(trocas).not.toHaveBeenCalled();
+    expect(lojaId()).toBe('elite');
   });
 });

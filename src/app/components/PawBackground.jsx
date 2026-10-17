@@ -68,7 +68,8 @@ export default function PawBackground({
   pausaEntreCiclos = 1,
   opacidadeMax = 0.16,
   distanciaMinima = 9,
-  degrade = "linear-gradient(135deg, #9ab8e0 0%, #cde1f8 50%, #f8dede 100%)"
+  // azul claro da marca Pata & Gestão (o da palavra "Pata"): igual em todas as lojas
+  degrade = "linear-gradient(135deg, var(--marca-fundo-1) 0%, var(--marca-fundo-2) 100%)"
 }) {
   const [ciclo, setCiclo] = useState(0);
 

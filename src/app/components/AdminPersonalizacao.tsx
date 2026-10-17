@@ -1,11 +1,11 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Upload, Trash2, RotateCcw, Save, AlertTriangle, Sparkles } from 'lucide-react';
 import { useCloudinaryUpload } from '../../hooks/useCloudinaryUpload';
 import { useVisualLoja } from '../../hooks/useVisualLoja';
 import { lojaAtual, lojaTemCores } from '../../lib/lojaAtual';
-import { salvarPersonalizacao } from '../../services/personalizacaoService';
-import { CORES_PADRAO, coresDaImagem, corMuitoClara, sugerirCores, type CoresLoja } from '../../utils/cores';
+import { salvarPersonalizacao, MSG_LOGO_INVALIDA } from '../../services/personalizacaoService';
+import { CORES_PADRAO, fundoTopo, coresDaImagem, corMuitoClara, sugerirCores, type CoresLoja } from '../../utils/cores';
 
 const LOGO_PADRAO = '/logo-pata-gestao.png';
 
@@ -20,6 +20,25 @@ export function SecaoPersonalizacao() {
   const [cores, setCores]       = useState<CoresLoja | null>(lojaTemCores() ? visual.cores : null);
   const [sugestao, setSugestao] = useState<string[]>([]);
   const [salvando, setSalvando] = useState(false);
+  const [aviso, setAviso]       = useState('');
+
+  // ✅ Logo já enviada: lê as cores dela ao abrir a aba. Se a loja ainda não escolheu
+  // cores, já deixa as da logo preenchidas (só valem depois de salvar).
+  useEffect(() => {
+    const atual = lojaAtual()?.logoUrl;
+    if (!atual) return;
+    let ativo = true;
+    coresDaImagem(atual).then((lidas) => {
+      if (!ativo || lidas.length === 0) return;
+      setSugestao(lidas);
+      const sugeridas = sugerirCores(lidas);
+      if (sugeridas && !lojaTemCores()) {
+        setCores(sugeridas);
+        setAviso('Preenchemos as cores com as da sua logo. Confira a prévia e salve para usar.');
+      }
+    });
+    return () => { ativo = false; };
+  }, []);
 
   const coresNaTela = cores ?? CORES_PADRAO;
   const clara = corMuitoClara(coresNaTela.principal) || corMuitoClara(coresNaTela.destaque);
@@ -36,8 +55,10 @@ export function SecaoPersonalizacao() {
     const sugeridas = sugerirCores(doArquivo);
     if (sugeridas) {
       setCores(sugeridas);
-      toast.success('Logo enviada! Aplicamos cores que combinam com ela. Ajuste se quiser e salve.');
+      setAviso('Aplicamos as cores da sua logo. Ajuste se quiser e salve.');
+      toast.success('Logo enviada! Aplicamos cores que combinam com ela.');
     } else {
+      setAviso('Não achamos cores fortes na logo (preto e branco?). Escolha as cores abaixo.');
       toast.success('Logo enviada! Escolha as cores e salve.');
     }
   };
@@ -49,10 +70,13 @@ export function SecaoPersonalizacao() {
     setSalvando(true);
     try {
       await salvarPersonalizacao({ logoUrl, cores });
+      setAviso('');
       toast.success('Personalização salva! Os outros aparelhos da loja veem na próxima vez que entrarem.');
     } catch (err) {
       console.error('[personalizacao]', err);
-      toast.error('Não foi possível salvar. Verifique a internet e tente de novo.');
+      toast.error((err as Error)?.message === MSG_LOGO_INVALIDA
+        ? MSG_LOGO_INVALIDA
+        : 'Não foi possível salvar. Verifique a internet e tente de novo.');
     } finally {
       setSalvando(false);
     }
@@ -114,8 +138,13 @@ export function SecaoPersonalizacao() {
 
       {/* Cores do topo */}
       <div className="border border-slate-200 rounded-2xl p-4">
-        <h3 className="font-bold text-gray-800 text-sm">Cores do topo</h3>
-        <p className="text-xs text-gray-500">Faixa de cima da tela, com a logo e o nome da loja.</p>
+        <h3 className="font-bold text-gray-800 text-sm">Cores da loja</h3>
+        <p className="text-xs text-gray-500">Usadas no topo da tela e no Painel Admin.</p>
+        {aviso && (
+          <p className="mt-2 text-xs bg-pink-50 border border-pink-200 text-pink-900 rounded-lg px-3 py-2 flex items-center gap-1.5">
+            <Sparkles size={13} className="flex-shrink-0" /> {aviso}
+          </p>
+        )}
         {([['principal', 'Cor principal'], ['destaque', 'Cor de destaque']] as const).map(([campo, rotulo]) => (
           <label key={campo} className="flex items-center gap-3 mt-3 text-sm text-gray-700">
             <input
@@ -138,7 +167,7 @@ export function SecaoPersonalizacao() {
         {/* Prévia do topo */}
         <div
           className="mt-3 rounded-xl px-3 py-2 flex items-center gap-3"
-          style={{ background: `linear-gradient(135deg, #1a1560 0%, ${coresNaTela.principal} 50%, ${coresNaTela.destaque} 100%)` }}
+          style={{ background: fundoTopo(coresNaTela) }}
           data-testid="previa-topo"
         >
           <div className="bg-white rounded-lg px-2 py-1">
@@ -148,7 +177,7 @@ export function SecaoPersonalizacao() {
         </div>
 
         <button
-          onClick={() => setCores(null)}
+          onClick={() => { setCores(null); setAviso(''); }}
           disabled={!cores}
           className="mt-3 w-full py-2 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold flex items-center justify-center gap-1.5 disabled:opacity-40"
         >

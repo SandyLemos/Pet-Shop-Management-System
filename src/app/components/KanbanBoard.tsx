@@ -163,7 +163,7 @@ function KanbanColumn({
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <button
               onClick={() => setIsDialogOpen(true)}
-              className="w-full mt-3 border-dashed border-2 border-yellow-500 hover:bg-yellow-50 text-yellow-700 hover:text-yellow-800 hover:border-yellow-600 rounded-md py-2 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
+              className="w-full mt-3 border-dashed border-2 border-[#F7931E] hover:bg-orange-50 text-[#B8650A] hover:text-[#8F4E07] rounded-md py-2 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
             >
               <Plus className="w-4 h-4" />
               Adicionar Animal
@@ -245,7 +245,7 @@ export function KanbanBoard({
               onAssignProfessional={onAssignProfessional}
               onMarkServiceComplete={onMarkServiceComplete}
               onAdvanceStage={onAdvanceStage}
-              color="bg-amber-400"
+              color="bg-[#F7931E]"
               onAddPet={onAddPet}
               allPets={pets}
               slotsUsados={usados}
@@ -263,7 +263,7 @@ export function KanbanBoard({
               onAssignProfessional={onAssignProfessional}
               onMarkServiceComplete={onMarkServiceComplete}
               onAdvanceStage={onAdvanceStage}
-              color="bg-sky-400"
+              color="bg-[#0B5A70]"
               allPets={pets}
               slotsUsados={usados}
             />
@@ -280,7 +280,7 @@ export function KanbanBoard({
               onAssignProfessional={onAssignProfessional}
               onMarkServiceComplete={onMarkServiceComplete}
               onAdvanceStage={onAdvanceStage}
-              color="bg-sky-400"
+              color="bg-[#0B5A70]"
               allPets={pets}
               slotsUsados={usados}
             />
@@ -297,7 +297,7 @@ export function KanbanBoard({
               onAssignProfessional={onAssignProfessional}
               onMarkServiceComplete={onMarkServiceComplete}
               onAdvanceStage={onAdvanceStage}
-              color="bg-sky-400"
+              color="bg-[#0B5A70]"
               allPets={pets}
               slotsUsados={usados}
             />

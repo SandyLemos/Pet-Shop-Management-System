@@ -39,8 +39,17 @@ service cloud.firestore {
 
     // —— Dono do sistema —————————————————————————————————————————
     match /donos/{uid} {
-      allow read: if isAuthenticated() && request.auth.uid == uid;
-      allow write: if false; // só pelo console
+      allow read: if isAuthenticated() && (request.auth.uid == uid || isDono());
+      // NOVO: um proprietário dá acesso a outro (sócio, desenvolvedor) pelo painel
+      allow create: if isDono()
+                    && request.resource.data.keys().hasOnly(['nome', 'email', 'criadoEm'])
+                    && request.resource.data.nome is string
+                    && request.resource.data.nome.size() > 0
+                    && request.resource.data.nome.size() <= 100
+                    && request.resource.data.email is string;
+      allow update: if false;
+      // ninguém tira o próprio acesso (sempre fica pelo menos um)
+      allow delete: if isDono() && uid != request.auth.uid;
     }
 
     // —— Usuários ————————————————————————————————————————————————
@@ -79,6 +88,7 @@ service cloud.firestore {
                     && request.resource.data.diff(resource.data).affectedKeys()
                          .hasOnly(['logoUrl', 'cores', 'personalizadoEm'])
                     && (!('logoUrl' in request.resource.data)
+                        || request.resource.data.logoUrl == resource.data.get('logoUrl', null)
                         || (request.resource.data.logoUrl is string
                             && request.resource.data.logoUrl.size() <= 500
                             && request.resource.data.logoUrl.matches('^https://res[.]cloudinary[.]com/.*')))
@@ -91,6 +101,7 @@ service cloud.firestore {
       match /{documento=**} {
         allow read: if isDono();
         allow create, update: if isDono();
+        allow delete: if isDono(); // NOVO: excluir a loja inteira
       }
 
       match /profissionais/{profissionalId} {
