@@ -185,6 +185,12 @@ service cloud.firestore {
       }
     }
 
+    // —— Contas liberadas (NOVO): e-mail de loja excluída ou acesso removido,
+    //    para poder cadastrar o mesmo e-mail de novo. Só o dono.
+    match /contasLivres/{email} {
+      allow read, write: if isDono();
+    }
+
     // —— Mensalidades (só o dono) —————————————————————————————————
     match /cobrancas/{cobrancaId} {
       allow read, write: if isDono();

@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Store, Wallet, Package, Megaphone, Settings, LogOut, Plus, Search,
   AlertTriangle, TrendingUp, CalendarCheck, Ban, CheckCircle2, Clock, MessageCircle,
   ChevronRight, ChevronLeft, X, Sparkles, ShieldCheck, Lock, Send, Pencil, RefreshCw,
-  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus,
+  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus, Eye,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import {
@@ -17,6 +17,7 @@ import {
 import { telefoneWhatsApp } from '../../../utils/whatsapp';
 import { idDoDia } from '../../../utils/dias';
 import type { ResultadoMigracao } from '../../../services/migracaoService';
+import { LojaAoVivo } from './LojaAoVivo';
 import { fonteFirestore, LOJA_DA_MIGRACAO, EMAIL_EM_USO, nomeConfere, type FonteDono, type Proprietario } from './fonteDono';
 
 const COR = { petroleo: '#0B5A70', escuro: '#04394A', azul: '#1A90D0', laranja: '#F7931E' };
@@ -287,6 +288,7 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmarBloqueio, setConfirmarBloqueio] = useState(false);
   const [excluir, setExcluir] = useState(false);
+  const [aoVivo, setAoVivo] = useState(false);
   const { situacao, diasAtraso } = situacaoDaLoja(loja, d.cobrancas, d.hoje);
   const uso = resumoUso(d.atividade[loja.id], d.hoje);
   const mes = mesDe(d.hoje);
@@ -349,6 +351,7 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
 
           <div className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Ações</p>
+            <Botao id="aovivo" icone={Eye} cor={COR.azul} onClick={() => setAoVivo(true)}>Ver a loja ao vivo (só leitura)</Botao>
             {zap && (
               <a href={`https://wa.me/${zap}`} target="_blank" rel="noreferrer"
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl ring-1 ring-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700">
@@ -397,6 +400,7 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
           </div>
         </div>
       </div>
+      {aoVivo && <LojaAoVivo loja={loja} fechar={() => setAoVivo(false)} />}
       {excluir && (
         <ExcluirLoja d={d} loja={loja} fonte={fonte} fechar={() => setExcluir(false)}
           aoExcluir={async () => { setExcluir(false); fechar(); await recarregar(); }} />
@@ -506,7 +510,7 @@ function Acessos({ fonte, meuUid, hoje }: { fonte: FonteDono; meuUid?: string; h
   const confirmarRemocao = async () => {
     if (!remover) return;
     try {
-      await fonte.removerProprietario(remover.uid, meuUid ?? '');
+      await fonte.removerProprietario(remover.uid, meuUid ?? '', hoje);
       toast.success(`${remover.nome || remover.email} não acessa mais o painel.`);
       setRemover(null);
       await carregar();

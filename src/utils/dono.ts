@@ -19,6 +19,8 @@ export interface Loja {
   /** último dia do teste grátis (AAAA-MM-DD) */
   fimTeste?: string;
   logoUrl?: string;
+  /** cores do topo escolhidas na Personalização da loja */
+  cores?: { principal: string; destaque: string };
   /** AAAA-MM-DD */
   criadaEm?: string;
   /** primeiro mês com mensalidade (AAAA-MM); antes disso não cobra */
@@ -40,6 +42,8 @@ export interface Atividade {
   /** atendimentos entregues por dia (AAAA-MM-DD), últimos 30 dias */
   porDia: Record<string, number>;
   usuarios: number;
+  /** a loja já começou a usar (tem atendimento ou ficha de pet). Sem o dado, conta como já usou. */
+  jaUsou?: boolean;
 }
 
 export type AlvoComunicado = 'todas' | 'teste' | PlanoId;
@@ -183,6 +187,8 @@ export interface ResumoUso {
   /** dias desde o último atendimento (null = nenhum nos últimos 30 dias) */
   diasSemUso: number | null;
   usuarios: number;
+  /** a loja ainda não fez o primeiro atendimento (não conta como "sem uso") */
+  naoComecou: boolean;
 }
 
 export function resumoUso(a: Atividade | undefined, hoje: string): ResumoUso {
@@ -194,10 +200,12 @@ export function resumoUso(a: Atividade | undefined, hoje: string): ResumoUso {
     ultimos30: Object.values(porDia).reduce((s, n) => s + n, 0),
     diasSemUso: ultimo ? diasEntre(ultimo, hoje) : null,
     usuarios: a?.usuarios ?? 0,
+    naoComecou: !ultimo && a?.jaUsou === false,
   };
 }
 
 export function textoUltimoUso(r: ResumoUso): string {
+  if (r.naoComecou) return 'ainda sem atendimentos';
   if (r.diasSemUso === null) return 'sem uso em 30 dias';
   if (r.diasSemUso === 0) return 'hoje';
   if (r.diasSemUso === 1) return 'ontem';
@@ -227,7 +235,8 @@ export function alertasDoDono(d: DadosDono): Alerta[] {
     }
     if (loja.status !== 'bloqueada' && !(loja.status === 'teste' && loja.fimTeste && loja.fimTeste < d.hoje)) {
       const uso = resumoUso(d.atividade[loja.id], d.hoje);
-      if (uso.diasSemUso === null || uso.diasSemUso >= 7) {
+      // loja que ainda não começou a usar não entra no alerta: conta a partir do primeiro atendimento
+      if (!uso.naoComecou && (uso.diasSemUso === null || uso.diasSemUso >= 7)) {
         out.push({ loja, tipo: 'sem_uso', acao: 'Ver loja',
           texto: uso.diasSemUso === null ? 'Nenhum atendimento nos últimos 30 dias' : `Nenhum atendimento há ${uso.diasSemUso} dias (risco de cancelar)` });
       }

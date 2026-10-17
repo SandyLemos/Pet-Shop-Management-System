@@ -15,7 +15,7 @@ export interface FonteDono {
   excluirLoja(loja: Loja, hoje: string, aoAvancar: (t: string) => void): Promise<void>;
   listarProprietarios(): Promise<dono.Proprietario[]>;
   cadastrarProprietario(nome: string, email: string, hoje: string): Promise<dono.Proprietario>;
-  removerProprietario(uid: string, meuUid: string): Promise<void>;
+  removerProprietario(uid: string, meuUid: string, hoje?: string): Promise<void>;
 }
 
 export { EMAIL_EM_USO, NAO_PODE_REMOVER_A_SI, nomeConfere, type Proprietario } from '../../../services/donoService';

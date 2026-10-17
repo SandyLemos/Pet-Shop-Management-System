@@ -27,7 +27,35 @@ async function atividadeDaLoja(lojaId: string, hoje: string): Promise<Atividade>
     if (n > 0) porDia[dia] = n;
   }));
   const usuarios = (await getCountFromServer(query(collection(db, 'usuarios'), where('lojaId', '==', lojaId)))).data().count;
-  return { porDia, usuarios };
+  // sem movimento em 30 dias: a loja já usou alguma vez? (sem nenhuma ficha de pet = ainda não começou)
+  const jaUsou = Object.keys(porDia).length > 0
+    || (await getCountFromServer(collection(db, 'lojas', lojaId, 'petsCadastro'))).data().count > 0;
+  return { porDia, usuarios, jaUsou };
+}
+
+// ─── Contas liberadas (e-mail de loja excluída ou acesso removido) ─────────────
+// O site não consegue apagar a conta de login de outra pessoa (só o console do Firebase).
+// Então, ao excluir, guardamos de quem era a conta; ao cadastrar o mesmo e-mail de novo,
+// ela é reaproveitada e a pessoa recebe o e-mail para criar uma senha nova.
+
+const chaveEmail = (email: string) => email.trim().toLowerCase();
+
+async function liberarConta(uid: string, email: string | undefined, hoje: string) {
+  if (!email) return;
+  await setDoc(doc(db, 'contasLivres', chaveEmail(email)), { uid, liberadaEm: hoje });
+}
+
+/** Cria a conta; se o e-mail já existir mas estiver liberado, reaproveita. Senão lança EMAIL_EM_USO. */
+async function criarOuReaproveitarConta(auth2: any, email: string): Promise<{ uid: string; reaproveitada: boolean }> {
+  try {
+    const senhaProvisoria = `${crypto.randomUUID()}Aa1!`;
+    return { uid: (await createUserWithEmailAndPassword(auth2, email, senhaProvisoria)).user.uid, reaproveitada: false };
+  } catch (err: any) {
+    if (err?.code !== 'auth/email-already-in-use') throw err;
+    const livre = await getDoc(doc(db, 'contasLivres', chaveEmail(email)));
+    if (!livre.exists()) throw new Error(EMAIL_EM_USO);
+    return { uid: livre.data()!.uid, reaproveitada: true };
+  }
 }
 
 export async function carregarDadosDono(hoje: string): Promise<DadosDono> {
@@ -92,14 +120,7 @@ export async function criarLoja(n: NovaLoja, hoje: string, existentes: string[])
   const app2 = initializeApp(firebaseConfig, `novaLoja-${Date.now()}`);
   const auth2 = getAuth(app2);
   try {
-    let uid: string;
-    try {
-      const senhaProvisoria = `${crypto.randomUUID()}Aa1!`;
-      uid = (await createUserWithEmailAndPassword(auth2, loja.emailAdmin!, senhaProvisoria)).user.uid;
-    } catch (err: any) {
-      if (err?.code === 'auth/email-already-in-use') throw new Error(EMAIL_EM_USO);
-      throw err;
-    }
+    const { uid, reaproveitada } = await criarOuReaproveitarConta(auth2, loja.emailAdmin!);
     const { id: _id, ...dados } = loja;
     await setDoc(doc(db, 'lojas', id), { ...dados, criadoEmTs: serverTimestamp() });
     const [nome, ...resto] = loja.responsavel!.split(/\s+/);
@@ -107,6 +128,7 @@ export async function criarLoja(n: NovaLoja, hoje: string, existentes: string[])
       id: uid, nome, sobrenome: resto.join(' '), funcao: 'Administrador', role: 'admin',
       email: loja.emailAdmin, lojaId: id, criadoEm: serverTimestamp(),
     });
+    if (reaproveitada) await deleteDoc(doc(db, 'contasLivres', chaveEmail(loja.emailAdmin!)));
     await sendPasswordResetEmail(auth2, loja.emailAdmin!);
   } finally {
     await deleteApp(app2);
@@ -168,16 +190,10 @@ export async function cadastrarProprietario(nome: string, email: string, hoje: s
   const app2 = initializeApp(firebaseConfig, `novoProprietario-${Date.now()}`);
   const auth2 = getAuth(app2);
   try {
-    let uid: string;
-    try {
-      const senhaProvisoria = `${crypto.randomUUID()}Aa1!`;
-      uid = (await createUserWithEmailAndPassword(auth2, emailLimpo, senhaProvisoria)).user.uid;
-    } catch (err: any) {
-      if (err?.code === 'auth/email-already-in-use') throw new Error(EMAIL_EM_USO);
-      throw err;
-    }
+    const { uid, reaproveitada } = await criarOuReaproveitarConta(auth2, emailLimpo);
     const dados = { nome: nome.trim(), email: emailLimpo, criadoEm: hoje };
     await setDoc(doc(db, 'donos', uid), dados);
+    if (reaproveitada) await deleteDoc(doc(db, 'contasLivres', emailLimpo));
     await sendPasswordResetEmail(auth2, emailLimpo);
     return { uid, ...dados };
   } finally {
@@ -186,9 +202,11 @@ export async function cadastrarProprietario(nome: string, email: string, hoje: s
 }
 
 /** Tira o acesso ao painel (a pessoa não entra mais). Ninguém tira o próprio acesso. */
-export async function removerProprietario(uid: string, meuUid: string) {
+export async function removerProprietario(uid: string, meuUid: string, hoje = '') {
   if (uid === meuUid) throw new Error(NAO_PODE_REMOVER_A_SI);
+  const atual = await getDoc(doc(db, 'donos', uid));
   await deleteDoc(doc(db, 'donos', uid));
+  await liberarConta(uid, atual.data()?.email, hoje); // o e-mail pode ser cadastrado de novo depois
 }
 
 // ─── Excluir loja ─────────────────────────────────────────────────────────────
@@ -234,9 +252,12 @@ export async function excluirLoja(loja: Loja, hoje: string, aoAvancar?: (texto: 
     lote.forEach((r) => refs.push(...r));
   }
   refs.push(...diasDoc.map((d: any) => d.ref));
-  refs.push(...(await getDocs(query(collection(db, 'usuarios'), where('lojaId', '==', loja.id)))).docs.map((d: any) => d.ref));
+  const usuarios = (await getDocs(query(collection(db, 'usuarios'), where('lojaId', '==', loja.id)))).docs;
+  refs.push(...usuarios.map((d: any) => d.ref));
   refs.push(...(await getDocs(query(collection(db, 'cobrancas'), where('lojaId', '==', loja.id)))).docs.map((d: any) => d.ref));
 
+  // guarda de quem eram as contas antes de apagar: o e-mail pode ser cadastrado de novo depois
+  await Promise.all(usuarios.map((u: any) => liberarConta(u.id, u.data()?.email, hoje)));
   await apagarTudo(refs, (feitos, total) => aoAvancar?.(`Apagando... ${feitos} de ${total}`));
   await deleteDoc(doc(db, 'lojas', loja.id)); // por último: se parar no meio, a loja continua na lista para tentar de novo
 }

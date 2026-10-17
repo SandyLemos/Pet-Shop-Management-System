@@ -21,7 +21,7 @@ vi.mock('firebase/firestore', async () => {
 
 import {
   linhasFinanceiro, situacaoDaLoja, alertasDoDono, resumoUso, idParaLoja, vencimentoNoMes,
-  primeiroMesCobrado, comunicadoParaLoja, receitaPorMes, type Loja, type Cobranca, type DadosDono,
+  primeiroMesCobrado, comunicadoParaLoja, receitaPorMes, textoUltimoUso, type Loja, type Cobranca, type DadosDono,
 } from '../src/utils/dono';
 import {
   carregarDadosDono, criarLoja, registrarPagamento, EMAIL_EM_USO,
@@ -78,7 +78,7 @@ describe('Painel do Dono: contas', () => {
 
   it('uso: hoje, 30 dias e dias sem uso', () => {
     const r = resumoUso({ porDia: { '2026-10-15': 3, '2026-10-01': 5 }, usuarios: 2 }, HOJE);
-    expect(r).toEqual({ hoje: 3, ultimos30: 8, diasSemUso: 0, usuarios: 2 });
+    expect(r).toEqual({ hoje: 3, ultimos30: 8, diasSemUso: 0, usuarios: 2, naoComecou: false });
     expect(resumoUso({ porDia: { '2026-10-06': 1 }, usuarios: 1 }, HOJE).diasSemUso).toBe(9);
     expect(resumoUso(undefined, HOJE).diasSemUso).toBeNull();
   });
@@ -153,7 +153,7 @@ describe('Painel do Dono: banco', () => {
     await registrarPagamento({ id: 'a' } as Loja, '2026-10', 89, HOJE);
     const d = await carregarDadosDono(HOJE);
     expect(d.lojas.map((l) => l.id)).toEqual(['a']);
-    expect(d.atividade.a).toEqual({ porDia: { '2026-10-15': 1, '2026-10-02': 1 }, usuarios: 1 });
+    expect(d.atividade.a).toEqual({ porDia: { '2026-10-15': 1, '2026-10-02': 1 }, usuarios: 1, jaUsou: true });
     expect(d.cobrancas).toEqual([{ id: 'a_2026-10', lojaId: 'a', mes: '2026-10', valor: 89, pagaEm: HOJE }]);
     expect(d.migracaoPendente).toBe(false);
   });
@@ -251,11 +251,58 @@ describe('Painel do Proprietário: acessos', () => {
     expect(await listarProprietarios()).toEqual([]);
   });
 
+  it('acesso removido libera o e-mail: dá para cadastrar a mesma pessoa de novo', async () => {
+    fs().set('donos/eu', { nome: 'André' });
+    const p = await cadastrarProprietario('Maria', 'maria@x.com', HOJE);
+    await removerProprietario(p.uid, 'eu', HOJE);
+    expect(fs().get('contasLivres/maria@x.com')).toEqual({ uid: p.uid, liberadaEm: HOJE });
+    const de_novo = await cadastrarProprietario('Maria', 'maria@x.com', HOJE); // a conta de login continua existindo
+    expect(de_novo.uid).toBe(p.uid);
+    expect(fs().get('contasLivres/maria@x.com')).toBeUndefined();
+    expect(ff.resetEnviado).toEqual(['maria@x.com', 'maria@x.com']);
+  });
+
   it('remove o acesso de outro, mas ninguém remove o próprio', async () => {
     fs().set('donos/eu', { nome: 'André' });
     fs().set('donos/socio', { nome: 'Sócio' });
     await expect(removerProprietario('eu', 'eu')).rejects.toThrow(NAO_PODE_REMOVER_A_SI);
     await removerProprietario('socio', 'eu');
     expect((await listarProprietarios()).map((x) => x.uid)).toEqual(['eu']);
+  });
+});
+
+describe('Painel do Proprietário: e-mail de loja excluída e loja nova', () => {
+  it('excluir a loja libera o e-mail do responsável para uma loja nova', async () => {
+    const nova = { nome: 'Loja Teste 01', cidade: 'X', telefone: '', responsavel: 'Ana Lima', emailAdmin: 'ana@x.com',
+      plano: 'basico' as const, mensalidade: 89, vencimentoDia: 10, diasDeTeste: 15 };
+    const l1 = await criarLoja(nova, HOJE, []);
+    const uid = 'uid-ana@x.com'; // conta criada pelo login falso
+    await excluirLoja(l1, HOJE);
+    expect(fs().get('contasLivres/ana@x.com')).toEqual({ uid, liberadaEm: HOJE });
+
+    const l2 = await criarLoja(nova, HOJE, []); // mesmo e-mail: antes dava "e-mail em uso"
+    expect(fs().get(`usuarios/${uid}`)).toMatchObject({ email: 'ana@x.com', lojaId: l2.id, role: 'admin' });
+    expect(fs().get('contasLivres/ana@x.com')).toBeUndefined();
+  });
+
+  it('e-mail em uso por outra loja continua recusado', async () => {
+    ff.contas = ['ana@x.com'];
+    await expect(criarLoja({ nome: 'B', cidade: '', telefone: '', responsavel: 'Ana', emailAdmin: 'ana@x.com',
+      plano: 'basico', mensalidade: 89, vencimentoDia: 10, diasDeTeste: 0 }, HOJE, [])).rejects.toThrow(EMAIL_EM_USO);
+  });
+
+  it('loja nova sem nenhum atendimento não aparece como "sem uso"', () => {
+    const nova = resumoUso({ porDia: {}, usuarios: 1, jaUsou: false }, HOJE);
+    expect(nova.naoComecou).toBe(true);
+    expect(textoUltimoUso(nova)).toBe('ainda sem atendimentos');
+    const parada = resumoUso({ porDia: {}, usuarios: 1, jaUsou: true }, HOJE);
+    expect(textoUltimoUso(parada)).toBe('sem uso em 30 dias');
+
+    const d: DadosDono = {
+      hoje: HOJE, cobrancas: [], comunicados: [], migracaoPendente: false,
+      lojas: [loja({ id: 'nova', nome: 'Nova' }), loja({ id: 'par', nome: 'Parada' })],
+      atividade: { nova: { porDia: {}, usuarios: 1, jaUsou: false }, par: { porDia: {}, usuarios: 1, jaUsou: true } },
+    };
+    expect(alertasDoDono(d).filter((a) => a.tipo === 'sem_uso').map((a) => a.loja.id)).toEqual(['par']);
   });
 });
