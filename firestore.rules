@@ -73,6 +73,12 @@ service cloud.firestore {
                             && (userId != request.auth.uid
                                 || request.resource.data.role == resource.data.role)));
 
+      // primeiro acesso: a própria pessoa só tira a marca "trocar senha" depois de criar a senha dela
+      allow update: if isAuthenticated() && request.auth.uid == userId
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['trocarSenha'])
+                    && resource.data.get('trocarSenha', false) == true
+                    && request.resource.data.trocarSenha == false;
+
       // admin exclui os da loja dele, menos a si mesmo
       allow delete: if userId != request.auth.uid
                     && (isDono() || adminDaLoja(resource.data.lojaId));
@@ -214,116 +220,10 @@ service cloud.firestore {
       allow write: if isDono();
     }
 
-    // ════════════════════════════════════════════════════════════
-    // FORMATO ANTIGO (antes das várias lojas) — fica só durante a mudança.
-    // O dono lê tudo para copiar; depois da migração esta parte sai.
-    // ════════════════════════════════════════════════════════════
-    match /{colecao}/{documento=**} {
-      allow read: if isDono()
-                  && colecao in ['petsCadastro', 'profissionais', 'racas', 'contadores', 'slotsUsados', 'dias'];
-    }
-
-    // Funcionário ainda NÃO ligado a uma loja (versão antiga do app).
-    // Depois da migração todos têm loja, e a versão antiga para de gravar aqui.
-    function semLoja() {
-      return isStaff() && !('lojaId' in perfil());
-    }
-
-    function adminSemLoja() {
-      return semLoja() && perfil().role == 'admin';
-    }
-
-    // —— Profissionais (antigo) ——————————————————————————————————
-    match /profissionais/{profissionalId} {
-      allow read: if semLoja();
-      allow create, update, delete: if adminSemLoja();
-    }
-
-    // —— Pets Cadastro (ficha permanente) ————————————————————————
+    // —— Raiz antiga (vazia desde 17/10): o Painel do Dono ainda consulta se há
+    //    migração pendente. Só leitura, só o dono. Sai quando o site parar de consultar.
     match /petsCadastro/{petNumber} {
-      allow read: if semLoja();
-      allow create, update: if semLoja()
-                    && request.resource.data.petNumber == petNumber
-                    && request.resource.data.nomePet is string
-                    && request.resource.data.nomePet.size() > 0
-                    && request.resource.data.nomePet.size() <= 100
-                    && request.resource.data.nomeTutor is string
-                    && request.resource.data.nomeTutor.size() <= 100;
-      allow delete: if adminSemLoja();
-    }
-
-    // —— Raças (catálogo customizável) ————————————————————————————
-    match /racas/{racaId} {
-      allow read: if semLoja();
-
-      allow create: if semLoja()
-                    && request.resource.data.keys().hasOnly(['nome', 'especie', 'criadoEm'])
-                    && request.resource.data.nome is string
-                    && request.resource.data.nome.size() > 0
-                    && request.resource.data.nome.size() <= 60
-                    && request.resource.data.especie in ['cao', 'gato'];
-
-      allow update: if adminSemLoja()
-                    && request.resource.data.diff(resource.data)
-                         .affectedKeys().hasOnly(['nome', 'atualizadoEm'])
-                    && request.resource.data.nome is string
-                    && request.resource.data.nome.size() > 0
-                    && request.resource.data.nome.size() <= 60;
-
-      allow delete: if adminSemLoja();
-    }
-
-    // —— Contadores (petNumber sequencial) ———————————————————————
-    // MUDOU: o contador só pode começar em 1 e subir de 1 em 1,
-    // para ninguém voltar o número e sobrescrever fichas.
-    match /contadores/{contadorId} {
-      allow read:   if semLoja();
-      allow create: if semLoja() && request.resource.data.valor == 1;
-      allow update: if semLoja()
-                    && request.resource.data.valor == resource.data.valor + 1;
-      allow delete: if false;
-    }
-
-    // —— Slots já usados no dia (grade compartilhada) ————————————
-    match /slotsUsados/{dia} {
-      allow read:           if semLoja();
-      allow create, update: if semLoja() && request.resource.data.slots is list;
-      allow delete:         if adminSemLoja();
-    }
-
-    // —— Dias (antigo) ————————————————————————————————————————————————————
-    match /dias/{diaId} {
-      allow read, create, update: if semLoja();
-      allow delete: if adminSemLoja();
-
-      match /pets/{petId} {
-        allow read:   if semLoja();
-        allow create, update: if semLoja()
-                    && request.resource.data.slotNumber is int
-                    && request.resource.data.slotNumber >= 1
-                    && request.resource.data.slotNumber <= 100
-                    && request.resource.data.status in
-                         ['espera', 'banho', 'escovar', 'tosa', 'finalizado']
-                    && request.resource.data.servico in
-                         ['banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao']
-                    && request.resource.data.nomePet is string
-                    && request.resource.data.nomePet.size() > 0
-                    && request.resource.data.nomePet.size() <= 100;
-        allow delete: if semLoja();
-      }
-
-      // aba "Entregues" lê para todos os funcionários; log não se edita
-      match /logs/{logId} {
-        allow read:   if semLoja();
-        allow create: if semLoja();
-        // NOVO (LGPD): só o admin, e só para trocar o nome do tutor por "Removido (LGPD)"
-        allow update: if adminSemLoja()
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor'])
-                    && request.resource.data.nomeTutor == 'Removido (LGPD)';
-        allow delete: if adminSemLoja();
-      }
-
-      // REMOVIDO: /deletados — o app não usa mais (cai no bloqueio abaixo)
+      allow read: if isDono();
     }
 
     // —— Bloqueio de coleções não previstas ——————————————————————

@@ -219,3 +219,28 @@ describe('useAuth em mais de um componente', () => {
     expect(lojaId()).toBe('elite');
   });
 });
+
+describe('useAuth: primeiro acesso (senha provisória)', () => {
+  it('cadastro com trocarSenha: entra, mas fica marcado para criar a senha (com o nome)', async () => {
+    fb.docs['usuarios/func1'] = { role: 'user', lojaId: 'elite', nome: 'Ana', trocarSenha: true };
+    const { result } = renderHook(() => useAuth());
+    await act(async () => { fb.listener!(null); });
+    fb.signInResult = funcionario;
+    await act(async () => { await result.current.login('func@loja.com', 'Abcd-Ef23'); });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(result.current.trocarSenha).toBe(true);
+    expect(result.current.nome).toBe('Ana');
+
+    act(() => result.current.senhaTrocada());
+    expect(result.current.trocarSenha).toBe(false);
+  });
+
+  it('contas antigas (sem o campo) não são afetadas', async () => {
+    const { result } = renderHook(() => useAuth());
+    await act(async () => { fb.listener!(null); });
+    fb.signInResult = funcionario;
+    await act(async () => { await result.current.login('func@loja.com', '123456'); });
+    await waitFor(() => expect(result.current.isAuthenticated).toBe(true));
+    expect(result.current.trocarSenha).toBe(false);
+  });
+});

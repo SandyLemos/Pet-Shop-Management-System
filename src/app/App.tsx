@@ -19,6 +19,7 @@ import { EntreguesTab } from './components/EntreguesTab';
 
 import { LogoutModal } from './components/LogoutModal';
 import { LoginScreen, SplashScreen } from './components/TelaLogin';
+import { TelaPrimeiroAcesso } from './components/TelaPrimeiroAcesso';
 // o Painel do Dono só é baixado por quem é dono (as lojas não carregam esse código)
 const PainelDono = lazy(() => import('./components/dono/PainelDono').then((m) => ({ default: m.PainelDono })));
 import { AvisoSistema } from './components/AvisoSistema';
@@ -28,7 +29,7 @@ import { fundoTopo } from '../utils/cores';
 
 // ─── App Principal ────────────────────────────────────────────────────────────
 export default function App() {
-  const { user, loading, error, isAuthenticated, login, logout, isAdmin, isDono } = useAuth();
+  const { user, loading, error, isAuthenticated, login, logout, isAdmin, isDono, trocarSenha, nome, senhaTrocada } = useAuth();
   const visual = useVisualLoja(); // logo e cores da Personalização
   useAplicarCoresLoja(visual);    // e as mesmas cores no Painel Admin
 
@@ -55,7 +56,8 @@ export default function App() {
   // ✅ Depende da CONTA (uid) e do DIA: se a conta mudar ou o dia virar
   //    sem recarregar a página, a lista é zerada e buscada de novo.
   // ✅ o dono do sistema não tem loja: nada da fila é carregado para ele
-  const uid = isDono ? null : user?.uid ?? null;
+  // ✅ primeiro acesso (senha provisória): nada da loja é carregado até a pessoa criar a senha
+  const uid = isDono || trocarSenha ? null : user?.uid ?? null;
 
   // ✅ Suporte ao vivo: enquanto o proprietário acompanha, este aparelho conta o que está aberto
   const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
@@ -124,6 +126,16 @@ export default function App() {
             return success;
           }}
         />
+      </>
+    );
+  }
+
+  // ✅ Primeiro acesso: a pessoa cria a própria senha antes de usar o sistema
+  if (trocarSenha) {
+    return (
+      <>
+        <Toaster position="top-right" richColors />
+        <TelaPrimeiroAcesso nome={nome} onSalvo={senhaTrocada} onSair={logout} />
       </>
     );
   }

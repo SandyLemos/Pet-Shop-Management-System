@@ -192,10 +192,8 @@ describe('Migração do formato antigo', () => {
     await expect(migrarDadosAntigos({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' }, HOJE)).rejects.toThrow(JA_MIGRADO);
   });
 
-  it('painel avisa que há dados antigos até a migração ser feita', async () => {
+  it('painel não consulta mais a raiz antiga (apagada): nunca há migração pendente', async () => {
     antigo();
-    expect((await carregarDadosDono(HOJE)).migracaoPendente).toBe(true);
-    await migrarDadosAntigos({ id: 'elite-pet-shop', nome: 'Elite Pet Shop' }, HOJE);
     expect((await carregarDadosDono(HOJE)).migracaoPendente).toBe(false);
   });
 });

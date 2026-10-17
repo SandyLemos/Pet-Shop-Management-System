@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { X, Users, Plus, Pencil, Trash2, AlertTriangle, UserCircle2, ShieldCheck, User } from 'lucide-react';
+import { X, Users, Plus, Pencil, Trash2, AlertTriangle, UserCircle2, ShieldCheck, User, CheckCircle2, Copy, MessageCircle } from 'lucide-react';
 import { collection, getDocs, updateDoc, deleteDoc, doc, setDoc, Timestamp, query, where } from 'firebase/firestore';
 import { getAuth, createUserWithEmailAndPassword } from 'firebase/auth';
+import { gerarSenhaProvisoria } from '../../services/senhaService';
 import { firebaseConfig, db } from '../../lib/firebase';
 import { lojaId } from '../../lib/loja';
 import { toast } from 'sonner';
@@ -52,6 +53,59 @@ function ModalConfirmDelete({
   );
 }
 
+// ─── Usuário criado: login e senha provisória para passar à pessoa ───────────
+function UsuarioCriado({ nome, email, senha, onClose }: { nome: string; email: string; senha: string; onClose: () => void }) {
+  const dados = `Login: ${email}\nSenha provisória: ${senha}`;
+  const mensagem = `Olá! Seu acesso ao Pata & Gestão:\n${window.location.origin}\n${dados}\nNo primeiro acesso o sistema pede para você criar a sua senha.`;
+
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(dados); toast.success('Login e senha copiados.'); }
+    catch { toast.error('Não deu para copiar. Selecione o texto e copie.'); }
+  };
+
+  return (
+    <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" />
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-8 animate-in fade-in zoom-in-95 duration-200 space-y-5">
+        <div className="flex flex-col items-center text-center gap-2">
+          <div className="bg-green-100 p-3 rounded-full"><CheckCircle2 className="w-8 h-8 text-green-600" /></div>
+          <h2 className="text-lg font-bold text-gray-900">Usuário {nome} criado</h2>
+          <p className="text-sm text-gray-500">
+            Passe estes dados para a pessoa. Ela entra com a senha provisória e o sistema pede para ela criar a senha dela na hora.
+          </p>
+        </div>
+        <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-4 space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Login</p>
+            <p className="font-mono text-sm text-gray-800 break-all select-all">{email}</p>
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Senha provisória</p>
+            <p className="font-mono text-2xl font-bold tracking-wider select-all" style={{ color: '#0B5A70' }} data-testid="senha-provisoria">{senha}</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <button type="button" onClick={copiar}
+            className="py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm font-semibold text-gray-700 hover:bg-slate-100 transition flex items-center justify-center gap-2">
+            <Copy size={15} /> Copiar
+          </button>
+          <a href={`https://wa.me/?text=${encodeURIComponent(mensagem)}`} target="_blank" rel="noopener noreferrer"
+            className="py-2.5 rounded-lg bg-green-500 hover:bg-green-600 text-white text-sm font-semibold shadow transition flex items-center justify-center gap-2">
+            <MessageCircle size={15} /> Enviar no WhatsApp
+          </a>
+        </div>
+        <p className="text-xs text-gray-400">
+          A senha provisória aparece só agora e só serve para o primeiro login. Se a pessoa esquecer a senha depois, ela toca em "Esqueci a senha" na tela de login.
+        </p>
+        <button type="button" onClick={onClose}
+          className="w-full py-2.5 rounded-lg text-white text-sm font-semibold shadow transition" style={{ background: 'linear-gradient(135deg, #0B5A70 0%, #1A90D0 100%)' }}>
+          Pronto
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ─── Card Criar Usuário ───────────────────────────────────────────────────────
 function CardCriarUsuario({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
   const [nome, setNome]           = useState('');
@@ -59,33 +113,39 @@ function CardCriarUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
   const [funcao, setFuncao]       = useState('');
   const [role, setRole]           = useState<'user' | 'admin'>('user');
   const [email, setEmail]         = useState('');
-  const [senha, setSenha]         = useState('');
   const [loading, setLoading]     = useState(false);
+  // dados para passar à pessoa: ficam só nesta tela, a senha não é gravada
+  const [criado, setCriado]       = useState<{ nome: string; email: string; senha: string } | null>(null);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nome || !sobrenome || !funcao || !email || !senha) { toast.error('Preencha todos os campos.'); return; }
-    if (senha.length < 6) { toast.error('A senha deve ter no mínimo 6 caracteres.'); return; }
+    if (!nome || !sobrenome || !funcao || !email) { toast.error('Preencha todos os campos.'); return; }
     setLoading(true);
-    const appSecundario = initializeApp(firebaseConfig, 'appSecundario');
+    const emailLimpo = email.trim();
+    // app secundário: criar a conta sem desconectar o admin
+    const appSecundario = initializeApp(firebaseConfig, `novoUsuario-${Date.now()}`);
     const authSecundario = getAuth(appSecundario);
     try {
-      const cred = await createUserWithEmailAndPassword(authSecundario, email, senha);
+      // senha provisória: serve só para o primeiro login, depois a pessoa cria a dela
+      const senhaProvisoria = gerarSenhaProvisoria();
+      const cred = await createUserWithEmailAndPassword(authSecundario, emailLimpo, senhaProvisoria);
       await setDoc(doc(db, 'usuarios', cred.user.uid), {
-        id: cred.user.uid, nome, sobrenome, funcao, role, email, lojaId: lojaId(), criadoEm: Timestamp.now(),
+        id: cred.user.uid, nome, sobrenome, funcao, role, email: emailLimpo, lojaId: lojaId(),
+        trocarSenha: true, criadoEm: Timestamp.now(),
       });
-      toast.success(`Usuário ${nome} criado com sucesso! 🎉`);
+      setCriado({ nome: `${nome} ${sobrenome}`.trim(), email: emailLimpo, senha: senhaProvisoria });
       onSuccess();
-      onClose();
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') toast.error('Este e-mail já está em uso.');
-      else if (err.code === 'auth/weak-password') toast.error('A senha deve ter no mínimo 6 caracteres.');
+      else if (err.code === 'auth/invalid-email') toast.error('E-mail inválido.');
       else toast.error('Erro ao criar usuário. Tente novamente.');
     } finally {
       await deleteApp(appSecundario);
       setLoading(false);
     }
   };
+
+  if (criado) return <UsuarioCriado {...criado} onClose={onClose} />;
 
   return (
     <div className="fixed inset-0 z-[60] flex items-center justify-center px-4">
@@ -120,16 +180,7 @@ function CardCriarUsuario({ onClose, onSuccess }: { onClose: () => void; onSucce
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">E-mail</label>
             <input type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="usuario@email.com" autoComplete="email"
               className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
-          </div>
-          <div className="space-y-1">
-            <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Senha</label>
-            <input type="password" value={senha} onChange={e => setSenha(e.target.value)} placeholder="Mínimo 6 caracteres" minLength={6} autoComplete="new-password"
-              className="w-full px-3 py-2.5 rounded-lg border border-slate-200 bg-slate-50 text-sm text-gray-800 placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-400 transition" />
-            {senha.length > 0 && (
-              <p className={`text-xs font-medium mt-1 ${senha.length < 6 ? 'text-red-500' : 'text-green-500'}`}>
-                {senha.length < 6 ? `⚠️ Senha muito curta (${senha.length}/6 caracteres)` : '✅ Senha válida'}
-              </p>
-            )}
+            <p className="text-xs text-gray-400">É o login da pessoa. O sistema gera uma senha provisória na próxima tela.</p>
           </div>
           <div className="space-y-2">
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Nível de Acesso</label>

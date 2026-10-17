@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, AlertTriangle, PawPrint } from 'lucide-react';
+import { LogIn, Eye, EyeOff, AlertTriangle, PawPrint, MailCheck } from 'lucide-react';
+import { enviarLinkNovaSenha } from '../../services/senhaService';
 
 // ✅ Cores da marca Pata & Gestão (tiradas da logo). O login é do sistema, não da loja.
 const FUNDO_MARCA = 'linear-gradient(135deg, #04394A 0%, #0B5A70 45%, #1A90D0 100%)';
@@ -47,6 +48,18 @@ export function LoginScreen({
   const [password, setPassword]         = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [loading, setLoading]           = useState(false);
+  // ✅ "Esqueci a senha": a resposta é sempre a mesma, para não revelar quem tem cadastro
+  const [avisoLink, setAvisoLink]       = useState<string | null>(null);
+  const [pedeEmail, setPedeEmail]       = useState(false);
+  const [enviando, setEnviando]         = useState(false);
+
+  const esqueciSenha = async () => {
+    if (!email.trim()) { setPedeEmail(true); setAvisoLink(null); return; }
+    setPedeEmail(false);
+    setEnviando(true);
+    setAvisoLink(await enviarLinkNovaSenha(email));
+    setEnviando(false);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -122,7 +135,26 @@ export function LoginScreen({
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
+              <div className="flex justify-end">
+                <button type="button" onClick={esqueciSenha} disabled={enviando}
+                  className="text-xs font-semibold hover:underline disabled:opacity-60" style={{ color: '#0B5A70' }}>
+                  {enviando ? 'Enviando…' : 'Esqueci a senha'}
+                </button>
+              </div>
             </div>
+
+            {pedeEmail && (
+              <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 px-4 py-2.5 rounded-xl">
+                Digite o seu e-mail acima e toque em "Esqueci a senha" de novo.
+              </p>
+            )}
+
+            {avisoLink && (
+              <div className="bg-sky-50 border border-sky-200 text-sky-800 text-sm px-4 py-2.5 rounded-xl flex items-center gap-2" role="status">
+                <MailCheck size={15} className="flex-shrink-0" />
+                {avisoLink}
+              </div>
+            )}
 
             {error && (
               <div className="bg-red-50 border border-red-200 text-red-600 text-sm px-4 py-2.5 rounded-xl flex items-center gap-2">

@@ -17,7 +17,12 @@ interface AuthState {
   role: Papel | null;
   loading: boolean;
   error: string | null;
+  /** ✅ primeiro acesso: entrou com a senha provisória e ainda precisa criar a dele */
+  trocarSenha: boolean;
+  nome: string;
 }
+
+interface Acesso { role: Papel; trocarSenha: boolean; nome: string }
 
 // ✅ Mensagens exibidas na tela de login
 export const MSG_ACESSO_NEGADO =
@@ -48,10 +53,10 @@ const RECUSAS: Record<string, string> = {
  * - funcionário com registro em /usuarios ligado a uma loja ativa (ou em teste no prazo).
  * Qualquer outro caso lança um dos motivos de RECUSAS.
  */
-async function verificarAcesso(user: User): Promise<Papel> {
+async function verificarAcesso(user: User): Promise<Acesso> {
   definirLoja(null);
   const dono = await getDoc(doc(db, 'donos', user.uid));
-  if (dono.exists()) return 'dono';
+  if (dono.exists()) return { role: 'dono', trocarSenha: false, nome: '' };
 
   const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
   if (!userDoc.exists()) throw new Error(SEM_REGISTRO);
@@ -65,7 +70,11 @@ async function verificarAcesso(user: User): Promise<Papel> {
   if (loja.status === 'teste' && loja.fimTeste && loja.fimTeste < idDoDia()) throw new Error('TESTE_ACABOU');
 
   definirLoja({ id: perfil.lojaId, nome: loja.nome ?? '', logoUrl: loja.logoUrl, plano: loja.plano, status: loja.status, cores: loja.cores });
-  return perfil.role === 'admin' ? 'admin' : 'user';
+  return {
+    role: perfil.role === 'admin' ? 'admin' : 'user',
+    trocarSenha: perfil.trocarSenha === true, // contas antigas (sem o campo) não são afetadas
+    nome: perfil.nome ?? '',
+  };
 }
 
 /**
@@ -74,12 +83,14 @@ async function verificarAcesso(user: User): Promise<Papel> {
  */
 let erroPendente: string | null = null;
 
+const SEM_CONTA: AuthState = { user: null, role: null, loading: false, error: null, trocarSenha: false, nome: '' };
+
 /**
  * Conta já conferida nesta sessão. Outros componentes também usam useAuth (ex.: o cadastro
  * de pet, para saber se é admin); sem isto cada um refazia a conferência, que zera a loja
  * por um instante (o topo voltava para a logo da Pata & Gestão e os dados recomeçavam).
  */
-let conferida: { uid: string; role: Papel } | null = null;
+let conferida: ({ uid: string } & Acesso) | null = null;
 
 export function useAuth() {
   const [authState, setAuthState] = useState<AuthState>({
@@ -87,6 +98,8 @@ export function useAuth() {
     role: null,
     loading: true,
     error: null,
+    trocarSenha: false,
+    nome: '',
   });
 
   useEffect(() => {
@@ -95,9 +108,7 @@ export function useAuth() {
         conferida = null;
         definirLoja(null);
         setAuthState((prev) => ({
-          user: null,
-          role: null,
-          loading: false,
+          ...SEM_CONTA,
           error: erroPendente ?? prev.error,
         }));
         erroPendente = null;
@@ -105,14 +116,14 @@ export function useAuth() {
       }
 
       if (conferida?.uid === user.uid && (conferida.role === 'dono' || lojaAtual())) {
-        setAuthState({ user, role: conferida.role, loading: false, error: null });
+        setAuthState({ user, role: conferida.role, trocarSenha: conferida.trocarSenha, nome: conferida.nome, loading: false, error: null });
         return;
       }
 
       try {
-        const role = await verificarAcesso(user);
-        conferida = { uid: user.uid, role };
-        setAuthState({ user, role, loading: false, error: null });
+        const acesso = await verificarAcesso(user);
+        conferida = { uid: user.uid, ...acesso };
+        setAuthState({ user, ...acesso, loading: false, error: null });
       } catch (err: any) {
         conferida = null;
         if (RECUSAS[err?.message]) {
@@ -122,7 +133,7 @@ export function useAuth() {
         } else {
           // falha de rede: NÃO desconecta (recarregar a página tenta de novo),
           // só mostra a tela de login com o aviso em vez de travar no splash
-          setAuthState({ user: null, role: null, loading: false, error: MSG_SEM_CONEXAO });
+          setAuthState({ ...SEM_CONTA, error: MSG_SEM_CONEXAO });
         }
       }
     });
@@ -137,15 +148,15 @@ export function useAuth() {
     conferida = null;
     try {
       const cred = await signInWithEmailAndPassword(auth, email, password);
-      const role = await verificarAcesso(cred.user);
-      conferida = { uid: cred.user.uid, role };
-      setAuthState({ user: cred.user, role, loading: false, error: null });
+      const acesso = await verificarAcesso(cred.user);
+      conferida = { uid: cred.user.uid, ...acesso };
+      setAuthState({ user: cred.user, ...acesso, loading: false, error: null });
       return true;
     } catch (err: any) {
       if (RECUSAS[err?.message]) {
         erroPendente = RECUSAS[err.message];
         await signOut(auth);
-        setAuthState({ user: null, role: null, loading: false, error: RECUSAS[err.message] });
+        setAuthState({ ...SEM_CONTA, error: RECUSAS[err.message] });
         return false;
       }
       const code: string = err?.code ?? '';
@@ -162,7 +173,13 @@ export function useAuth() {
     conferida = null;
     definirLoja(null);
     await signOut(auth);
-    setAuthState({ user: null, role: null, loading: false, error: null });
+    setAuthState({ ...SEM_CONTA, error: null });
+  };
+
+  /** Depois que a pessoa criou a própria senha no primeiro acesso: o sistema abre */
+  const senhaTrocada = () => {
+    if (conferida) conferida = { ...conferida, trocarSenha: false };
+    setAuthState((prev) => ({ ...prev, trocarSenha: false }));
   };
 
   return {
@@ -173,8 +190,11 @@ export function useAuth() {
     isAuthenticated: !!authState.user,
     isAdmin: authState.role === 'admin',
     isDono: authState.role === 'dono',
+    trocarSenha: authState.trocarSenha,
+    nome: authState.nome,
     login,
     logout,
+    senhaTrocada,
   };
 }
 

@@ -2,7 +2,7 @@
 // Só funciona para a conta marcada em /donos (as regras do Firestore garantem).
 import {
   collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc, addDoc,
-  query, where, limit, getCountFromServer, serverTimestamp,
+  query, where, getCountFromServer, serverTimestamp,
 } from 'firebase/firestore';
 import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
@@ -59,11 +59,10 @@ async function criarOuReaproveitarConta(auth2: any, email: string): Promise<{ ui
 }
 
 export async function carregarDadosDono(hoje: string): Promise<DadosDono> {
-  const [lojasSnap, cobSnap, comSnap, antigos] = await Promise.all([
+  const [lojasSnap, cobSnap, comSnap] = await Promise.all([
     getDocs(collection(db, 'lojas')),
     getDocs(collection(db, 'cobrancas')),
     getDocs(collection(db, 'comunicados')),
-    getDocs(query(collection(db, 'petsCadastro'), limit(1))),
   ]);
   const lojas = lojasSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }) as Loja)
     .sort((a, b) => a.nome.localeCompare(b.nome, 'pt-BR'));
@@ -76,7 +75,8 @@ export async function carregarDadosDono(hoje: string): Promise<DadosDono> {
     comunicados: comSnap.docs.map((d: any) => ({ id: d.id, ...d.data() }) as Comunicado)
       .sort((a, b) => b.criadoEm.localeCompare(a.criadoEm)),
     atividade,
-    migracaoPendente: !antigos.empty && !lojas.some((l) => l.migradaEm),
+    // a raiz antiga foi apagada em 17/10/2026 (dados já estão em lojas/elite-pet-shop)
+    migracaoPendente: false,
   };
 }
 
