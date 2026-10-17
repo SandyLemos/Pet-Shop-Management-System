@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } f
 import { PetRegistration } from './PetRegistration';
 import { PetDetailModal } from './PetDetailModal';
 import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje';
-import { useRef, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
+import { informarJanela, JanelaRemota } from '../../lib/espelho';
 import { PetCard } from './PetCard';
 
 interface KanbanBoardProps {
@@ -93,6 +94,25 @@ function KanbanColumn({
 
   const columnPets = pets.filter((p) => p.status === status)
 
+  // ✅ Suporte ao vivo (igual à Grade): conta a janela aberta ou segue a do aparelho acompanhado
+  const remoto = useContext(JanelaRemota)
+  const primeira = useRef(true)
+  useEffect(() => {
+    if (remoto) return
+    if (primeira.current) { primeira.current = false; return } // abrir a aba não fecha janela de outra coluna
+    informarJanela(
+      isDialogOpen ? { tipo: 'cadastro', vaga: proximoSlotRef.current }
+        : detailPetId ? { tipo: 'detalhe', petId: detailPetId }
+        : null,
+    )
+  }, [remoto, isDialogOpen, detailPetId]) // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!remoto) return
+    const j = remoto.janela
+    setIsDialogOpen(j?.tipo === 'cadastro' && status === 'espera')
+    setDetailPetId(j?.tipo === 'detalhe' && columnPets.some((p) => p.id === j.petId) ? j.petId : null)
+  }, [remoto, remoto?.janela, pets]) // eslint-disable-line react-hooks/exhaustive-deps
+
   const getNextAvailableSlot = () => {
     const occupiedSlots = allPets.map((p) => p.slotNumber)
     for (let i = 1; i <= 100; i++) {
@@ -102,6 +122,8 @@ function KanbanColumn({
   }
 
   const proximoSlot = getNextAvailableSlot()
+  const proximoSlotRef = useRef(proximoSlot)
+  proximoSlotRef.current = proximoSlot
 
   // ✅ evita cadastro duplo por toque repetido enquanto salva
   const salvandoRef = useRef(false)
@@ -160,7 +182,7 @@ function KanbanColumn({
           </div>
         )}
         {status === "espera" && onAddPet && proximoSlot > 0 && (
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <Dialog open={isDialogOpen} onOpenChange={(v) => { if (!remoto) setIsDialogOpen(v) }}>
             <button
               onClick={() => setIsDialogOpen(true)}
               className="w-full mt-3 border-dashed border-2 border-[#F7931E] hover:bg-orange-50 text-[#B8650A] hover:text-[#8F4E07] rounded-md py-2 flex items-center justify-center gap-2 text-sm font-medium transition-colors"
@@ -195,7 +217,7 @@ function KanbanColumn({
       <PetDetailModal
         pet={detailPet}
         open={!!detailPet}
-        onClose={() => setDetailPetId(null)}
+        onClose={() => { if (!remoto) setDetailPetId(null) }}
         onEdit={onEditPet}
         onDelete={(id) => { onDeletePet(id); setDetailPetId(null) }}
         onCheckout={(id, tipo) => {

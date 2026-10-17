@@ -104,6 +104,18 @@ service cloud.firestore {
         allow delete: if isDono(); // NOVO: excluir a loja inteira
       }
 
+      // NOVO (suporte ao vivo): a loja vê se o proprietário está acompanhando (só ele grava)...
+      match /suporte/{documento} {
+        allow read: if daLoja(lojaId);
+      }
+      // ...e, enquanto isso, cada aparelho conta a aba e a janela aberta
+      match /telas/{aparelho} {
+        allow create, update: if daLoja(lojaId)
+                      && request.resource.data.keys().hasOnly(['nome', 'aba', 'janela', 'atualizadoEm'])
+                      && request.resource.data.aba in ['grid', 'kanban', 'entregues'];
+        allow delete: if daLoja(lojaId);
+      }
+
       match /profissionais/{profissionalId} {
         allow read: if daLoja(lojaId);
         allow create, update, delete: if adminDaLoja(lojaId);

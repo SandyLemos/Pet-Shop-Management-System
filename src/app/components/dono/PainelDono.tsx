@@ -283,12 +283,11 @@ function ListaLojas({ d, abrirLoja, novaLoja }: { d: DadosDono; abrirLoja: (l: L
 }
 
 // ─── Detalhe da loja (painel lateral) ─────────────────────────────────────────
-function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
-  { d: DadosDono; loja: Loja; fonte: FonteDono; fechar: () => void; editar: () => void; recarregar: () => Promise<void> }) {
+function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar, verAoVivo }:
+  { d: DadosDono; loja: Loja; fonte: FonteDono; fechar: () => void; editar: () => void; recarregar: () => Promise<void>; verAoVivo: () => void }) {
   const [ocupado, setOcupado] = useState<string | null>(null);
   const [confirmarBloqueio, setConfirmarBloqueio] = useState(false);
   const [excluir, setExcluir] = useState(false);
-  const [aoVivo, setAoVivo] = useState(false);
   const { situacao, diasAtraso } = situacaoDaLoja(loja, d.cobrancas, d.hoje);
   const uso = resumoUso(d.atividade[loja.id], d.hoje);
   const mes = mesDe(d.hoje);
@@ -351,7 +350,7 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
 
           <div className="space-y-2">
             <p className="text-xs font-bold uppercase tracking-wide text-slate-400">Ações</p>
-            <Botao id="aovivo" icone={Eye} cor={COR.azul} onClick={() => setAoVivo(true)}>Ver a loja ao vivo (só leitura)</Botao>
+            <Botao id="aovivo" icone={Eye} cor={COR.azul} onClick={verAoVivo}>Ver a loja ao vivo (só leitura)</Botao>
             {zap && (
               <a href={`https://wa.me/${zap}`} target="_blank" rel="noreferrer"
                 className="w-full flex items-center gap-3 px-4 py-3 rounded-xl ring-1 ring-slate-200 hover:bg-slate-50 text-sm font-semibold text-slate-700">
@@ -400,7 +399,6 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar }:
           </div>
         </div>
       </div>
-      {aoVivo && <LojaAoVivo loja={loja} fechar={() => setAoVivo(false)} />}
       {excluir && (
         <ExcluirLoja d={d} loja={loja} fonte={fonte} fechar={() => setExcluir(false)}
           aoExcluir={async () => { setExcluir(false); fechar(); await recarregar(); }} />
@@ -935,6 +933,7 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
   const [erro, setErro] = useState(false);
   const [lojaId, setLojaId] = useState<string | null>(lojaAberta ?? null);
   const [form, setForm] = useState<'nova' | 'editar' | null>(novaAberta ? 'nova' : null);
+  const [aoVivo, setAoVivo] = useState(false);
   const hoje = hojeFixo ?? idDoDia();
 
   const recarregar = useCallback(async () => {
@@ -1000,9 +999,11 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
         </div>
       </main>
 
-      {dados && loja && !form && (
-        <DetalheLoja d={dados} loja={loja} fonte={fonte} fechar={() => setLojaId(null)} editar={() => setForm('editar')} recarregar={recarregar} />
+      {dados && loja && !form && !aoVivo && (
+        <DetalheLoja d={dados} loja={loja} fonte={fonte} fechar={() => setLojaId(null)} editar={() => setForm('editar')} recarregar={recarregar}
+          verAoVivo={() => setAoVivo(true)} />
       )}
+      {loja && aoVivo && <LojaAoVivo loja={loja} meuUid={meuUid} fechar={() => setAoVivo(false)} />}
       {dados && form && (
         <FormLoja d={dados} fonte={fonte} loja={form === 'editar' ? loja ?? undefined : undefined} fechar={() => setForm(null)} aoSalvar={recarregar} />
       )}

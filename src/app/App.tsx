@@ -12,7 +12,9 @@ import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
 import { addPet, subscribeToPets, encerrarPet, updatePet, marcarComoAvisado, getPetsPendentes, SLOT_OCUPADO, SLOT_USADO, JA_ENCERRADO, CAMPOS_OBRIGATORIOS, garantirReservasDeVaga, atualizarFichaComEdicao, CAMPOS_FICHA } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
-import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck } from 'lucide-react';
+import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck, Eye } from 'lucide-react';
+import { useSuporteAcompanhando } from '../hooks/useSuporteAcompanhando';
+import { informarAba, type AbaLoja } from '../lib/espelho';
 import { EntreguesTab } from './components/EntreguesTab';
 
 import { LogoutModal } from './components/LogoutModal';
@@ -54,6 +56,9 @@ export default function App() {
   //    sem recarregar a página, a lista é zerada e buscada de novo.
   // ✅ o dono do sistema não tem loja: nada da fila é carregado para ele
   const uid = isDono ? null : user?.uid ?? null;
+
+  // ✅ Suporte ao vivo: enquanto o proprietário acompanha, este aparelho conta o que está aberto
+  const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
   useEffect(() => {
     setPets([]); // nunca mostra a lista de outra conta / de outro dia
     if (!uid) return;
@@ -467,6 +472,12 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-6 py-8">
           <AvisoSistema />
 
+          {acompanhando && (
+            <div className="fixed bottom-4 left-4 z-[60] flex items-center gap-2 rounded-full bg-slate-900/85 text-white text-xs font-semibold px-3.5 py-2 shadow-lg">
+              <Eye size={14} /> Suporte Pata &amp; Gestão acompanhando esta tela
+            </div>
+          )}
+
           {/* ✅ Aviso de pets esquecidos em dias anteriores */}
           {pendentes.length > 0 && (
             <div className="mb-6">
@@ -474,7 +485,7 @@ export default function App() {
             </div>
           )}
 
-          <Tabs defaultValue="grid" className="space-y-6">
+          <Tabs defaultValue="grid" className="space-y-6" onValueChange={(v) => informarAba(v as AbaLoja)}>
             <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
               <TabsList className="bg-slate-100">
                 <TabsTrigger value="grid"   className="gap-2"><LayoutGrid size={18} /> Grade</TabsTrigger>

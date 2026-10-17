@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from 'react';
+import { useState, useMemo, useEffect, useRef, useContext } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -18,6 +18,7 @@ import { PetDetailModal } from './PetDetailModal';
 import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import type { Pet, SlotStatus } from '../types/pet';
 import { estaParado, minutosNaLoja, formatarTempo, LIMITE_ESPERA_MIN, LIMITE_ATENDIMENTO_MIN } from '../../utils/parado';
+import { informarJanela, JanelaRemota } from '../../lib/espelho';
 
 interface SlotGridProps {
   pets: Pet[];
@@ -40,6 +41,34 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
 
   // ✅ NOVO: slots já queimados hoje
   const { usados } = useSlotsUsadosHoje();
+
+  // ✅ Suporte ao vivo: na loja, conta qual janela está aberta; na tela do proprietário,
+  // abre a mesma janela que o aparelho acompanhado (e ignora os toques locais)
+  const remoto = useContext(JanelaRemota);
+  useEffect(() => {
+    if (remoto) return;
+    informarJanela(
+      isDialogOpen && selectedSlot !== null ? { tipo: 'cadastro', vaga: selectedSlot }
+        : isDetailOpen && selectedPet ? { tipo: 'detalhe', petId: selectedPet.id, vaga: selectedPet.slotNumber }
+        : null,
+    );
+  }, [remoto, isDialogOpen, selectedSlot, isDetailOpen, selectedPet?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => { if (!remoto) informarJanela(null); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    if (!remoto) return;
+    const j = remoto.janela;
+    if (j?.tipo === 'cadastro') {
+      setIsDetailOpen(false); setSelectedPet(null);
+      setSelectedSlot(j.vaga); setIsDialogOpen(true);
+    } else if (j?.tipo === 'detalhe') {
+      const p = pets.find((x) => x.id === j.petId);
+      setIsDialogOpen(false); setSelectedSlot(null);
+      if (p) { setSelectedPet(p); setIsDetailOpen(true); }
+    } else {
+      setIsDialogOpen(false); setSelectedSlot(null);
+      setIsDetailOpen(false); setSelectedPet(null);
+    }
+  }, [remoto, remoto?.janela, pets]);
 
   const totalSlots      = 100;
   const SLOTS_PER_BATCH = 10;
@@ -340,7 +369,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             key={slotNumber}
             open={isDialogOpen && selectedSlot === slotNumber}
             onOpenChange={(open) => {
-              if (!open) {
+              if (!open && !remoto) {
                 setIsDialogOpen(false);
                 setSelectedSlot(null);
               }
@@ -410,6 +439,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         pet={selectedPet}
         open={isDetailOpen}
         onClose={() => {
+          if (remoto) return; // ao vivo: quem fecha é o aparelho acompanhado
           setIsDetailOpen(false);
           setSelectedPet(null);
         }}
