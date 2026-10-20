@@ -19,6 +19,7 @@ import { useSlotsUsadosHoje } from '../../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import type { Pet, SlotStatus } from '../types/pet';
 import { estaParado, minutosNaLoja, formatarTempo, LIMITE_ESPERA_MIN, LIMITE_ATENDIMENTO_MIN } from '../../utils/parado';
 import { informarJanela, JanelaRemota } from '../../lib/espelho';
+import { AlertaSeloVaga } from './AlertasPet';
 
 interface SlotGridProps {
   pets: Pet[];
@@ -253,9 +254,9 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     <div>
 
       {/* ── Indicador de slots visíveis ── */}
-      <div className="px-4 pt-4 pb-2">
+      <div className="px-0 pt-1 sm:px-4 sm:pt-4 pb-2">
         <div className="bg-blue-50 border border-blue-200 rounded-lg p-3">
-          <div className="flex items-center justify-between mb-3">
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:gap-0 mb-3">
             <div className="flex items-center gap-3">
               <div className="bg-blue-500 text-white px-3 py-1 rounded-md font-bold text-sm">
                 {visibleSlots}/{totalSlots}
@@ -281,11 +282,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             </div>
           </div>
 
-          {/* Controles */}
-          <div className="flex items-center gap-2">
+          {/* Controles (no celular: Remover e Adicionar nas pontas, quebrando linha se faltar espaço) */}
+          <div className="flex flex-wrap items-center justify-between gap-2 sm:justify-start">
 
             {/* Remoção */}
-            <div className="flex items-center gap-1 mr-2">
+            <div className="flex items-center gap-1 sm:mr-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Remover:</span>
               <Button
                 onClick={handleRemoveOneSlot}
@@ -324,10 +325,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             </div>
 
             {/* Separador */}
-            <div className="h-6 w-px bg-slate-300" />
+            <div className="hidden sm:block h-6 w-px bg-slate-300" />
 
             {/* Adição */}
-            <div className="flex items-center gap-1 ml-2">
+            <div className="flex items-center gap-1 sm:ml-2">
               <span className="text-xs text-slate-600 font-medium mr-2">Adicionar:</span>
               {visibleSlots < totalSlots ? (
                 <Button
@@ -351,7 +352,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
       </div>
 
       {/* ── Grade de slots ── */}
-      <div className="grid grid-cols-10 gap-2 p-4">
+      <div className="grid grid-cols-5 gap-2.5 px-0 py-3 sm:grid-cols-10 sm:gap-2 sm:p-4">
       {Array.from({ length: visibleSlots }, (_, i) => {
         const slotNumber = i + 1;
         const { status, pet } = getSlotStatus(slotNumber);
@@ -380,7 +381,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 onClick={() => handleSlotClick(slotNumber)}
                 disabled={slotUsado}
                 className={`
-                  aspect-square rounded-lg border-2 transition-all
+                  relative aspect-square rounded-lg border-2 transition-all
                   flex flex-col items-center justify-center gap-1
                   ${slotUsado ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
                   ${getStatusColor(status, avisado, slotUsado)}
@@ -389,21 +390,22 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 `}
                 title={
                   pet
-                    ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''} (clique para detalhes)`
+                    ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''}${pet.alertas?.length ? ` ⚠️ ${pet.alertas.join(', ')}` : ''} (clique para detalhes)`
                     : slotUsado
                       ? `Slot ${slotNumber} - Já utilizado hoje`
                       : `Slot ${slotNumber} - Livre`
                 }
               >
+                {pet && <AlertaSeloVaga alertas={pet.alertas} />}
                 {getStatusIcon(status, avisado, slotUsado)}
-                <span className="text-xs font-semibold">{slotNumber}</span>
+                <span className="text-sm sm:text-xs font-semibold">{slotNumber}</span>
                 {pet && (
-                  <span className="text-[8px] font-medium truncate w-full px-1 text-center">
+                  <span className="text-[11px] sm:text-[8px] font-medium truncate w-full px-1 text-center">
                     {pet.nomePet}
                   </span>
                 )}
                 {parado && pet && (
-                  <span className="text-[8px] font-bold text-red-600 leading-none" title="Pet parado há muito tempo">
+                  <span className="text-[10px] sm:text-[8px] font-bold text-red-600 leading-none" title="Pet parado há muito tempo">
                     ⏱ {formatarTempo(minutosNaLoja(pet, agora))}
                   </span>
                 )}

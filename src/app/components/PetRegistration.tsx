@@ -5,7 +5,6 @@ import React, { useState, useMemo, useEffect, useRef } from "react"
 import { Button } from "./ui/button"
 import { Input } from "./ui/input"
 import { Label } from "./ui/label"
-import { Textarea } from "./ui/textarea"
 import {
   Upload,
   Save,
@@ -25,6 +24,8 @@ import { useRacas } from "../../hooks/useRacas"
 import { GerenciarRacas } from "./GerenciarRacas"
 import { useAuth } from "../../hooks/useAuth"
 import { RACAS_CAO, RACAS_GATO } from "../constants/racas"
+import { AlertasSelector } from "./AlertasPet"
+import { juntarAlertas, normalizarAlertaObs, separarAlertas } from "../../utils/alertas"
 
 // ✅ Status considerados "em produção" (pet ativo em algum slot)
 const STATUS_ATIVOS: SlotStatus[] = ["espera", "banho", "escovar", "tosa"]
@@ -131,7 +132,15 @@ export function PetRegistration({
     }
     return initialData?.servico || ""
   })
-  const [observacoes, setObservacoes] = useState(initialData?.observacoes || "")
+  // ✅ Campo "Observações" saiu da tela (substituído pelos Alertas da ficha);
+  // o texto antigo de um pet em edição é mantido como está.
+  const [observacoes] = useState(initialData?.observacoes || "")
+  // ✅ Alertas da ficha (valem para todas as visitas)
+  const [alertas, setAlertas] = useState(() => {
+    const { prontos, outro } = separarAlertas(initialData?.alertas)
+    // ficha/pet antigo: o texto das Observações antigas vira o detalhe do alerta
+    return { prontos, outro, obs: initialData?.alertaObs || initialData?.observacoes || "" }
+  })
   const [selectedSlot, setSelectedSlot] = useState(
     initialData?.slotNumber || defaultSlot || 1,
   )
@@ -331,6 +340,8 @@ export function PetRegistration({
     setPorte(p.porte || "")
     setFoto(p.foto || "")
     setPetNumber(p.petNumber)
+    const salvos = separarAlertas(p.alertas)
+    setAlertas({ prontos: salvos.prontos, outro: salvos.outro, obs: p.alertaObs || (p as any).observacoes || "" })
     setPetVinculado(true)
     setConsentimentoFicha(dataDoConsentimento(p.consentimentoEm))
     setConsentimento(false)
@@ -359,6 +370,8 @@ export function PetRegistration({
       foto,
       servico: servico as any,
       observacoes,
+      alertas: juntarAlertas(alertas.prontos, alertas.outro),
+      alertaObs: normalizarAlertaObs(alertas.obs),
       slotNumber: selectedSlot || defaultSlot,
       consentimentoLgpd: consentimento || undefined,
     } as any)
@@ -765,6 +778,14 @@ export function PetRegistration({
             />
           </div>
 
+          {/* 5b. ALERTAS DA FICHA */}
+          <AlertasSelector
+            prontos={alertas.prontos}
+            outro={alertas.outro}
+            obs={alertas.obs}
+            onChange={setAlertas}
+          />
+
           {/* DIVISOR */}
           <div className="border-t border-dashed pt-4 opacity-60">
             <h3 className="font-bold text-[10px] text-slate-400 uppercase tracking-widest">
@@ -816,18 +837,6 @@ export function PetRegistration({
                 )}
               </div>
             </div>
-          </div>
-
-          {/* 7. OBSERVAÇÕES */}
-          <div className="space-y-2">
-            <Label className="text-slate-600 font-semibold text-sm">Observações</Label>
-            <Textarea
-              placeholder="Alergias, comportamento, etc..."
-              className="rounded-xl border-none bg-[#f1f3f5] text-slate-800 font-medium placeholder:text-slate-400 focus:ring-2 focus:ring-blue-500/20"
-              value={observacoes}
-              onChange={(e) => setObservacoes(e.target.value)}
-              rows={2}
-            />
           </div>
         </div>
       </div>

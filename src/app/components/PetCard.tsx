@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, Di
 import { PetRegistration } from './PetRegistration';
 import { ProfessionalSelector } from './ProfessionalSelector';
 import { ReversionDialog } from "./ReversionDialog";
+import { AlertaSelos } from "./AlertasPet";
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -221,6 +222,8 @@ export function PetCard({
               </Badge>
             </div>
 
+            <AlertaSelos alertas={pet.alertas} compacto className="mt-1.5" />
+
             <Button
               className="w-full bg-blue-500 hover:bg-blue-600 h-7 text-[11px] mt-2"
               onClick={(e) => prepararAvanco(e, "banho")}
@@ -338,6 +341,7 @@ export function PetCard({
         )}
 
         <CardContent className="space-y-1 px-3 pt-0 [&:last-child]:pb-2">
+          <AlertaSelos alertas={pet.alertas} compacto className="pt-1" />
           <div className="space-y-0.5 py-1 border-y border-gray-100 mt-0 mb-1 bg-slate-50/50 rounded-sm px-2">
             {pet.profissionalBanho && (
               <div className={`flex items-center gap-2 text-[11px] ${pet.banhoCompleto ? "text-gray-400" : "text-gray-700"}`}>
@@ -377,10 +381,11 @@ export function PetCard({
             )}
           </div>
 
-          {pet.observacoes && (
+          {/* ✅ detalhe do alerta da ficha (pets antigos: observação antiga) */}
+          {(pet.alertaObs || pet.observacoes) && (
             <div className="flex items-start gap-2 text-orange-600 bg-orange-50 p-1.5 rounded">
               <AlertCircle className="w-3.5 h-3.5 mt-0.5 flex-shrink-0" />
-              <span className="text-[11px]">{pet.observacoes}</span>
+              <span className="text-[11px]">{pet.alertaObs || pet.observacoes}</span>
             </div>
           )}
 

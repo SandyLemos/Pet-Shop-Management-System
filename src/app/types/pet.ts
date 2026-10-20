@@ -62,6 +62,10 @@ export interface Pet {
   problemasSaudeBanho?: string[];
   problemasSaudeEscovar?: string[];
   problemasSaudeTosa?: string[];
+
+  // ✅ Cópia dos alertas da ficha (para não ler a ficha a cada card)
+  alertas?: string[];
+  alertaObs?: string;
 }
 
 // ─── Ficha permanente do pet (coleção petsCadastro) ───────────────────────
@@ -83,4 +87,7 @@ export interface PetCadastro {
   consentimentoEm?: any;
   consentimentoPorId?: string | null;
   consentimentoPorNome?: string | null;
+  // ✅ Alertas fixos do pet (valem para todas as visitas)
+  alertas?: string[];         // ex.: ["Morde", "Alérgico"] — até 12, cada um até 40 letras
+  alertaObs?: string;         // detalhe livre, até 300 letras
 }

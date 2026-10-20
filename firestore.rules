@@ -37,6 +37,20 @@ service cloud.firestore {
       return daLoja(lojaId) && perfil().role == 'admin';
     }
 
+    // NOVO (alertas da ficha): lista de até 12 etiquetas curtas + detalhe de até 300 letras.
+    // Vale para a ficha (petsCadastro) e para a cópia do pet na fila do dia.
+    // As 3 primeiras etiquetas têm o tamanho conferido aqui; o app corta todas em 40 letras.
+    function alertaCurto(a, i) {
+      return a.size() <= i || (a[i] is string && a[i].size() > 0 && a[i].size() <= 40);
+    }
+    function alertasValidos(d) {
+      return (!('alertas' in d)
+              || (d.alertas is list && d.alertas.size() <= 12
+                  && alertaCurto(d.alertas, 0) && alertaCurto(d.alertas, 1) && alertaCurto(d.alertas, 2)))
+          && (!('alertaObs' in d)
+              || (d.alertaObs is string && d.alertaObs.size() <= 300));
+    }
+
     // —— Dono do sistema —————————————————————————————————————————
     match /donos/{uid} {
       allow read: if isAuthenticated() && (request.auth.uid == uid || isDono());
@@ -135,7 +149,8 @@ service cloud.firestore {
                       && request.resource.data.nomePet.size() > 0
                       && request.resource.data.nomePet.size() <= 100
                       && request.resource.data.nomeTutor is string
-                      && request.resource.data.nomeTutor.size() <= 100;
+                      && request.resource.data.nomeTutor.size() <= 100
+                      && alertasValidos(request.resource.data);
         allow delete: if adminDaLoja(lojaId);
       }
 
@@ -187,7 +202,8 @@ service cloud.firestore {
                            ['banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao']
                       && request.resource.data.nomePet is string
                       && request.resource.data.nomePet.size() > 0
-                      && request.resource.data.nomePet.size() <= 100;
+                      && request.resource.data.nomePet.size() <= 100
+                      && alertasValidos(request.resource.data);
           allow delete: if daLoja(lojaId);
         }
 

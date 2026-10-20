@@ -138,7 +138,8 @@ function mesclarLogs(logs: LogEntry[]): LogMesclado[] {
       // entregue/removido/cancelado por: vem do log de encerramento
       entregueporNome:
         encerrado?.encerradoPorNome ?? encerrado?.removidoPorNome ?? null,
-      observacoes: base.observacoes,
+      // ✅ observação do alerta da ficha; registros antigos usam a observação antiga
+      observacoes: base.alertaObs || base.observacoes,
     });
   });
 

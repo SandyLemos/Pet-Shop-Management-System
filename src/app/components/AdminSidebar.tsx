@@ -42,19 +42,20 @@ export default function AdminSidebar({
         <div className="relative ml-auto w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-300">
 
           {/* Header */}
-          <div className="topo-admin bg-gradient-to-r from-purple-700 to-indigo-700 px-6 py-5 flex items-center justify-between flex-shrink-0">
-            <div className="flex items-center gap-3">
-              <div className="bg-white/20 p-2 rounded-xl">
+          <div className="topo-admin bg-gradient-to-r from-purple-700 to-indigo-700 px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-3 flex-shrink-0">
+            <div className="flex items-center gap-3 min-w-0">
+              <div className="bg-white/20 p-2 rounded-xl shrink-0">
                 <ShieldCheck className="w-5 h-5 text-white" />
               </div>
-              <div>
+              <div className="min-w-0">
                 <h2 className="text-white font-bold text-base">Painel Admin</h2>
-                <p className="text-purple-200 text-xs">{nomeLoja()}</p>
+                <p className="text-purple-200 text-xs truncate">{nomeLoja()}</p>
               </div>
             </div>
             <button
               onClick={onClose}
-              className="text-white/70 hover:text-white transition p-1 rounded-lg hover:bg-white/10"
+              aria-label="Fechar"
+              className="shrink-0 text-white/70 hover:text-white transition p-2 sm:p-1 rounded-lg hover:bg-white/10"
             >
               <X size={20} />
             </button>
@@ -64,58 +65,60 @@ export default function AdminSidebar({
           <div className="flex border-b border-slate-100 bg-slate-50 flex-shrink-0">
             <button
               onClick={() => setAbaAtiva('usuarios')}
-              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+              className={`flex-1 min-w-0 px-0.5 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'usuarios'
                   ? 'border-purple-500 text-purple-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Users size={14} /> <span className="hidden sm:inline">Usuários</span>
+              <Users size={14} /> <span>Usuários</span>
             </button>
             <button
               onClick={() => setAbaAtiva('profissionais')}
-              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+              aria-label="Profissionais"
+              className={`flex-1 min-w-0 px-0.5 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'profissionais'
                   ? 'border-orange-500 text-orange-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Briefcase size={14} /> <span className="hidden sm:inline">Profissionais</span>
+              <Briefcase size={14} /> <span className="hidden sm:inline">Profissionais</span><span aria-hidden="true" className="sm:hidden">Equipe</span>
             </button>
             <button
               onClick={() => setAbaAtiva('pets')}
-              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+              className={`flex-1 min-w-0 px-0.5 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'pets'
                   ? 'border-pink-500 text-pink-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <PawPrint size={14} /> <span className="hidden sm:inline">Pets</span>
+              <PawPrint size={14} /> <span>Pets</span>
             </button>
             <button
               onClick={() => setAbaAtiva('relatorios')}
-              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+              className={`flex-1 min-w-0 px-0.5 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'relatorios'
                   ? 'border-indigo-500 text-indigo-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <FileText size={14} /> <span className="hidden sm:inline">Relatórios</span>
+              <FileText size={14} /> <span>Relatórios</span>
             </button>
             <button
               onClick={() => setAbaAtiva('personalizacao')}
-              className={`flex-1 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
+              aria-label="Personalização"
+              className={`flex-1 min-w-0 px-0.5 py-2.5 text-[11px] font-semibold flex flex-col items-center justify-center gap-1 border-b-2 transition-all ${
                 abaAtiva === 'personalizacao'
                   ? 'border-pink-500 text-pink-700 bg-white'
                   : 'border-transparent text-gray-500 hover:text-gray-700'
               }`}
             >
-              <Palette size={14} /> <span className="hidden sm:inline">Personalização</span>
+              <Palette size={14} /> <span className="hidden sm:inline">Personalização</span><span aria-hidden="true" className="sm:hidden">Visual</span>
             </button>
           </div>
 
           {/* Conteúdo */}
-          <div className="flex-1 overflow-y-auto p-5 space-y-4">
+          <div className="flex-1 min-w-0 overflow-y-auto p-4 sm:p-5 space-y-4">
             {abaAtiva === 'usuarios'      && <SecaoUsuarios />}
             {abaAtiva === 'profissionais' && <SecaoProfissionais />}
             {abaAtiva === 'pets'          && <SecaoPetsCadastro />}

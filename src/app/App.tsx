@@ -10,6 +10,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
+import { mesmosAlertas } from '../utils/alertas';
 import { addPet, subscribeToPets, encerrarPet, updatePet, marcarComoAvisado, getPetsPendentes, SLOT_OCUPADO, SLOT_USADO, JA_ENCERRADO, CAMPOS_OBRIGATORIOS, garantirReservasDeVaga, atualizarFichaComEdicao, CAMPOS_FICHA } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
 import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck, Eye } from 'lucide-react';
@@ -290,14 +291,18 @@ export default function App() {
       return;
     }
 
-    // ✅ Correções de nome, tutor, telefone, espécie, raça, porte ou foto
-    //    também vão para a ficha permanente (valem na próxima visita).
+    // ✅ Correções de nome, tutor, telefone, espécie, raça, porte, foto
+    //    e alertas também vão para a ficha permanente (valem na próxima visita).
     //    Observação e serviço continuam só no atendimento do dia.
     if (!pet?.petNumber) return;
-    const mudancas: Record<string, string> = {};
+    const mudancas: Record<string, string | string[]> = {};
     for (const k of CAMPOS_FICHA) {
       const novo = (updatedData as any)[k];
-      if (novo !== undefined && novo !== (pet as any)[k]) mudancas[k] = novo;
+      if (novo === undefined) continue;
+      const mudou = Array.isArray(novo)
+        ? !mesmosAlertas(novo, (pet as any)[k])
+        : novo !== ((pet as any)[k] ?? (k === 'alertaObs' ? '' : undefined));
+      if (mudou) mudancas[k] = novo;
     }
     if (Object.keys(mudancas).length === 0) return;
     try {
@@ -435,16 +440,16 @@ export default function App() {
           className="shadow-md"
           style={{ background: fundoTopo(visual.cores) }}
         >
-          <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
+          <div className="max-w-7xl mx-auto px-3 py-2 gap-2 sm:gap-0 sm:px-6 sm:py-3 flex items-center justify-between">
 
-            <div className="flex items-center gap-4">
-              <div className="bg-white rounded-xl px-4 py-2 shadow-md">
+            <div className="flex items-center gap-4 shrink-0">
+              <div className="bg-white rounded-lg px-2 py-1 sm:rounded-xl sm:px-4 sm:py-2 shadow-md">
                 <img
                   src={visual.logo}
                   alt={visual.nome}
                   width={63}
                   height={40}
-                  className="h-10 w-auto object-contain"
+                  className="h-7 sm:h-10 w-auto max-w-[72px] sm:max-w-none object-contain"
                 />
               </div>
               <div className="hidden sm:block">
@@ -454,17 +459,18 @@ export default function App() {
               </div>
             </div>
 
-            <div className="flex-1 flex justify-center">
-              <h1 className="text-white text-xl sm:text-2xl font-bold tracking-wide text-center truncate">
+            <div className="flex-1 min-w-0 flex justify-center">
+              <h1 className="text-white text-base leading-tight line-clamp-2 break-words sm:line-clamp-none sm:leading-normal sm:text-2xl font-bold tracking-wide text-center sm:truncate">
                 {visual.nome}
               </h1>
             </div>
 
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-0.5 sm:gap-2 shrink-0">
               {isAdmin && (
                 <button
                   onClick={() => setShowAdminSidebar(true)}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
+                  aria-label="Admin"
+                  className="flex items-center gap-2 p-2.5 sm:px-4 sm:py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
                 >
                   <Settings size={16} />
                   <span className="hidden sm:inline">Admin</span>
@@ -472,7 +478,8 @@ export default function App() {
               )}
               <button
                 onClick={() => setShowLogoutModal(true)}
-                className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
+                aria-label="Sair"
+                className="flex items-center gap-2 p-2.5 sm:px-4 sm:py-2 rounded-lg text-sm font-semibold text-white/90 hover:bg-white/10 transition"
               >
                 <LogOut size={16} />
                 <span className="hidden sm:inline">Sair</span>
@@ -481,7 +488,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="max-w-7xl mx-auto px-6 py-8">
+        <div className="max-w-7xl mx-auto px-3 py-4 sm:px-6 sm:py-8">
           <AvisoSistema />
 
           {acompanhando && (
@@ -498,16 +505,17 @@ export default function App() {
           )}
 
           <Tabs defaultValue="grid" className="space-y-6" onValueChange={(v) => informarAba(v as AbaLoja)}>
-            <div className="flex justify-between items-center bg-white p-4 rounded-xl shadow-sm border border-slate-100">
-              <TabsList className="bg-slate-100">
-                <TabsTrigger value="grid"   className="gap-2"><LayoutGrid size={18} /> Grade</TabsTrigger>
-                <TabsTrigger value="kanban" className="gap-2"><LayoutList size={18} /> Fluxo</TabsTrigger>
-                <TabsTrigger value="entregues" className="gap-2"><PackageCheck size={18} /> Entregues</TabsTrigger>
+            <div className="flex flex-col items-stretch gap-3 p-3 sm:flex-row sm:justify-between sm:items-center sm:gap-0 sm:p-4 bg-white rounded-xl shadow-sm border border-slate-100">
+              {/* celular: abas na largura toda e o filtro na linha de baixo */}
+              <TabsList className="bg-slate-100 w-full h-11 sm:w-fit sm:h-9">
+                <TabsTrigger value="grid"   className="gap-1.5 px-1 sm:gap-2 sm:px-2"><LayoutGrid size={18} /> Grade</TabsTrigger>
+                <TabsTrigger value="kanban" className="gap-1.5 px-1 sm:gap-2 sm:px-2"><LayoutList size={18} /> Fluxo</TabsTrigger>
+                <TabsTrigger value="entregues" className="gap-1.5 px-1 sm:gap-2 sm:px-2"><PackageCheck size={18} /> Entregues</TabsTrigger>
               </TabsList>
-              <div className="flex items-center gap-2">
-                <Filter size={16} className="text-slate-400" />
+              <div className="flex items-center gap-2 rounded-lg bg-slate-50 px-3 sm:bg-transparent sm:px-0">
+                <Filter size={16} className="text-slate-400 shrink-0" />
                 <select
-                  className="text-sm border-none bg-transparent font-medium focus:ring-0"
+                  className="flex-1 min-w-0 py-2 sm:flex-none sm:py-0 text-sm border-none bg-transparent font-medium focus:ring-0"
                   value={filter}
                   onChange={(e) => setFilter(e.target.value as any)}
                 >

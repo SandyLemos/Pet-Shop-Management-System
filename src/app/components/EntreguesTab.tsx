@@ -2,6 +2,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { CheckCircle2, RefreshCw, Search, PawPrint } from 'lucide-react';
 import { getLogsByDate, getTodayKey, type LogEntry } from '../../services/petService';
+import { AlertaSelos } from './AlertasPet';
 
 const TZ = 'America/Sao_Paulo';
 
@@ -105,7 +106,7 @@ export function EntreguesTab() {
   });
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-5">
+    <div className="bg-white rounded-xl shadow-sm border border-slate-100 p-4 sm:p-5">
       {/* Cabeçalho */}
       <div className="flex flex-wrap items-center justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
@@ -121,20 +122,20 @@ export function EntreguesTab() {
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
-          <div className="relative">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
+          <div className="relative flex-1 min-w-0 sm:flex-none">
             <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
             <input
               value={busca}
               onChange={(e) => setBusca(e.target.value)}
               placeholder="Buscar pet, tutor ou código..."
-              className="pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200 w-56"
+              className="pl-9 pr-3 py-2 rounded-lg border border-slate-200 bg-slate-50 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-200 w-full sm:w-56"
             />
           </div>
           <button
             onClick={() => carregar()}
             disabled={loading}
-            className="p-2 rounded-lg border border-slate-200 bg-slate-50 text-gray-500 hover:bg-slate-100 transition disabled:opacity-50"
+            className="shrink-0 p-2.5 sm:p-2 rounded-lg border border-slate-200 bg-slate-50 text-gray-500 hover:bg-slate-100 transition disabled:opacity-50"
             title="Atualizar"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
@@ -158,7 +159,35 @@ export function EntreguesTab() {
           </p>
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* celular: um cartão por pet no lugar da tabela */}
+        <ul className="sm:hidden space-y-2.5">
+          {filtrados.map((l) => (
+            <li key={l.id} className="rounded-xl border border-slate-100 bg-slate-50/60 p-3.5">
+              <div className="flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-bold text-gray-800 text-base leading-tight break-words">{l.nomePet}</p>
+                  <p className="text-sm text-gray-600 break-words">{l.nomeTutor}</p>
+                </div>
+                <div className="shrink-0 text-right">
+                  <p className="text-emerald-600 font-semibold text-sm">{formatHora(l.checkOutTime)}</p>
+                  <p className="text-[10px] uppercase text-gray-400">Entrega</p>
+                </div>
+              </div>
+              <AlertaSelos alertas={l.alertas} compacto className="mt-1.5" />
+              <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-500">
+                <span className="capitalize font-medium text-gray-700">{l.servico.replace('_', ' + ')}</span>
+                <span>Entrada {formatHora(l.checkInTime)}</span>
+                <span>Permanência {formatDuracao(l.duracaoMinutos)}</span>
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-xs text-gray-400">
+                <span className="font-mono">{l.petNumber ?? '—'}</span>
+                <span className="min-w-0 break-words">Entregue por {l.encerradoPorNome ?? l.removidoPorNome ?? '—'}</span>
+              </div>
+            </li>
+          ))}
+        </ul>
+        <div className="hidden sm:block overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left text-xs uppercase text-gray-400 border-b border-slate-100">
@@ -176,7 +205,10 @@ export function EntreguesTab() {
               {filtrados.map((l) => (
                 <tr key={l.id} className="border-b border-slate-50 hover:bg-slate-50/60 transition">
                   <td className="py-2.5 px-3 font-mono text-xs text-gray-500">{l.petNumber ?? '—'}</td>
-                  <td className="py-2.5 px-3 font-semibold text-gray-800">{l.nomePet}</td>
+                  <td className="py-2.5 px-3 font-semibold text-gray-800">
+                    {l.nomePet}
+                    <AlertaSelos alertas={l.alertas} compacto className="mt-1" />
+                  </td>
                   <td className="py-2.5 px-3 text-gray-600">{l.nomeTutor}</td>
                   <td className="py-2.5 px-3 capitalize text-gray-600">{l.servico.replace('_', ' + ')}</td>
                   <td className="py-2.5 px-3 text-gray-500">{formatHora(l.checkInTime)}</td>
@@ -188,6 +220,7 @@ export function EntreguesTab() {
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   );

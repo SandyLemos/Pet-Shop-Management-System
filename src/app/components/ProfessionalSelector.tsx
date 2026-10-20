@@ -6,6 +6,7 @@ import { subscribeToProfissionais } from '../../services/petService';
 import type { Profissional, Pet } from '../types/pet';
 import { Button } from './ui/button';
 import { HealthIssuesSelector } from './HealthIssuesSelector';
+import { AlertaSelos } from './AlertasPet';
 
 
 // ── Tipos ────────────────────────────────────────────────────────────────────
@@ -391,6 +392,9 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
                       transition-[padding] duration-150
                       ${open ? 'pb-56' : 'pb-4'}`}
         >
+          {/* ✅ o banhista vê os alertas da ficha antes de começar */}
+          <AlertaSelos alertas={props.pet.alertas} alertaObs={props.pet.alertaObs || props.pet.observacoes} />
+
           {blocoProfissional}
 
           <div className="pt-2 border-t border-slate-100">
@@ -409,6 +413,8 @@ export function ProfessionalSelector(props: ProfissionalSelectorProps) {
   // ── MODO MODAL legado (rodapé rola junto) — compatibilidade ─────────────────
   return (
     <div className="space-y-4">
+      <AlertaSelos alertas={props.pet.alertas} alertaObs={props.pet.alertaObs || props.pet.observacoes} />
+
       {blocoProfissional}
 
       {/* ── Problemas de saúde (obrigatório) ── */}

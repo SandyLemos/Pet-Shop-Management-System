@@ -6,7 +6,7 @@ import {
   LayoutDashboard, Store, Wallet, Package, Megaphone, Settings, LogOut, Plus, Search,
   AlertTriangle, TrendingUp, CalendarCheck, Ban, CheckCircle2, Clock, MessageCircle,
   ChevronRight, ChevronLeft, X, Sparkles, ShieldCheck, Lock, Send, Pencil, RefreshCw,
-  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus, Eye,
+  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus, Eye, Menu,
 } from 'lucide-react';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import {
@@ -64,12 +64,12 @@ function Selo({ situacao }: { situacao: Situacao }) {
 
 function Cartao({ titulo, valor, detalhe, icone: Icone, cor }: { titulo: string; valor: string; detalhe: string; icone: React.ElementType; cor: string }) {
   return (
-    <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-slate-100">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-slate-500">{titulo}</span>
-        <span className="p-2 rounded-xl" style={{ background: `${cor}18`, color: cor }}><Icone size={18} /></span>
+    <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm ring-1 ring-slate-100 min-w-0">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-sm font-semibold text-slate-500 min-w-0">{titulo}</span>
+        <span className="p-2 rounded-xl shrink-0" style={{ background: `${cor}18`, color: cor }}><Icone size={18} /></span>
       </div>
-      <p className="text-3xl font-bold text-slate-900 mt-3">{valor}</p>
+      <p className="text-2xl sm:text-3xl font-bold text-slate-900 mt-3 break-words">{valor}</p>
       <p className="text-xs text-slate-500 mt-1">{detalhe}</p>
     </div>
   );
@@ -78,11 +78,11 @@ function Cartao({ titulo, valor, detalhe, icone: Icone, cor }: { titulo: string;
 function Secao({ titulo, acao, children }: { titulo: string; acao?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100">
-      <div className="flex items-center justify-between px-5 pt-5 pb-3 gap-3">
+      <div className="flex items-center justify-between px-4 pt-4 sm:px-5 sm:pt-5 pb-3 gap-3">
         <h3 className="font-bold text-slate-800">{titulo}</h3>
         {acao}
       </div>
-      <div className="px-5 pb-5">{children}</div>
+      <div className="px-4 pb-4 sm:px-5 sm:pb-5 overflow-x-auto sm:overflow-x-visible">{children}</div>
     </div>
   );
 }
@@ -98,18 +98,18 @@ function Modal({ titulo, subtitulo, icone: Icone, fechar, children, rodape, larg
     <div className="fixed inset-0 z-[90] flex items-center justify-center px-4">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={fechar} />
       <div className={`relative bg-white rounded-2xl shadow-2xl w-full ${largura} max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200`}>
-        <div className="px-6 py-5 flex items-center justify-between shrink-0" style={{ background: GRADIENTE }}>
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg"><Icone className="w-5 h-5 text-white" /></div>
-            <div>
+        <div className="px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-3 shrink-0" style={{ background: GRADIENTE }}>
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-white/20 p-2 rounded-lg shrink-0"><Icone className="w-5 h-5 text-white" /></div>
+            <div className="min-w-0">
               <h2 className="text-white font-bold text-base">{titulo}</h2>
               {subtitulo && <p className="text-white/70 text-xs">{subtitulo}</p>}
             </div>
           </div>
-          <button onClick={fechar} className="text-white/70 hover:text-white" aria-label="Fechar"><X size={20} /></button>
+          <button onClick={fechar} className="shrink-0 p-1 text-white/70 hover:text-white" aria-label="Fechar"><X size={20} /></button>
         </div>
-        <div className="p-6 space-y-5 overflow-y-auto">{children}</div>
-        <div className="px-6 py-4 bg-slate-50 flex justify-end gap-3 shrink-0">{rodape}</div>
+        <div className="p-4 sm:p-6 space-y-5 overflow-y-auto">{children}</div>
+        <div className="px-4 sm:px-6 py-4 bg-slate-50 flex flex-wrap justify-end gap-3 shrink-0">{rodape}</div>
       </div>
     </div>
   );
@@ -143,7 +143,7 @@ function VisaoGeral({ d, abrirLoja, irPara }: { d: DadosDono; abrirLoja: (l: Loj
         </div>
       )}
 
-      <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-4">
         <Cartao titulo="Receita por mês" valor={reais(receita)} detalhe={`${pagantes.length} ${pagantes.length === 1 ? 'loja pagante' : 'lojas pagantes'}`} icone={TrendingUp} cor={COR.petroleo} />
         <Cartao titulo="Lojas" valor={String(d.lojas.length)}
           detalhe={`${d.lojas.filter((l) => l.status === 'teste').length} em teste · ${d.lojas.filter((l) => l.status === 'bloqueada').length} bloqueadas`} icone={Store} cor={COR.azul} />
@@ -197,12 +197,12 @@ function VisaoGeral({ d, abrirLoja, irPara }: { d: DadosDono; abrirLoja: (l: Loj
         {ativas.length === 0 ? <Vazio texto="Nenhuma loja cadastrada ainda." /> : (
           <div className="space-y-3">
             {ativas.map(({ loja, uso }) => (
-              <button key={loja.id} onClick={() => abrirLoja(loja)} className="w-full flex items-center gap-4 text-left group">
-                <span className="w-48 text-sm font-medium text-slate-700 truncate group-hover:underline">{loja.nome}</span>
-                <div className="flex-1 h-2.5 bg-slate-100 rounded-full overflow-hidden">
+              <button key={loja.id} onClick={() => abrirLoja(loja)} className="w-full flex items-center gap-2 sm:gap-4 text-left group">
+                <span className="w-28 sm:w-48 shrink-0 text-sm font-medium text-slate-700 truncate group-hover:underline">{loja.nome}</span>
+                <div className="flex-1 min-w-0 h-2.5 bg-slate-100 rounded-full overflow-hidden">
                   <div className="h-full rounded-full" style={{ width: `${(uso.ultimos30 / max) * 100}%`, background: `linear-gradient(90deg, ${COR.petroleo}, ${COR.azul})` }} />
                 </div>
-                <span className="w-40 text-right text-sm text-slate-600 whitespace-nowrap">{uso.ultimos30} atendimentos</span>
+                <span className="shrink-0 sm:w-40 text-right text-sm text-slate-600 whitespace-nowrap">{uso.ultimos30} atendimentos</span>
               </button>
             ))}
           </div>
@@ -232,10 +232,10 @@ function ListaLojas({ d, abrirLoja, novaLoja }: { d: DadosDono; abrirLoja: (l: L
           <input value={busca} onChange={(e) => setBusca(e.target.value)} placeholder="Buscar por loja, cidade ou responsável..."
             className="w-full pl-9 pr-3 py-2.5 rounded-xl border border-slate-200 bg-white text-sm focus:outline-none focus:ring-2 focus:ring-sky-300" />
         </div>
-        <div className="flex gap-1 p-1 bg-white rounded-xl ring-1 ring-slate-200">
+        <div className="flex gap-1 p-1 bg-white rounded-xl ring-1 ring-slate-200 max-w-full overflow-x-auto">
           {filtros.map((f) => (
             <button key={f.id} onClick={() => setFiltro(f.id)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-semibold transition ${filtro === f.id ? 'text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
+              className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-semibold transition ${filtro === f.id ? 'text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
               style={filtro === f.id ? { background: COR.petroleo } : undefined}>{f.nome}</button>
           ))}
         </div>
@@ -243,8 +243,35 @@ function ListaLojas({ d, abrirLoja, novaLoja }: { d: DadosDono; abrirLoja: (l: L
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 overflow-hidden">
-        {lista.length === 0 ? <Vazio texto={d.lojas.length ? 'Nenhuma loja com esse filtro.' : 'Nenhuma loja ainda. Clique em "Nova loja" para começar.'} /> : (
-          <table className="w-full text-sm">
+        {lista.length === 0 ? <Vazio texto={d.lojas.length ? 'Nenhuma loja com esse filtro.' : 'Nenhuma loja ainda. Clique em "Nova loja" para começar.'} /> : (<>
+          {/* celular: um cartão por loja no lugar da tabela */}
+          <ul className="sm:hidden divide-y divide-slate-100">
+            {lista.map(({ loja, situacao, uso }) => (
+              <li key={loja.id}>
+                <button onClick={() => abrirLoja(loja)} className="w-full text-left px-4 py-3.5 flex items-center gap-3 hover:bg-slate-50">
+                  <div className="flex-1 min-w-0 space-y-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-slate-800 break-words">{loja.nome}</p>
+                        <p className="text-xs text-slate-500 break-words">{[loja.cidade, loja.responsavel].filter(Boolean).join(' · ')}</p>
+                      </div>
+                      <Selo situacao={situacao} />
+                    </div>
+                    <div className="flex flex-wrap gap-x-3 gap-y-0.5 text-xs text-slate-600">
+                      <span>{nomePlano(loja.plano)}</span>
+                      <span className="font-semibold text-slate-800">
+                        {loja.mensalidade > 0 ? `${reais(loja.mensalidade)} · vence dia ${loja.vencimentoDia}` : 'Cortesia'}
+                      </span>
+                      <span>{uso.ultimos30} atend. em 30 dias</span>
+                      <span className={uso.diasSemUso === null || uso.diasSemUso >= 7 ? 'text-rose-600 font-semibold' : ''}>{textoUltimoUso(uso)}</span>
+                    </div>
+                  </div>
+                  <ChevronRight size={18} className="shrink-0 text-slate-400" />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <table className="hidden sm:table w-full text-sm">
             <thead className="bg-slate-50 text-slate-500 text-xs uppercase tracking-wide">
               <tr>
                 <th className="text-left font-semibold px-5 py-3">Loja</th>
@@ -276,7 +303,7 @@ function ListaLojas({ d, abrirLoja, novaLoja }: { d: DadosDono; abrirLoja: (l: L
               ))}
             </tbody>
           </table>
-        )}
+        </>)}
       </div>
     </div>
   );
@@ -311,9 +338,9 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar, verAoVivo }:
     <div className="fixed inset-0 z-[80] flex justify-end">
       <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={fechar} />
       <div className="relative w-full max-w-md h-full bg-white shadow-2xl flex flex-col animate-in slide-in-from-right duration-200">
-        <div className="px-6 py-5 text-white" style={{ background: `linear-gradient(135deg, ${COR.escuro}, ${COR.petroleo})` }}>
-          <div className="flex items-start justify-between">
-            <div>
+        <div className="px-4 py-4 sm:px-6 sm:py-5 text-white" style={{ background: `linear-gradient(135deg, ${COR.escuro}, ${COR.petroleo})` }}>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
               <p className="text-xs uppercase tracking-widest text-white/60">Loja</p>
               <h2 className="text-xl font-bold mt-1">{loja.nome}</h2>
               <p className="text-sm text-white/70">{[loja.cidade, loja.criadaEm && `cliente desde ${fmtDia(loja.criadaEm)}/${loja.criadaEm.slice(0, 4)}`].filter(Boolean).join(' · ')}</p>
@@ -327,8 +354,8 @@ function DetalheLoja({ d, loja, fonte, fechar, editar, recarregar, verAoVivo }:
           </div>
         </div>
 
-        <div className="flex-1 overflow-y-auto p-6 space-y-6">
-          <div className="grid grid-cols-3 gap-3">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6">
+          <div className="grid grid-cols-3 gap-2 sm:gap-3">
             {[{ v: uso.hoje, t: 'hoje' }, { v: uso.ultimos30, t: 'em 30 dias' }, { v: uso.usuarios, t: 'usuários' }].map((x) => (
               <div key={x.t} className="rounded-xl bg-slate-50 p-3 text-center">
                 <p className="text-2xl font-bold text-slate-900">{x.v}</p>
@@ -613,8 +640,8 @@ function FormLoja({ d, fonte, loja, fechar, aoSalvar }: { d: DadosDono; fonte: F
           {salvando && <Loader2 size={16} className="animate-spin" />} {editando ? 'Salvar' : 'Criar loja'}
         </button>
       </>}>
-      <div className="grid grid-cols-2 gap-4">
-        <div className="col-span-2 space-y-1"><label className={rotulo}>Nome da loja *</label><input className={campo} value={f.nome} onChange={muda('nome')} placeholder="Ex.: Pet Mania" /></div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="sm:col-span-2 space-y-1"><label className={rotulo}>Nome da loja *</label><input className={campo} value={f.nome} onChange={muda('nome')} placeholder="Ex.: Pet Mania" /></div>
         <div className="space-y-1"><label className={rotulo}>Cidade</label><input className={campo} value={f.cidade} onChange={muda('cidade')} placeholder="Ex.: Volta Redonda/RJ" /></div>
         <div className="space-y-1"><label className={rotulo}>Telefone (WhatsApp) *</label><input className={campo} value={f.telefone} onChange={muda('telefone')} placeholder="(24) 99999-9999" /></div>
         <div className="space-y-1"><label className={rotulo}>Responsável *</label><input className={campo} value={f.responsavel} onChange={muda('responsavel')} placeholder="Nome de quem vai administrar" /></div>
@@ -637,7 +664,7 @@ function FormLoja({ d, fonte, loja, fechar, aoSalvar }: { d: DadosDono; fonte: F
         </div>
       </div>
 
-      <div className={`grid ${editando ? 'grid-cols-2' : 'grid-cols-3'} gap-4`}>
+      <div className={`grid ${editando ? 'grid-cols-2' : 'grid-cols-2 sm:grid-cols-3'} gap-4`}>
         <div className="space-y-1"><label className={rotulo}>Mensalidade (R$)</label><input className={campo} value={f.mensalidade} onChange={muda('mensalidade')} inputMode="decimal" /></div>
         <div className="space-y-1"><label className={rotulo}>Dia do vencimento</label><input className={campo} value={f.vencimentoDia} onChange={muda('vencimentoDia')} inputMode="numeric" /></div>
         {!editando && (
@@ -693,14 +720,14 @@ function Financeiro({ d, fonte, recarregar }: { d: DadosDono; fonte: FonteDono; 
         <span className="px-4 py-2 rounded-xl bg-white ring-1 ring-slate-200 font-semibold text-slate-700 min-w-[160px] text-center">{nomeMes(mes).replace(/^./, (c) => c.toUpperCase())} de {mes.slice(0, 4)}</span>
         <button onClick={() => setMes(somarMeses(mes, 1))} className="p-2 rounded-xl bg-white ring-1 ring-slate-200 hover:bg-slate-50" aria-label="Próximo mês"><ChevronRight size={18} /></button>
       </div>
-      <div className="grid grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
         <Cartao titulo={`A receber em ${nomeMes(mes)}`} valor={reais(total)} detalhe={`${linhas.length} ${linhas.length === 1 ? 'mensalidade' : 'mensalidades'}`} icone={Wallet} cor={COR.petroleo} />
         <Cartao titulo="Já recebido" valor={reais(pago)} detalhe={total ? `${Math.round((pago / total) * 100)}% do mês` : '—'} icone={CheckCircle2} cor="#059669" />
         <Cartao titulo="Atrasado" valor={reais(atrasado)} detalhe={`com ${DIAS_PARA_BLOQUEIO} dias de atraso o painel sugere bloquear`} icone={AlertTriangle} cor={COR.laranja} />
       </div>
       <Secao titulo={`Mensalidades de ${nomeMes(mes)}`}>
         {linhas.length === 0 ? <Vazio texto="Nenhuma mensalidade neste mês. Lojas em teste e cortesias não pagam." /> : (
-          <table className="w-full text-sm">
+          <table className="w-full min-w-[600px] sm:min-w-0 text-sm">
             <thead className="text-slate-500 text-xs uppercase tracking-wide">
               <tr><th className="text-left font-semibold py-2">Loja</th><th className="text-left font-semibold">Vencimento</th><th className="text-right font-semibold">Valor</th><th className="text-left font-semibold pl-6">Situação</th><th /></tr>
             </thead>
@@ -934,6 +961,7 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
   const [lojaId, setLojaId] = useState<string | null>(lojaAberta ?? null);
   const [form, setForm] = useState<'nova' | 'editar' | null>(novaAberta ? 'nova' : null);
   const [aoVivo, setAoVivo] = useState(false);
+  const [menuAberto, setMenuAberto] = useState(false); // celular: menu lateral em gaveta
   const hoje = hojeFixo ?? idDoDia();
 
   const recarregar = useCallback(async () => {
@@ -948,14 +976,20 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
 
   return (
     <div className="min-h-screen flex bg-[#eef3f6]">
-      <aside className="w-64 shrink-0 flex flex-col text-white sticky top-0 h-screen" style={{ background: `linear-gradient(180deg, ${COR.escuro} 0%, ${COR.petroleo} 100%)` }}>
-        <div className="p-5">
+      {/* celular: fundo escuro atrás da gaveta; tocar fora fecha */}
+      {menuAberto && <div className="sm:hidden fixed inset-0 z-40 bg-black/40" onClick={() => setMenuAberto(false)} aria-hidden="true" />}
+      <aside
+        className={`fixed inset-y-0 left-0 z-50 w-72 max-w-[85vw] transition-transform duration-200 ${menuAberto ? 'translate-x-0' : '-translate-x-full'} sm:sticky sm:top-0 sm:bottom-auto sm:left-auto sm:z-auto sm:w-64 sm:max-w-none sm:translate-x-0 sm:transition-none shrink-0 flex flex-col text-white h-screen`}
+        style={{ background: `linear-gradient(180deg, ${COR.escuro} 0%, ${COR.petroleo} 100%)` }}
+      >
+        <button onClick={() => setMenuAberto(false)} className="sm:hidden absolute top-2 right-2 z-10 p-2 rounded-lg text-white/80 hover:bg-white/10" aria-label="Fechar menu"><X size={20} /></button>
+        <div className="p-5 pt-12 sm:pt-5">
           <div className="bg-white rounded-2xl px-4 py-3"><img src="/logo-pata-gestao.png" alt="Pata & Gestão" className="h-12 w-auto mx-auto object-contain" /></div>
           <p className="text-[11px] text-center uppercase tracking-widest text-white/60 mt-3 font-semibold">Painel do {PAPEL.toLowerCase()}</p>
         </div>
         <nav className="flex-1 px-3 space-y-1">
           {MENU.map((m) => (
-            <button key={m.id} onClick={() => setAba(m.id)}
+            <button key={m.id} onClick={() => { setAba(m.id); setMenuAberto(false); }}
               className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-sm font-semibold transition ${aba === m.id ? 'bg-white/15 text-white' : 'text-white/70 hover:bg-white/10 hover:text-white'}`}>
               <m.icone size={18} /> {m.nome}
               {m.id === 'financeiro' && atrasadas > 0 && <span className="ml-auto text-[11px] px-1.5 rounded-full" style={{ background: COR.laranja }}>{atrasadas}</span>}
@@ -970,16 +1004,17 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
       </aside>
 
       <main className="flex-1 min-w-0">
-        <header className="px-8 py-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">{titulo}</h1>
-            <p className="text-sm text-slate-500">{dataPorExtenso(hoje)}</p>
+        <header className="px-4 py-4 sm:px-8 sm:py-6 flex items-center justify-between gap-3">
+          <button onClick={() => setMenuAberto(true)} className="sm:hidden shrink-0 p-2 -ml-1 rounded-xl bg-white ring-1 ring-slate-200 text-slate-700" aria-label="Abrir menu"><Menu size={20} /></button>
+          <div className="flex-1 min-w-0">
+            <h1 className="text-xl sm:text-2xl font-bold text-slate-900 truncate">{titulo}</h1>
+            <p className="text-xs sm:text-sm text-slate-500">{dataPorExtenso(hoje)}</p>
           </div>
-          <button onClick={() => { setDados(null); void recarregar(); }} className="flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50">
+          <button onClick={() => { setDados(null); void recarregar(); }} className="shrink-0 flex items-center gap-2 text-sm font-semibold px-3 py-2 rounded-xl bg-white ring-1 ring-slate-200 text-slate-600 hover:bg-slate-50">
             <RefreshCw size={16} /> Atualizar
           </button>
         </header>
-        <div className="px-8 pb-10">
+        <div className="px-4 pb-8 sm:px-8 sm:pb-10">
           {erro && !dados ? (
             <div className="bg-white rounded-2xl p-8 text-center ring-1 ring-slate-100">
               <p className="font-semibold text-slate-800">Não foi possível carregar os dados.</p>

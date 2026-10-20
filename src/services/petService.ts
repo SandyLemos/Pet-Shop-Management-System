@@ -24,6 +24,7 @@ import { colLoja, docLoja } from '../lib/loja';
 import type { Pet, PetCadastro, Profissional } from '../app/types/pet';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
 import { TUTOR_REMOVIDO } from '../utils/lgpd';
+import { normalizarAlertas, normalizarAlertaObs } from '../utils/alertas';
 
 /** Reexporta para quem já importava daqui */
 export { idDoDia, idDoDiaDe };
@@ -272,12 +273,41 @@ export async function apagarDadosTutor(petNumber: string): Promise<number> {
   return logs.length;
 }
 
-/** Atualiza a ficha permanente do pet (reusa salvarCadastroPet). */
+/**
+ * Atualiza a ficha permanente do pet (reusa salvarCadastroPet).
+ * ✅ Se os alertas vierem junto, a cópia do pet que está na fila de hoje
+ * também é atualizada (os cards leem a cópia, não a ficha).
+ */
 export async function updatePetCadastro(
   petNumber: string,
   dados: Omit<PetCadastro, 'petNumber' | 'petNumberSeq' | 'telefoneReverso' | 'criadoEm' | 'atualizadoEm'>,
+  dia: string = getTodayKey(),
 ): Promise<void> {
   await salvarCadastroPet(dados, petNumber);
+  if (dados.alertas !== undefined || dados.alertaObs !== undefined) {
+    await atualizarAlertasNaFila(petNumber, dados.alertas, dados.alertaObs, dia);
+  }
+}
+
+/**
+ * ✅ Copia os alertas da ficha para o pet que está na fila do dia (se estiver).
+ * Uma consulta só (pelo petNumber); não mexe em mais nada do atendimento.
+ * Devolve quantos pets da fila foram atualizados.
+ */
+export async function atualizarAlertasNaFila(
+  petNumber: string,
+  alertas: string[] | undefined,
+  alertaObs: string | undefined,
+  dia: string = getTodayKey(),
+): Promise<number> {
+  const dados: Record<string, any> = {};
+  if (alertas !== undefined) dados.alertas = normalizarAlertas(alertas);
+  if (alertaObs !== undefined) dados.alertaObs = normalizarAlertaObs(alertaObs);
+  if (Object.keys(dados).length === 0) return 0;
+
+  const snap = await getDocs(query(colLoja('dias', dia, 'pets'), where('petNumber', '==', petNumber)));
+  await Promise.all(snap.docs.map((d) => updateDoc(docLoja('dias', dia, 'pets', d.id), dados)));
+  return snap.docs.length;
 }
 
 /**
@@ -305,6 +335,9 @@ function montarFicha(dados: DadosFicha, petNumber: string, existente: boolean) {
   const dadosDefinidos = Object.fromEntries(
     Object.entries(dados).filter(([, v]) => v !== undefined),
   );
+  // ✅ alertas sempre limpos (sem repetidos, dentro dos limites da regra)
+  if (dados.alertas !== undefined) dadosDefinidos.alertas = normalizarAlertas(dados.alertas);
+  if (dados.alertaObs !== undefined) dadosDefinidos.alertaObs = normalizarAlertaObs(dados.alertaObs);
   return {
     ...dadosDefinidos,
     petNumber,
@@ -319,7 +352,7 @@ function montarFicha(dados: DadosFicha, petNumber: string, existente: boolean) {
 }
 
 /** Campos da fila que também existem na ficha permanente */
-export const CAMPOS_FICHA = ['nomePet', 'nomeTutor', 'telefone', 'especie', 'raca', 'porte', 'foto'] as const;
+export const CAMPOS_FICHA = ['nomePet', 'nomeTutor', 'telefone', 'especie', 'raca', 'porte', 'foto', 'alertas', 'alertaObs'] as const;
 
 /**
  * ✅ Leva para a ficha permanente as correções feitas no pet da fila
@@ -329,7 +362,7 @@ export const CAMPOS_FICHA = ['nomePet', 'nomeTutor', 'telefone', 'especie', 'rac
  */
 export async function atualizarFichaComEdicao(
   petNumber: string,
-  campos: Partial<Record<(typeof CAMPOS_FICHA)[number], string>>,
+  campos: Partial<Record<(typeof CAMPOS_FICHA)[number], string | string[]>>,
 ): Promise<boolean> {
   const dados: Record<string, any> = {};
   for (const k of CAMPOS_FICHA) {
@@ -337,6 +370,9 @@ export async function atualizarFichaComEdicao(
     if (v !== undefined) dados[k] = v;
   }
   if (Object.keys(dados).length === 0) return false;
+
+  if (dados.alertas !== undefined) dados.alertas = normalizarAlertas(dados.alertas);
+  if (dados.alertaObs !== undefined) dados.alertaObs = normalizarAlertaObs(dados.alertaObs);
 
   if (dados.nomePet !== undefined) dados.nomePetLower = String(dados.nomePet).toLowerCase();
   if (dados.telefone !== undefined) {
@@ -409,9 +445,15 @@ export async function addPet(
   // ✅ LGPD: a autorização do tutor vai só para a ficha, não para a fila
   const consentiu = (petData as any).consentimentoLgpd === true;
 
-  const petDataLimpo = Object.fromEntries(
+  const petDataLimpo: Record<string, any> = Object.fromEntries(
     Object.entries(petData).filter(([k, v]) => v !== undefined && k !== 'dia' && k !== 'consentimentoLgpd'),
   );
+
+  // ✅ Alertas da ficha: o formulário manda a lista (pode ser vazia = tirar todos).
+  // Se não mandar (undefined), a ficha fica como está e a fila copia o que a ficha já tem.
+  const alertasInformados = petData.alertas !== undefined || petData.alertaObs !== undefined;
+  if (petData.alertas !== undefined) petDataLimpo.alertas = normalizarAlertas(petData.alertas);
+  if (petData.alertaObs !== undefined) petDataLimpo.alertaObs = normalizarAlertaObs(petData.alertaObs);
 
   const dadosFicha: DadosFicha = {
     nomePet:   petData.nomePet,
@@ -421,6 +463,8 @@ export async function addPet(
     raca:      petData.raca,
     porte:     petData.porte,
     foto:      petData.foto,
+    alertas:   petData.alertas,
+    alertaObs: petData.alertaObs,
   };
 
   const diaRef      = docLoja('dias', dia);
@@ -463,8 +507,16 @@ export async function addPet(
       { merge: true },
     );
     tx.set(diaRef, { slotsOcupados: arrayUnion(slot) }, { merge: true });
+    // ✅ cópia dos alertas na fila: o que veio do formulário ou, se nada veio, o da ficha
+    const copiaAlertas: Record<string, any> = {};
+    if (!alertasInformados && fichaSnap?.exists()) {
+      const f = fichaSnap.data();
+      if (Array.isArray(f.alertas) && f.alertas.length > 0) copiaAlertas.alertas = normalizarAlertas(f.alertas);
+      if (typeof f.alertaObs === 'string' && f.alertaObs) copiaAlertas.alertaObs = normalizarAlertaObs(f.alertaObs);
+    }
     tx.set(petRef, {
       ...petDataLimpo,
+      ...copiaAlertas,
       petNumber:          numero,
       checkInTime:        serverTimestamp(),
       historicoReversoes: [],
@@ -647,6 +699,9 @@ export async function encerrarPet(
     problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
+    // alertas da ficha no momento do atendimento (aparecem em Entregues)
+    alertas:               normalizarAlertas(pet.alertas),
+    alertaObs:             normalizarAlertaObs(pet.alertaObs),
   };
 
   // 2️⃣ ✅ TRANSAÇÃO: confere que o pet ainda está na fila, grava o log,
@@ -722,6 +777,8 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
     problemasSaudeBanho:   pet.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: pet.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    pet.problemasSaudeTosa    ?? [],
+    alertas:               normalizarAlertas(pet.alertas),
+    alertaObs:             normalizarAlertaObs(pet.alertaObs),
   });
 
   // 2️⃣ Atualiza o pet — salva quem avisou direto no documento
@@ -769,6 +826,8 @@ export interface LogEntry {
   problemasSaudeBanho?:   string[];
   problemasSaudeEscovar?: string[];
   problemasSaudeTosa?:    string[];
+  alertas?:               string[];
+  alertaObs?:             string;
 }
 
 // ─── Conversor Firestore → LogEntry ───────────────────────────────────────
@@ -813,6 +872,8 @@ function logFromFirestore(id: string, data: any): LogEntry {
     problemasSaudeBanho:   data.problemasSaudeBanho   ?? [],
     problemasSaudeEscovar: data.problemasSaudeEscovar ?? [],
     problemasSaudeTosa:    data.problemasSaudeTosa    ?? [],
+    alertas:               Array.isArray(data.alertas) ? data.alertas : [],
+    alertaObs:             data.alertaObs             ?? '',
   };
 }
 

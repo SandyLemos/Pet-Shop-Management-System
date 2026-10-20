@@ -36,7 +36,7 @@ const ABAS: { id: Aba; label: string; icone: ReactNode }[] = [
 // ─── Peças visuais ─────────────────────────────────────────────────────────
 function Cartao({ titulo, subtitulo, children, className = '', extra }: { titulo: string; subtitulo?: string; children: ReactNode; className?: string; extra?: ReactNode }) {
   return (
-    <div className={`bg-white rounded-3xl p-6 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex flex-col ${className}`}>
+    <div className={`bg-white rounded-3xl p-4 sm:p-6 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex flex-col min-w-0 ${className}`}>
       <div className="flex items-start justify-between gap-3 mb-4">
         <div>
           <h3 className="font-bold text-slate-900 text-base">{titulo}</h3>
@@ -55,11 +55,11 @@ function Vazio({ texto = 'Nenhum atendimento neste período.' }: { texto?: strin
 
 function Indicador({ icone, cor, rotulo, valor, delta }: { icone: ReactNode; cor: string; rotulo: string; valor: string; delta?: number | null }) {
   return (
-    <div className="bg-white rounded-3xl p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex items-center gap-4">
-      <div className="w-12 h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: `${cor}22`, color: cor }}>{icone}</div>
+    <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex flex-col items-start gap-2.5 sm:flex-row sm:items-center sm:gap-4 min-w-0">
+      <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-2xl flex items-center justify-center shrink-0" style={{ background: `${cor}22`, color: cor }}>{icone}</div>
       <div className="min-w-0">
         <p className="text-xs text-slate-500 font-medium">{rotulo}</p>
-        <p className="text-[26px] font-extrabold text-slate-900 leading-tight">{valor}</p>
+        <p className="text-[22px] sm:text-[26px] font-extrabold text-slate-900 leading-tight">{valor}</p>
         {delta !== undefined && delta !== null && (
           <p className={`text-[11px] font-semibold flex items-center gap-1 ${delta >= 0 ? 'text-emerald-600' : 'text-rose-500'}`}>
             {delta >= 0 ? <TrendingUp size={12} /> : <TrendingDown size={12} />}{delta >= 0 ? '+' : ''}{delta}% vs. anterior
@@ -160,7 +160,7 @@ const ESTILO_DICA: Record<TipoDica, { cor: string; icone: ReactNode; rotulo: str
 function CartaoDica({ dica }: { dica: Dica }) {
   const e = ESTILO_DICA[dica.tipo];
   return (
-    <div className="bg-white rounded-3xl p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex gap-4">
+    <div className="bg-white rounded-3xl p-4 sm:p-5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex gap-3 sm:gap-4">
       <div className="w-11 h-11 rounded-2xl flex items-center justify-center shrink-0" style={{ background: `${e.cor}22`, color: e.cor }}>{e.icone}</div>
       <div className="min-w-0">
         <p className="text-[11px] font-bold uppercase tracking-wide" style={{ color: e.cor }}>{e.rotulo}</p>
@@ -217,37 +217,37 @@ export default function AnalyticsModal({ onClose, carregar = carregarDadosAnalis
   }, [dados, periodo, hoje]);
 
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center px-4 py-6">
+    <div className="fixed inset-0 z-[70] flex items-center justify-center px-2 py-3 sm:px-4 sm:py-6">
       <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-full max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+      <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-6xl h-full max-h-[96vh] sm:max-h-[92vh] flex flex-col overflow-hidden animate-in fade-in zoom-in-95 duration-200">
 
         {/* Cabeçalho (padrão dos modais do Admin) */}
-        <div className="shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600 px-6 py-5 flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="bg-white/20 p-2 rounded-lg"><BarChart3 className="w-5 h-5 text-white" /></div>
-            <div>
+        <div className="shrink-0 bg-gradient-to-r from-indigo-600 to-purple-600 px-4 py-4 sm:px-6 sm:py-5 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="bg-white/20 p-2 rounded-lg shrink-0"><BarChart3 className="w-5 h-5 text-white" /></div>
+            <div className="min-w-0">
               <h2 className="text-white font-bold text-base">Análises</h2>
               <p className="text-indigo-200 text-xs">{nomeLoja()}{calc ? ` · período de ${fmtDia(calc.inicio)} a ${fmtDia(calc.fim)}` : ''}</p>
             </div>
           </div>
-          <button onClick={onClose} className="text-white/70 hover:text-white transition p-1" aria-label="Fechar"><X size={20} /></button>
+          <button onClick={onClose} className="shrink-0 text-white/70 hover:text-white transition p-2 sm:p-1" aria-label="Fechar"><X size={20} /></button>
         </div>
 
         {/* Abas + período */}
-        <div className="shrink-0 bg-[#eef2f7] px-6 pt-5 pb-1 flex flex-wrap items-center justify-between gap-3">
-          <div className="flex flex-wrap gap-1 p-1 bg-white rounded-xl shadow-sm">
+        <div className="shrink-0 bg-[#eef2f7] px-3 pt-3 sm:px-6 sm:pt-5 pb-1 flex flex-wrap items-center justify-between gap-2 sm:gap-3">
+          <div className="w-full sm:w-auto flex flex-wrap gap-1 p-1 bg-white rounded-xl shadow-sm">
             {ABAS.map((a) => (
               <button key={a.id} onClick={() => setAba(a.id)}
-                className={`px-3.5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-2 ${aba === a.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+                className={`px-2.5 sm:px-3.5 py-2 rounded-lg text-sm font-semibold transition-all flex items-center gap-1.5 sm:gap-2 ${aba === a.id ? 'bg-indigo-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
                 {a.icone}{a.label}
               </button>
             ))}
           </div>
-          <div className="flex items-center gap-3">
-            <div className="grid grid-cols-4 gap-1 p-1 bg-white rounded-xl shadow-sm">
+          <div className="w-full sm:w-auto flex items-center gap-3">
+            <div className="w-full sm:w-auto grid grid-cols-4 gap-1 p-1 bg-white rounded-xl shadow-sm">
               {PERIODOS.map((p) => (
                 <button key={p.id} onClick={() => setPeriodo(p.id)}
-                  className={`px-3 py-2 rounded-lg text-xs font-semibold transition-all ${periodo === p.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>
+                  className={`px-1 sm:px-3 py-2 rounded-lg text-xs font-semibold transition-all ${periodo === p.id ? 'bg-indigo-50 text-indigo-700' : 'text-slate-500 hover:text-slate-700'}`}>
                   {p.label}
                 </button>
               ))}
@@ -255,7 +255,7 @@ export default function AnalyticsModal({ onClose, carregar = carregarDadosAnalis
           </div>
         </div>
 
-        <div className="flex-1 min-h-0 overflow-y-auto bg-[#eef2f7] px-6 pb-6 pt-4">
+        <div className="flex-1 min-h-0 overflow-y-auto bg-[#eef2f7] px-3 pb-4 sm:px-6 sm:pb-6 pt-4">
           {erro && (
             <div className="bg-red-50 border border-red-200 rounded-lg p-3 flex items-center justify-between gap-3">
               <p className="text-red-600 text-xs font-medium">⚠️ Não foi possível carregar os dados. Verifique a internet.</p>
@@ -276,7 +276,7 @@ export default function AnalyticsModal({ onClose, carregar = carregarDadosAnalis
           {/* ── Visão geral ── */}
           {calc && aba === 'geral' && (
             <div className="space-y-5">
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-5">
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-5">
                 <Indicador icone={<PackageCheck size={22} />} cor={C.verde} rotulo="Atendimentos concluídos" valor={String(calc.atual.atendimentos)} delta={calc.delta.atendimentos} />
                 <Indicador icone={<Clock size={22} />} cor={C.azul} rotulo="Tempo médio na loja" valor={formatarMinutos(calc.atual.tempoMedioMin)} />
                 <Indicador icone={<UserPlus size={22} />} cor={C.roxo} rotulo="Clientes novos" valor={String(calc.atual.clientesNovos)} delta={calc.delta.novos} />
@@ -286,7 +286,7 @@ export default function AnalyticsModal({ onClose, carregar = carregarDadosAnalis
                 const d = calc.dicas[0]; const e = ESTILO_DICA[d.tipo];
                 return (
                   <button onClick={() => setAba('dicas')}
-                    className="w-full bg-white rounded-3xl px-5 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex items-center gap-4 text-left hover:shadow-md transition">
+                    className="w-full bg-white rounded-3xl px-4 sm:px-5 py-3.5 shadow-[0_8px_24px_rgba(15,23,42,0.06)] flex items-center gap-3 sm:gap-4 text-left hover:shadow-md transition">
                     <div className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 bg-amber-100 text-amber-500"><Lightbulb size={18} /></div>
                     <p className="flex-1 min-w-0 text-sm text-slate-700 truncate">
                       <span className="font-bold" style={{ color: e.cor }}>{e.rotulo}: </span>

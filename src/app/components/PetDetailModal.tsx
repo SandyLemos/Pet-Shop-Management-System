@@ -20,7 +20,6 @@ import {
   Droplet,
   Wind,
   Clock,
-  AlertCircle,
   Pencil,
   Trash2,
   CheckCircle2,
@@ -31,6 +30,7 @@ import {
 import type { Pet } from '../types/pet';
 import { PetRegistration } from './PetRegistration';
 import { HEALTH_ISSUES, NO_ISSUES_ID } from '../constants/healthIssues';
+import { AlertaSelos } from './AlertasPet';
 
 interface PetDetailModalProps {
   pet: Pet | null;
@@ -175,6 +175,10 @@ export function PetDetailModal({
 
           <DialogBody className="pb-6 space-y-3">
 
+            {/* ── Alertas da ficha (todos + detalhe) ── */}
+            {/* pets antigos: a observação antiga aparece aqui, no lugar do detalhe */}
+            <AlertaSelos alertas={pet.alertas} alertaObs={pet.alertaObs || pet.observacoes} />
+
             {/* ── Badges ── */}
             <div className="flex gap-1.5 flex-wrap">
               <Badge className={`${getServiceColor(pet.servico)} text-xs`}>
@@ -316,16 +320,6 @@ export function PetDetailModal({
                     </div>
                   </>
                 )}
-              </div>
-            )}
-
-            {/* ── Observações ── */}
-            {pet.observacoes && (
-              <div className="flex items-start gap-2 bg-orange-50 border border-orange-100 rounded-lg p-2">
-                <AlertCircle className="w-3.5 h-3.5 text-orange-500 mt-0.5 flex-shrink-0" />
-                <p className="text-xs text-orange-700 min-w-0 break-words whitespace-pre-wrap">
-                  {pet.observacoes}
-                </p>
               </div>
             )}
 

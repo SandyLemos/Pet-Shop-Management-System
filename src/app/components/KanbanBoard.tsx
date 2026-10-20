@@ -64,6 +64,8 @@ interface KanbanColumnProps {
   allPets?: Pet[]
   /** ✅ slots já queimados hoje (recebido do KanbanBoard) */
   slotsUsados: Set<number>
+  /** celular: só a etapa escolhida no seletor aparece */
+  ocultaNoCelular?: boolean
 }
 
 function KanbanColumn({
@@ -83,6 +85,7 @@ function KanbanColumn({
   onAddPet,
   allPets = [],
   slotsUsados,
+  ocultaNoCelular = false,
 }: KanbanColumnProps) {
   const [isDialogOpen, setIsDialogOpen] = useState(false)
 
@@ -146,7 +149,7 @@ function KanbanColumn({
   }
 
   return (
-    <div className="shrink-0 w-[280px] xl:w-auto xl:flex-1 xl:min-w-0 flex flex-col min-h-0 transition-colors rounded-lg">
+    <div className={`${ocultaNoCelular ? 'hidden sm:flex' : 'flex'} shrink-0 w-full sm:w-[280px] xl:w-auto xl:flex-1 xl:min-w-0 flex-col min-h-0 transition-colors rounded-lg`}>
       <div className={`${color} p-4 rounded-t-lg shrink-0`}>
         <div className="flex items-center justify-between text-white">
           <div className="flex items-center gap-2">
@@ -245,17 +248,59 @@ export function KanbanBoard({
   // ✅ um único listener para todas as colunas
   const { usados } = useSlotsUsadosHoje()
 
+  // celular: uma etapa por vez, escolhida no seletor do topo
+  const [etapaCelular, setEtapaCelular] = useState<SlotStatus>('espera')
+  const etapas: { status: SlotStatus; titulo: string; icone: React.ReactNode; cor: string }[] = [
+    { status: 'espera',  titulo: 'Aguardando', icone: <Calendar className="w-4 h-4" />, cor: '#F7931E' },
+    { status: 'banho',   titulo: 'Banho',      icone: <Droplet className="w-4 h-4" />,  cor: '#0B5A70' },
+    { status: 'escovar', titulo: 'Escovar',    icone: <Wind className="w-4 h-4" />,     cor: '#0B5A70' },
+    { status: 'tosa',    titulo: 'Tosa',       icone: <Scissors className="w-4 h-4" />, cor: '#0B5A70' },
+  ]
+
   return (
     <div className="flex w-full min-w-0 gap-6 flow-area md:h-[calc(100dvh-300px)] md:overflow-hidden xl:h-auto xl:overflow-visible">
       <div className="flex-1 min-w-0 w-full flex flex-col min-h-0">
-        <h2 className="shrink-0 text-lg font-semibold mb-4 text-gray-800">
+        <h2 className="shrink-0 text-lg font-semibold mb-3 sm:mb-4 text-gray-800">
           Fluxo de Trabalho
         </h2>
 
-        <div className="flex-1 min-h-0 w-full min-w-0 overflow-x-auto overflow-y-hidden touch-pan-x [-webkit-overflow-scrolling:touch]">
-          <div className="flex flex-nowrap gap-4 pb-4 h-full w-max xl:w-full">
+        {/* celular: seletor de etapas (no tablet e no computador as colunas ficam lado a lado) */}
+        <div role="tablist" aria-label="Etapas" className="sm:hidden sticky top-0 z-20 grid grid-cols-4 gap-1.5 mb-3 p-1.5 bg-white rounded-xl shadow-sm border border-slate-100">
+          {etapas.map((e) => {
+            const ativa = etapaCelular === e.status
+            return (
+              <button
+                key={e.status}
+                type="button"
+                role="tab"
+                aria-selected={ativa}
+                data-etapa={e.status}
+                aria-label={`${e.titulo} (${pets.filter((p) => p.status === e.status).length})`}
+                onClick={() => setEtapaCelular(e.status)}
+                className="min-w-0 flex flex-col items-center gap-0.5 rounded-lg py-2 px-1 text-[11px] leading-tight font-semibold transition-colors"
+                style={ativa ? { background: e.cor, color: '#fff' } : { color: e.cor }}
+              >
+                <span aria-hidden="true" className="flex items-center gap-1">
+                  {e.icone}
+                  <span
+                    className="min-w-[1.25rem] rounded-full px-1.5 text-[11px] leading-5"
+                    style={ativa ? { background: 'rgba(255,255,255,0.25)' } : { background: `${e.cor}1A` }}
+                  >
+                    {pets.filter((p) => p.status === e.status).length}
+                  </span>
+                </span>
+                {/* nome pelo CSS: o texto da coluna continua único na página */}
+                <span aria-hidden="true" data-titulo={e.titulo} className="w-full truncate text-center before:content-[attr(data-titulo)]" />
+              </button>
+            )
+          })}
+        </div>
+
+        <div className="flex-1 min-h-0 w-full min-w-0 sm:overflow-x-auto sm:overflow-y-hidden sm:touch-pan-x [-webkit-overflow-scrolling:touch]">
+          <div className="flex flex-nowrap gap-4 pb-4 h-full w-full sm:w-max xl:w-full">
             <KanbanColumn
               status="espera"
+              ocultaNoCelular={etapaCelular !== 'espera'}
               title="Aguardando"
               onRevertService={onRevertService}
               icon={<Calendar className="w-5 h-5" />}
@@ -274,6 +319,7 @@ export function KanbanBoard({
             />
             <KanbanColumn
               status="banho"
+              ocultaNoCelular={etapaCelular !== 'banho'}
               title="Banho"
               onRevertService={onRevertService}
               icon={<Droplet className="w-5 h-5" />}
@@ -291,6 +337,7 @@ export function KanbanBoard({
             />
             <KanbanColumn
               status="escovar"
+              ocultaNoCelular={etapaCelular !== 'escovar'}
               title="Escovar"
               onRevertService={onRevertService}
               icon={<Wind className="w-5 h-5" />}
@@ -308,6 +355,7 @@ export function KanbanBoard({
             />
             <KanbanColumn
               status="tosa"
+              ocultaNoCelular={etapaCelular !== 'tosa'}
               title="Tosa"
               onRevertService={onRevertService}
               icon={<Scissors className="w-5 h-5" />}
