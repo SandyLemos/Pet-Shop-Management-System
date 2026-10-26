@@ -66,6 +66,11 @@ export interface Pet {
   // ✅ Cópia dos alertas da ficha (para não ler a ficha a cada card)
   alertas?: string[];
   alertaObs?: string;
+
+  // ✅ Portal do tutor: código do link de acompanhamento (acompanhamentos/{codigo})
+  linkTutor?: string;
+  /** quando a equipe enviou o link ao tutor (ISO) */
+  linkTutorEnviadoEm?: string;
 }
 
 // ─── Ficha permanente do pet (coleção petsCadastro) ───────────────────────

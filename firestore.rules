@@ -219,6 +219,30 @@ service cloud.firestore {
       }
     }
 
+    // —— Portal do tutor (NOVO): link de acompanhamento do pet ——————————
+    //    Sem login: quem tem o código lê SÓ aquele link, e só enquanto vale.
+    //    Ninguém lista os links. Só a equipe da loja cria e avança as etapas.
+    match /acompanhamentos/{codigo} {
+      allow get: if resource.data.expiraEm > request.time.toMillis();
+      allow list: if false;
+      allow create: if daLoja(request.resource.data.lojaId)
+                    && codigo.matches('^[A-Za-z0-9]{20,40}$')
+                    && request.resource.data.keys().hasOnly([
+                         'lojaId', 'nomeLoja', 'logoUrl', 'cores', 'nomePet', 'especie', 'servico', 'status', 'dia',
+                         'expiraEm', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'entregueEm'])
+                    && request.resource.data.nomePet is string
+                    && request.resource.data.nomePet.size() > 0
+                    && request.resource.data.nomePet.size() <= 100
+                    && request.resource.data.expiraEm is int
+                    && request.resource.data.expiraEm <= request.time.toMillis() + 3 * 24 * 60 * 60 * 1000;
+      allow update: if daLoja(resource.data.lojaId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
+                         'status', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'entregueEm'])
+                    && request.resource.data.status in
+                         ['espera', 'banho', 'escovar', 'tosa', 'finalizado', 'entregue', 'removido'];
+      allow delete: if isDono() || daLoja(resource.data.lojaId);
+    }
+
     // —— Contas liberadas (NOVO): e-mail de loja excluída ou acesso removido,
     //    para poder cadastrar o mesmo e-mail de novo. Só o dono.
     match /contasLivres/{email} {

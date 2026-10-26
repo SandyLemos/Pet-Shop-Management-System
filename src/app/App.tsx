@@ -17,6 +17,8 @@ import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck, Eye } f
 import { useSuporteAcompanhando } from '../hooks/useSuporteAcompanhando';
 import { informarAba, type AbaLoja } from '../lib/espelho';
 import { EntreguesTab } from './components/EntreguesTab';
+import { criarLinkTutor, atualizarLinkTutor } from '../services/acompanhamentoService';
+import type { SituacaoTutor } from '../utils/acompanhamento';
 
 import { LogoutModal } from './components/LogoutModal';
 import { LoginScreen, SplashScreen } from './components/TelaLogin';
@@ -158,10 +160,19 @@ export default function App() {
   /** ✅ Dia da fila onde o pet está (para editar no lugar certo) */
   const diaDoPet = (petId: string) => pets.find((p) => p.id === petId)?.dia;
 
+  /** ✅ Portal do tutor: leva a nova etapa ao link do pet (se ele tiver link) */
+  const seguirLink = (petId: string, status?: SlotStatus) => {
+    const pet = pets.find((p) => p.id === petId);
+    if (pet?.linkTutor && status && status !== 'livre' && status !== pet.status) {
+      void atualizarLinkTutor(pet.linkTutor, status as SituacaoTutor);
+    }
+  };
+
   /** ✅ Encerra um pet esquecido de dia anterior (registro vai para o dia dele) */
   const handleEncerrarPendente = async (pet: Pet, tipo: 'entregue' | 'removido') => {
     try {
       await encerrarPet(pet, tipo); // usa pet.dia → log e exclusão no dia certo
+      void atualizarLinkTutor(pet.linkTutor, tipo);
       toast.success(
         tipo === 'entregue'
           ? `${pet.nomePet} registrado como entregue.`
@@ -210,6 +221,7 @@ export default function App() {
 
     try {
       await updatePet(petId, updates, diaDoPet(petId));
+      seguirLink(petId, updates.status);
       toast.success(`Serviço de ${etapa} revertido com sucesso.`);
     } catch {
       toast.error('Erro ao reverter serviço. Tente novamente.');
@@ -224,6 +236,7 @@ export default function App() {
 
     try {
       await updatePet(petId, updates, diaDoPet(petId));
+      seguirLink(petId, newStatus);
     } catch {
       toast.error('Erro ao atualizar status. Tente novamente.');
     }
@@ -232,8 +245,11 @@ export default function App() {
   /** ✅ Retorna true se cadastrou; false mantém o formulário aberto (dados preservados) */
   const handleAddPet = async (petData: Omit<Pet, 'id' | 'checkInTime'>): Promise<boolean> => {
     try {
-      const { petNumber, isNovo } = await addPet(petData, dia);
+      const { id, petNumber, isNovo } = await addPet(petData, dia);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
+      // ✅ Portal do tutor: o link nasce na entrada do pet (falha aqui não atrapalha o cadastro)
+      criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
+        .catch((err) => console.error('[link do tutor] não foi criado', err));
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
       }
@@ -267,6 +283,7 @@ export default function App() {
         toast.success(`${pet.nomePet} marcado como avisado! 📞`);
       } else {
         await encerrarPet(pet, 'entregue');
+        void atualizarLinkTutor(pet.linkTutor, 'entregue');
         // ✅ só "queima" o slot de hoje se o pet for da fila de hoje
         if (slot && (!pet.dia || pet.dia === dia)) await marcarUsado(slot);
         toast.success(`${pet.nomePet} entregue ao tutor! 🐾`);
@@ -319,6 +336,7 @@ export default function App() {
     if (!pet) return;
     try {
       await encerrarPet(pet, 'removido');
+      void atualizarLinkTutor(pet.linkTutor, 'removido');
       toast.success(`${pet.nomePet} removido da fila.`);
     } catch (err) {
       if (err instanceof Error && err.message === JA_ENCERRADO) {
@@ -349,6 +367,7 @@ export default function App() {
 
     try {
       await updatePet(petId, updates, diaDoPet(petId));
+      seguirLink(petId, updates.status);
     } catch {
       toast.error('Erro ao atribuir profissional. Tente novamente.');
     }
@@ -378,6 +397,7 @@ export default function App() {
 
     try {
       await updatePet(petId, updates, diaDoPet(petId));
+      seguirLink(petId, newStatus);
     } catch {
       toast.error('Erro ao avançar etapa. Tente novamente.');
     }

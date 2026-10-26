@@ -31,6 +31,7 @@ import type { Pet } from '../types/pet';
 import { PetRegistration } from './PetRegistration';
 import { HEALTH_ISSUES, NO_ISSUES_ID } from '../constants/healthIssues';
 import { AlertaSelos } from './AlertasPet';
+import { LinkTutorPet } from './LinkTutorPet';
 
 interface PetDetailModalProps {
   pet: Pet | null;
@@ -210,6 +211,9 @@ export function PetDetailModal({
                 </p>
               </div>
             )}
+
+            {/* ── Portal do tutor: link de acompanhamento ── */}
+            <LinkTutorPet pet={pet} />
 
             {/* ── Grid: Informações + Profissionais ── */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 items-start [&>*]:min-w-0">
