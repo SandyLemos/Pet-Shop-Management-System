@@ -12,8 +12,6 @@ import {
   PET_NA_FILA,
 } from '../../services/petService';
 import type { PetCadastro } from '../types/pet';
-import { AlertaSelos, AlertasSelector } from './AlertasPet';
-import { juntarAlertas, normalizarAlertaObs, separarAlertas } from '../../utils/alertas';
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 function labelEspecie(e?: string) {
@@ -78,9 +76,6 @@ function ModalDetalhesPet({
             <InfoRow icon="🦴" label="Raça" value={pet.raca || '—'} />
             <InfoRow icon="📏" label="Porte" value={labelPorte(pet.porte)} />
           </div>
-
-          {/* ✅ Alertas da ficha */}
-          <AlertaSelos alertas={pet.alertas} alertaObs={pet.alertaObs || (pet as any).observacoes} />
 
           {/* Ações */}
           <div className="flex gap-3 pt-1">
@@ -196,10 +191,6 @@ function CardEditarPet({
   const [especie, setEspecie]     = useState<'cao' | 'gato' | ''>(pet.especie || '');
   const [raca, setRaca]           = useState(pet.raca || '');
   const [porte, setPorte]         = useState<'pequeno' | 'medio' | 'grande' | ''>(pet.porte || '');
-  const [alertas, setAlertas]     = useState(() => {
-    const { prontos, outro } = separarAlertas(pet.alertas);
-    return { prontos, outro, obs: pet.alertaObs || (pet as any).observacoes || '' };
-  });
   const [loading, setLoading]     = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -215,9 +206,7 @@ function CardEditarPet({
         raca: raca || undefined,
         porte: porte || undefined,
         foto: pet.foto,
-        // ✅ alertas: grava na ficha e atualiza a cópia do pet na fila de hoje
-        alertas: juntarAlertas(alertas.prontos, alertas.outro),
-        alertaObs: normalizarAlertaObs(alertas.obs),
+        // os alertas não são editados aqui: os que a ficha já tem continuam como estão
       });
       toast.success(`Cadastro de ${nomePet} atualizado!`);
       onSuccess();
@@ -291,8 +280,6 @@ function CardEditarPet({
             <label className="text-xs font-semibold text-gray-600 uppercase tracking-wide">Telefone</label>
             <input type="tel" value={telefone} onChange={e => setTelefone(e.target.value)} placeholder="(24) 99999-9999" className={inputCls} />
           </div>
-
-          <AlertasSelector prontos={alertas.prontos} outro={alertas.outro} obs={alertas.obs} onChange={setAlertas} />
 
           <div className="flex gap-3 pt-2">
             <button type="button" onClick={onClose} className="flex-1 py-2.5 rounded-lg bg-red-500 hover:bg-red-600 text-sm font-semibold text-white transition">
@@ -471,7 +458,6 @@ const filtrados = useMemo(() => {
                   <p className="text-xs text-gray-400 truncate">
                     {p.nomeTutor} · {formatTelefone(p.telefone)}
                   </p>
-                  <AlertaSelos alertas={p.alertas} compacto className="mt-1" />
                 </div>
               </div>
               <div className="flex items-center gap-1 flex-shrink-0">
