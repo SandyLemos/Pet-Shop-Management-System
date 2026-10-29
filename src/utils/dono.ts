@@ -1,4 +1,5 @@
 // ✅ Painel do Dono: tipos e contas (sem Firebase, para poder testar).
+import type { Modulos } from './modulos';
 
 export type PlanoId = 'basico' | 'profissional' | 'rede';
 export type StatusLoja = 'ativa' | 'teste' | 'bloqueada';
@@ -26,6 +27,8 @@ export interface Loja {
   /** primeiro mês com mensalidade (AAAA-MM); antes disso não cobra */
   cobrarDesde?: string;
   migradaEm?: string;
+  /** módulos liberados pelo proprietário (sem o campo: só Banho e tosa) */
+  modulos?: Partial<Modulos>;
 }
 
 export interface Cobranca {

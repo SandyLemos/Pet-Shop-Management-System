@@ -10,7 +10,7 @@ import {
 import { Badge } from './ui/badge';
 import {
   Dog, Clock, Droplet, Wind, Scissors,
-  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall, Ban,
+  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall, Ban, Globe, CalendarCheck, Hourglass,
 } from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
 import { Button } from './ui/button';
@@ -20,6 +20,10 @@ import type { Pet, SlotStatus } from '../types/pet';
 import { estaParado, minutosNaLoja, formatarTempo, LIMITE_ESPERA_MIN, LIMITE_ATENDIMENTO_MIN } from '../../utils/parado';
 import { informarJanela, JanelaRemota } from '../../lib/espelho';
 import { AlertaSeloVaga } from './AlertasPet';
+import type { AgendaOnline } from '../../hooks/useAgendaOnline';
+import type { Pedido } from '../../services/agendamentoService';
+import { PedidoOnlineModal } from './agendamento/PedidoOnlineModal';
+import { soDigitos } from '../../utils/agendamento';
 
 interface SlotGridProps {
   pets: Pet[];
@@ -29,9 +33,15 @@ interface SlotGridProps {
   onDeletePet: (petId: string) => void;
   onCheckout: (petId: string, tipo: 'entregue' | 'avisado') => void;
   filter: 'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao';
+  /** ✅ Agendamento online: vagas de hoje reservadas para os tutores e os pedidos delas */
+  online?: AgendaOnline;
+  /** o pet do pedido chegou e foi cadastrado na vaga */
+  onChegou?: (pedido: Pedido) => void;
 }
 
-export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, filter }: SlotGridProps) {
+const SEM_ONLINE: AgendaOnline = { vagasHoje: new Set(), pedidoNaVaga: new Map(), aConfirmar: [] };
+
+export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, filter, online = SEM_ONLINE, onChegou }: SlotGridProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [visibleSlots, setVisibleSlots] = useState(10);
@@ -39,6 +49,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   // ── estados do modal de detalhes ──
   const [selectedPet, setSelectedPet] = useState<Pet | null>(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+
+  // ── agendamento online: pedido aberto na janela e pedido cujo pet está chegando ──
+  const [pedidoAberto, setPedidoAberto] = useState<Pedido | null>(null);
+  const [chegada, setChegada] = useState<Pedido | null>(null);
+  const vagaOnline = (n: number) => online.vagasHoje.has(n) && !pets.some((p) => p.slotNumber === n);
 
   // ✅ NOVO: slots já queimados hoje
   const { usados } = useSlotsUsadosHoje();
@@ -80,17 +95,18 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     let livres = 0;
     for (let n = 1; n <= visibleSlots; n++) {
       const ocupado = pets.some(p => p.slotNumber === n);
-      if (!ocupado && !usados.has(n)) livres++;
+      if (!ocupado && !usados.has(n) && !online.vagasHoje.has(n)) livres++;
     }
     return livres;
-  }, [pets, visibleSlots, usados]);
+  }, [pets, visibleSlots, usados, online.vagasHoje]);
 
   // ✅ garante que a grade sempre alcance a maior vaga ocupada/usada
   const maiorSlotOcupado = useMemo(() => {
     const maxPet = pets.reduce((max, p) => Math.max(max, Number(p.slotNumber) || 0), 0);
     const maxUsado = usados.size ? Math.max(...Array.from(usados)) : 0;
-    return Math.max(maxPet, maxUsado);
-  }, [pets, usados]);
+    const maxOnline = online.vagasHoje.size ? Math.max(...Array.from(online.vagasHoje)) : 0;
+    return Math.max(maxPet, maxUsado, maxOnline);
+  }, [pets, usados, online.vagasHoje]);
 
   // ✅ piso dinâmico: nunca esconder um slot ocupado/usado
   const minPermitido = Math.max(MIN_VISIBLE_SLOTS, maiorSlotOcupado);
@@ -183,6 +199,12 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
 
   const handleSlotClick = (slotNumber: number) => {
     const { status, pet } = getSlotStatus(slotNumber);
+    if (status === 'livre' && vagaOnline(slotNumber)) {
+      // ✅ vaga online: só abre quando um tutor marcou
+      const pedido = online.pedidoNaVaga.get(slotNumber);
+      if (pedido) setPedidoAberto(pedido);
+      return;
+    }
     if (status === 'livre') {
       if (usados.has(slotNumber)) return; // ✅ slot já usado hoje — bloqueado
       setSelectedSlot(slotNumber);
@@ -207,6 +229,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
       });
       // ✅ só fecha se cadastrou; se a vaga foi tomada, mantém o formulário preenchido
       if (ok !== false) {
+        if (chegada) onChegou?.(chegada);
+        setChegada(null);
         setIsDialogOpen(false);
         setSelectedSlot(null);
       }
@@ -220,7 +244,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   };
 
   const slotBloqueado = (n: number) =>
-    pets.some(p => p.slotNumber === n) || usados.has(n);
+    pets.some(p => p.slotNumber === n) || usados.has(n) || online.vagasHoje.has(n);
 
   const handleRemoveOneSlot = () => {
     setVisibleSlots(prev => {
@@ -245,8 +269,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
   const canRemoveBatch = useMemo(() => {
     if (visibleSlots - SLOTS_PER_BATCH < minPermitido) return false;
     const slotsToRemove = Array.from({ length: SLOTS_PER_BATCH }, (_, i) => visibleSlots - i);
-    return !slotsToRemove.some(n => pets.some(p => p.slotNumber === n) || usados.has(n));
-  }, [visibleSlots, pets, minPermitido, usados]);
+    return !slotsToRemove.some(n => pets.some(p => p.slotNumber === n) || usados.has(n) || online.vagasHoje.has(n));
+  }, [visibleSlots, pets, minPermitido, usados, online.vagasHoje]);
 
   // ── render ───────────────────────────────────────────────────────────────────
 
@@ -359,11 +383,20 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         const avisado = !!pet?.avisado;
         const slotUsado = usados.has(slotNumber) && !pet; // ✅ NOVO
         const parado = !!pet && estaParado(pet, agora);
+        const ehOnline = !pet && vagaOnline(slotNumber);
+        const pedido = ehOnline ? online.pedidoNaVaga.get(slotNumber) : undefined;
 
         // 🆕 com filtro ativo, renderiza só os slots cujo serviço bate
         if (filter !== 'all' && (!pet || pet.servico !== filter)) {
           return null;
         }
+
+        // ✅ vaga do agendamento online (livre, a confirmar ou aguardando chegada)
+        const corOnline = !pedido
+          ? 'bg-cyan-50 border-dashed border-cyan-300 text-cyan-700'
+          : pedido.status === 'pendente'
+            ? 'bg-orange-100 hover:bg-orange-200 border-dashed border-orange-400 text-orange-800 animate-pulse'
+            : 'bg-indigo-100 hover:bg-indigo-200 border-indigo-400 text-indigo-800';
 
         return (
           <Dialog
@@ -373,32 +406,44 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
               if (!open && !remoto) {
                 setIsDialogOpen(false);
                 setSelectedSlot(null);
+                setChegada(null);
               }
             }}
           >
             <DialogTrigger asChild>
               <button
                 onClick={() => handleSlotClick(slotNumber)}
-                disabled={slotUsado}
+                disabled={slotUsado || (ehOnline && !pedido)}
                 className={`
                   relative aspect-square rounded-lg border-2 transition-all
                   flex flex-col items-center justify-center gap-1
-                  ${slotUsado ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
-                  ${getStatusColor(status, avisado, slotUsado)}
+                  ${slotUsado || (ehOnline && !pedido) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
+                  ${ehOnline ? corOnline : getStatusColor(status, avisado, slotUsado)}
                   ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
                   ${parado ? 'ring-2 ring-red-500 ring-offset-1' : ''}
                 `}
                 title={
                   pet
                     ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''}${pet.alertas?.length ? ` ⚠️ ${pet.alertas.join(', ')}` : ''} (clique para detalhes)`
-                    : slotUsado
-                      ? `Slot ${slotNumber} - Já utilizado hoje`
-                      : `Slot ${slotNumber} - Livre`
+                    : pedido
+                      ? `${pedido.nomePet} - ${pedido.nomeTutor} (agendamento online: ${pedido.status === 'pendente' ? 'a confirmar' : 'aguardando chegada'})`
+                      : ehOnline
+                        ? `Slot ${slotNumber} - Reservado para o agendamento online`
+                        : slotUsado
+                          ? `Slot ${slotNumber} - Já utilizado hoje`
+                          : `Slot ${slotNumber} - Livre`
                 }
               >
                 {pet && <AlertaSeloVaga alertas={pet.alertas} />}
-                {getStatusIcon(status, avisado, slotUsado)}
+                {ehOnline
+                  ? (!pedido ? <Globe className="w-4 h-4" /> : pedido.status === 'pendente' ? <Hourglass className="w-4 h-4" /> : <CalendarCheck className="w-4 h-4" />)
+                  : getStatusIcon(status, avisado, slotUsado)}
                 <span className="text-sm sm:text-xs font-semibold">{slotNumber}</span>
+                {ehOnline && (
+                  <span className="text-[10px] sm:text-[8px] font-semibold truncate w-full px-1 text-center leading-tight">
+                    {pedido ? pedido.nomePet : 'Online'}
+                  </span>
+                )}
                 {pet && (
                   <span className="text-[11px] sm:text-[8px] font-medium truncate w-full px-1 text-center">
                     {pet.nomePet}
@@ -412,22 +457,34 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
               </button>
             </DialogTrigger>
 
-            {status === 'livre' && !slotUsado && (
+            {status === 'livre' && !slotUsado && (!ehOnline || chegada?.vaga === slotNumber) && (
               /* ✅ altura FIXA para o scroll interno do formulário funcionar */
               <DialogContent
                 className="sm:max-w-2xl h-[85vh]"
                 onOpenAutoFocus={(e) => e.preventDefault()}
               >
                 <DialogHeader>
-                  <DialogTitle>Cadastrar Pet - Slot {selectedSlot}</DialogTitle>
+                  <DialogTitle>{chegada ? `Confirmar chegada - ${chegada.nomePet} (Slot ${selectedSlot})` : `Cadastrar Pet - Slot ${selectedSlot}`}</DialogTitle>
                   <DialogDescription className="sr-only">
                     Preencha os dados do pet para reservar o slot {selectedSlot}.
                   </DialogDescription>
                 </DialogHeader>
+                {chegada && (
+                  <p className="text-xs text-indigo-800 bg-indigo-50 border border-indigo-200 rounded-lg px-3 py-2">
+                    Dados que o tutor informou no agendamento online. Se o pet já tem ficha, escolha ela na busca (já procuramos pelo telefone).
+                  </p>
+                )}
                 <PetRegistration
+                  key={chegada?.codigo ?? 'novo'}
                   onSubmit={handleRegister}
                   allPets={pets}
                   slotsUsados={usados}
+                  initialData={chegada ? ({
+                    nomePet: chegada.nomePet, nomeTutor: chegada.nomeTutor, telefone: chegada.telefone,
+                    especie: chegada.especie || undefined, raca: chegada.raca, porte: chegada.porte || undefined,
+                    servico: chegada.servico, alertaObs: chegada.obs,
+                  } as unknown as Pet) : undefined}
+                  buscaInicial={chegada ? soDigitos(chegada.telefone).slice(-8) : undefined}
                 />
               </DialogContent>
             )}
@@ -435,6 +492,18 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         );
       })}
       </div>
+
+      {/* ── Pedido do agendamento online ── */}
+      <PedidoOnlineModal
+        pedido={pedidoAberto ? online.pedidoNaVaga.get(pedidoAberto.vaga) ?? null : null}
+        fechar={() => setPedidoAberto(null)}
+        confirmarChegada={(p) => {
+          setPedidoAberto(null);
+          setChegada(p);
+          setSelectedSlot(p.vaga);
+          setIsDialogOpen(true);
+        }}
+      />
 
       {/* ── Modal de detalhes do pet ── */}
       <PetDetailModal
@@ -488,6 +557,20 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
           </div>
           <span className="text-sm text-gray-600">Tutor Avisado</span>
         </div>
+        {online.vagasHoje.size > 0 && (<>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-cyan-50 border-2 border-dashed border-cyan-300" />
+            <span className="text-sm text-gray-600">Online (livre)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-orange-100 border-2 border-dashed border-orange-400" />
+            <span className="text-sm text-gray-600">Online a confirmar</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <div className="w-4 h-4 rounded bg-indigo-100 border-2 border-indigo-400" />
+            <span className="text-sm text-gray-600">Aguardando chegada</span>
+          </div>
+        </>)}
         {/* ✅ NOVO */}
         <div className="flex items-center gap-2">
           <div className="w-4 h-4 rounded bg-slate-200 border-2 border-slate-300 flex items-center justify-center">

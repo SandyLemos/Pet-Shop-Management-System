@@ -6,8 +6,10 @@ import {
   LayoutDashboard, Store, Wallet, Package, Megaphone, Settings, LogOut, Plus, Search,
   AlertTriangle, TrendingUp, CalendarCheck, Ban, CheckCircle2, Clock, MessageCircle,
   ChevronRight, ChevronLeft, X, Sparkles, ShieldCheck, Lock, Send, Pencil, RefreshCw,
-  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus, Eye, Menu,
+  Database, Loader2, Undo2, PlayCircle, Trash2, Users, UserPlus, Eye, Menu, Puzzle, Copy,
 } from 'lucide-react';
+import { MODULOS, modulosDaLoja, type ModuloId } from '../../../utils/modulos';
+import { urlAgendar } from '../../../utils/agendamento';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import {
   PLANOS, nomePlano, reais, fmtDia, mesDe, somarMeses, linhasFinanceiro, situacaoDaLoja, alertasDoDono,
@@ -28,11 +30,12 @@ export const PAPEL = 'Proprietário';
 /** Nome da aba de quem acessa o painel */
 const ABA_ACESSOS = 'Usuários';
 
-type Aba = 'geral' | 'lojas' | 'financeiro' | 'planos' | 'comunicados' | 'acessos' | 'config';
+type Aba = 'geral' | 'lojas' | 'modulos' | 'financeiro' | 'planos' | 'comunicados' | 'acessos' | 'config';
 
 const MENU: { id: Aba; nome: string; icone: React.ElementType }[] = [
   { id: 'geral', nome: 'Visão geral', icone: LayoutDashboard },
   { id: 'lojas', nome: 'Lojas', icone: Store },
+  { id: 'modulos', nome: 'Liberação de módulos', icone: Puzzle },
   { id: 'financeiro', nome: 'Financeiro', icone: Wallet },
   { id: 'planos', nome: 'Planos', icone: Package },
   { id: 'comunicados', nome: 'Comunicados', icone: Megaphone },
@@ -765,6 +768,90 @@ function Financeiro({ d, fonte, recarregar }: { d: DadosDono; fonte: FonteDono; 
   );
 }
 
+// ─── Liberação de módulos ─────────────────────────────────────────────────────
+function ModulosLojas({ d, fonte, recarregar }: { d: DadosDono; fonte: FonteDono; recarregar: () => Promise<void> }) {
+  const [ocupado, setOcupado] = useState<string | null>(null);
+
+  const trocar = async (loja: Loja, id: ModuloId) => {
+    const atuais = modulosDaLoja(loja);
+    const novos = { ...atuais, [id]: !atuais[id] };
+    const nome = MODULOS.find((m) => m.id === id)!.nome;
+    setOcupado(`${loja.id}:${id}`);
+    try {
+      await fonte.salvarModulos(loja, novos);
+      await recarregar();
+      toast.success(`${nome} ${novos[id] ? 'liberado' : 'bloqueado'} para a ${loja.nome}. A equipe vê ao entrar de novo no sistema.`);
+    } catch (e) {
+      console.error('[módulos]', e);
+      toast.error('Não foi possível salvar. Confira a internet e tente de novo.');
+    } finally { setOcupado(null); }
+  };
+
+  const copiar = async (loja: Loja) => {
+    const url = urlAgendar(loja.id, window.location.origin);
+    try { await navigator.clipboard.writeText(url); toast.success('Link copiado.'); }
+    catch { toast.info(url); }
+  };
+
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-600 bg-sky-50 ring-1 ring-sky-200 rounded-xl px-4 py-3">
+        Escolha o que cada loja pode usar. Banho e tosa é o sistema de sempre. O Agendamento online abre uma página onde o tutor marca o banho nas vagas que o admin da loja liberar.
+      </p>
+      {d.lojas.length === 0 ? <Secao titulo="Lojas"><Vazio texto="Nenhuma loja cadastrada ainda." /></Secao> : (
+        <div className="grid lg:grid-cols-2 gap-4">
+          {d.lojas.map((loja) => {
+            const m = modulosDaLoja(loja);
+            return (
+              <div key={loja.id} className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-4 sm:p-5 space-y-3">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <h3 className="font-bold text-slate-800 truncate">{loja.nome}</h3>
+                    <p className="text-xs text-slate-500">{MODULOS.filter((x) => m[x.id]).length} de {MODULOS.length} módulos liberados</p>
+                  </div>
+                  <Selo situacao={situacaoDaLoja(loja, d.cobrancas, d.hoje).situacao} />
+                </div>
+                <ul className="space-y-2">
+                  {MODULOS.map((mod) => {
+                    const ligado = m[mod.id];
+                    const salvando = ocupado === `${loja.id}:${mod.id}`;
+                    return (
+                      <li key={mod.id} className="flex items-start gap-3 p-3 rounded-xl bg-slate-50">
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-slate-800">{mod.nome}</p>
+                          <p className="text-xs text-slate-500">{mod.descricao}</p>
+                          {mod.id === 'agendamento' && ligado && (
+                            <button onClick={() => copiar(loja)} className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold hover:underline" style={{ color: COR.petroleo }}>
+                              <Copy size={13} /> Copiar link da página do tutor
+                            </button>
+                          )}
+                        </div>
+                        <button
+                          role="switch"
+                          aria-checked={ligado}
+                          aria-label={`${mod.nome} na ${loja.nome}`}
+                          disabled={!!ocupado}
+                          onClick={() => trocar(loja, mod.id)}
+                          className={`relative shrink-0 w-12 h-7 rounded-full transition disabled:opacity-60 ${ligado ? '' : 'bg-slate-300'}`}
+                          style={ligado ? { background: COR.petroleo } : undefined}
+                        >
+                          {salvando
+                            ? <Loader2 size={14} className="absolute inset-0 m-auto animate-spin text-white" />
+                            : <span className={`absolute top-1 w-5 h-5 rounded-full bg-white shadow transition-all ${ligado ? 'left-6' : 'left-1'}`} />}
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ─── Planos ───────────────────────────────────────────────────────────────────
 function Planos({ d }: { d: DadosDono }) {
   return (
@@ -1025,6 +1112,7 @@ export function PainelDono({ nomeDono = PAPEL, meuUid, onLogout, fonte = fonteFi
           ) : (<>
             {aba === 'geral' && <VisaoGeral d={dados} abrirLoja={(l) => setLojaId(l.id)} irPara={setAba} />}
             {aba === 'lojas' && <ListaLojas d={dados} abrirLoja={(l) => setLojaId(l.id)} novaLoja={() => setForm('nova')} />}
+            {aba === 'modulos' && <ModulosLojas d={dados} fonte={fonte} recarregar={recarregar} />}
             {aba === 'financeiro' && <Financeiro d={dados} fonte={fonte} recarregar={recarregar} />}
             {aba === 'planos' && <Planos d={dados} />}
             {aba === 'comunicados' && <Comunicados d={dados} fonte={fonte} recarregar={recarregar} />}

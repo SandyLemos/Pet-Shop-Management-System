@@ -1,6 +1,7 @@
 // ✅ Loja de quem entrou no sistema (definida no login).
 // Arquivo sem Firebase, para poder ser usado em qualquer lugar (inclusive testes puros).
 import { CORES_PADRAO, coresValidas, type CoresLoja } from '../utils/cores';
+import { modulosDaLoja, type ModuloId, type Modulos } from '../utils/modulos';
 
 export interface LojaInfo {
   id: string;
@@ -9,6 +10,7 @@ export interface LojaInfo {
   plano?: string;
   status?: string;
   cores?: CoresLoja; // personalização do topo (sem ela fica o padrão)
+  modulos?: Partial<Modulos>; // liberados pelo proprietário (sem o campo: só Banho e tosa)
 }
 
 /** Dados da loja atual (para avisos do sistema) */
@@ -72,4 +74,9 @@ export function lojaTemCores(): boolean {
 /** Cores do topo da loja (ou as do padrão) */
 export function coresLoja(): CoresLoja {
   return coresValidas(atual?.cores) ?? CORES_PADRAO;
+}
+
+/** A loja atual tem este módulo liberado? */
+export function temModulo(id: ModuloId): boolean {
+  return modulosDaLoja(atual)[id];
 }

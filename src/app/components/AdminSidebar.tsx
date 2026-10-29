@@ -1,7 +1,7 @@
 import { useState, lazy, Suspense } from 'react';
 import {
   X, Users, ShieldCheck, Briefcase, PawPrint,
-  FileText, Download, PackageCheck, PhoneCall, BarChart3, Palette,
+  FileText, Download, PackageCheck, PhoneCall, BarChart3, Palette, CalendarCheck, ChevronRight,
 } from 'lucide-react';
 // ✅ Análises: carregado só quando aberto (não pesa no app dos tablets)
 const AnalyticsModal = lazy(() => import('./AnalyticsModal'));
@@ -12,21 +12,28 @@ import { ModalRelatorios } from './ModalRelatorios';
 import { SecaoUsuarios } from './AdminUsuarios';
 import { SecaoProfissionais } from './AdminProfissionais';
 import { SecaoPersonalizacao } from './AdminPersonalizacao';
-import { nomeLoja } from '../../lib/lojaAtual';
+import { nomeLoja, temModulo } from '../../lib/lojaAtual';
+import { AdminVagasOnline } from './agendamento/AdminVagasOnline';
+import type { Pet } from '../types/pet';
 
 // ─── AdminSidebar — Componente Principal (export default) ─────────────────────
 export default function AdminSidebar({
   onClose,
+  pets = [],
 }: {
   onClose: () => void;
   currentUserRole?: 'admin' | 'user';
+  /** fila de hoje (para não liberar online uma vaga que já tem pet) */
+  pets?: Pet[];
 }) {
   const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios' | 'personalizacao'>('usuarios');
   const [showRelatorios, setShowRelatorios] = useState(false);
   const [showAnalises, setShowAnalises]     = useState(false);
+  const [showVagasOnline, setShowVagasOnline] = useState(false);
 
   return (
     <div className="painel-admin">
+      {showVagasOnline && <AdminVagasOnline pets={pets} onClose={() => setShowVagasOnline(false)} />}
       {showRelatorios && <ModalRelatorios onClose={() => setShowRelatorios(false)} />}
       {showAnalises && (
         <Suspense fallback={null}>
@@ -60,6 +67,21 @@ export default function AdminSidebar({
               <X size={20} />
             </button>
           </div>
+
+          {/* ✅ Módulo Agendamento online */}
+          {temModulo('agendamento') && (
+            <button
+              onClick={() => setShowVagasOnline(true)}
+              className="mx-4 mt-3 sm:mx-5 flex items-center gap-3 rounded-xl border border-indigo-200 bg-indigo-50 px-3 py-2.5 text-left hover:bg-indigo-100 transition flex-shrink-0"
+            >
+              <span className="bg-indigo-600 text-white p-1.5 rounded-lg shrink-0"><CalendarCheck size={16} /></span>
+              <span className="flex-1 min-w-0">
+                <span className="block text-sm font-bold text-indigo-900">Liberar vagas para agendamento online</span>
+                <span className="block text-[11px] text-indigo-700">Escolha quantas vagas do dia o tutor pode marcar</span>
+              </span>
+              <ChevronRight size={16} className="text-indigo-500 shrink-0" />
+            </button>
+          )}
 
           {/* Abas */}
           <div className="flex border-b border-slate-100 bg-slate-50 flex-shrink-0">

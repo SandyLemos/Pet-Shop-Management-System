@@ -11,6 +11,8 @@ import { PetCard } from './PetCard';
 
 interface KanbanBoardProps {
   pets: Pet[]
+  /** ✅ vagas de hoje reservadas para o agendamento online (não aparecem para cadastro) */
+  vagasOnline?: Set<number>
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
   onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
@@ -244,9 +246,12 @@ export function KanbanBoard({
   onAssignProfessional,
   onMarkServiceComplete,
   onAdvanceStage,
+  vagasOnline,
 }: KanbanBoardProps) {
   // ✅ um único listener para todas as colunas
-  const { usados } = useSlotsUsadosHoje()
+  const { usados: queimados } = useSlotsUsadosHoje()
+  // vagas online contam como ocupadas para o cadastro pelo Fluxo
+  const usados = vagasOnline?.size ? new Set([...queimados, ...vagasOnline]) : queimados
 
   // celular: uma etapa por vez, escolhida no seletor do topo
   const [etapaCelular, setEtapaCelular] = useState<SlotStatus>('espera')

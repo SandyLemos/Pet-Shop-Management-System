@@ -69,7 +69,7 @@ async function verificarAcesso(user: User): Promise<Acesso> {
   if (loja.status === 'bloqueada') throw new Error('LOJA_BLOQUEADA');
   if (loja.status === 'teste' && loja.fimTeste && loja.fimTeste < idDoDia()) throw new Error('TESTE_ACABOU');
 
-  definirLoja({ id: perfil.lojaId, nome: loja.nome ?? '', logoUrl: loja.logoUrl, plano: loja.plano, status: loja.status, cores: loja.cores });
+  definirLoja({ id: perfil.lojaId, nome: loja.nome ?? '', logoUrl: loja.logoUrl, plano: loja.plano, status: loja.status, cores: loja.cores, modulos: loja.modulos });
   return {
     role: perfil.role === 'admin' ? 'admin' : 'user',
     trocarSenha: perfil.trocarSenha === true, // contas antigas (sem o campo) não são afetadas

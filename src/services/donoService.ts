@@ -8,6 +8,8 @@ import { initializeApp, deleteApp } from 'firebase/app';
 import { getAuth, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import { db, firebaseConfig } from '../lib/firebase';
 import { diasAnteriores, listarDias } from './petService';
+import { publicarAgenda } from './agendamentoService';
+import type { Modulos } from '../utils/modulos';
 import {
   idCobranca, idParaLoja, primeiroMesCobrado, somarDias,
   type Atividade, type Cobranca, type Comunicado, type DadosDono, type Loja, type AlvoComunicado, type PlanoId,
@@ -140,6 +142,12 @@ export type CamposLoja = Partial<Pick<Loja, 'nome' | 'cidade' | 'telefone' | 're
 
 export async function atualizarLoja(id: string, campos: CamposLoja) {
   await updateDoc(doc(db, 'lojas', id), campos as any);
+}
+
+/** Módulos da loja; o Agendamento online também liga/desliga a página pública dela */
+export async function salvarModulos(loja: Loja, modulos: Modulos) {
+  await updateDoc(doc(db, 'lojas', loja.id), { modulos });
+  await publicarAgenda(loja.id, { ativo: modulos.agendamento, nomeLoja: loja.nome, logoUrl: loja.logoUrl ?? null, cores: loja.cores ?? null });
 }
 
 export async function registrarPagamento(loja: Loja, mes: string, valor: number, hoje: string) {

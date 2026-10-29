@@ -43,6 +43,8 @@ interface PetRegistrationProps {
   isEditing?: boolean
   /** ✅ NOVO: slots já queimados/usados hoje */
   slotsUsados?: Set<number>
+  /** ✅ agendamento online: já abre a busca de ficha com este texto (telefone do tutor) */
+  buscaInicial?: string
 }
 
 // Componente de Select Nativo Estilizado
@@ -113,6 +115,7 @@ export function PetRegistration({
   initialData,
   isEditing = false,
   slotsUsados,
+  buscaInicial,
 }: PetRegistrationProps) {
   const [nomePet, setNomePet] = useState(initialData?.nomePet || "")
   const [nomeTutor, setNomeTutor] = useState(initialData?.nomeTutor || "")
@@ -146,7 +149,7 @@ export function PetRegistration({
   )
 
   // Estados de busca de cadastro permanente
-  const [termoBusca, setTermoBusca] = useState("")
+  const [termoBusca, setTermoBusca] = useState(buscaInicial ?? "")
   const [resultados, setResultados] = useState<PetCadastro[]>([])
   const [buscando, setBuscando] = useState(false)
   const [jaBuscou, setJaBuscou] = useState(false)

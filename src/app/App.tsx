@@ -19,6 +19,9 @@ import { informarAba, type AbaLoja } from '../lib/espelho';
 import { EntreguesTab } from './components/EntreguesTab';
 import { criarLinkTutor, atualizarLinkTutor } from '../services/acompanhamentoService';
 import type { SituacaoTutor } from '../utils/acompanhamento';
+import { useAgendaOnline } from '../hooks/useAgendaOnline';
+import { marcarChegou, type Pedido } from '../services/agendamentoService';
+import { PedidosOnlineBanner } from './components/agendamento/PedidosOnlineBanner';
 
 import { LogoutModal } from './components/LogoutModal';
 import { LoginScreen, SplashScreen } from './components/TelaLogin';
@@ -26,7 +29,7 @@ import { TelaPrimeiroAcesso } from './components/TelaPrimeiroAcesso';
 // o Painel do Dono só é baixado por quem é dono (as lojas não carregam esse código)
 const PainelDono = lazy(() => import('./components/dono/PainelDono').then((m) => ({ default: m.PainelDono })));
 import { AvisoSistema } from './components/AvisoSistema';
-import { nomeLoja } from '../lib/lojaAtual';
+import { nomeLoja, temModulo } from '../lib/lojaAtual';
 import { useVisualLoja, useAplicarCoresLoja } from '../hooks/useVisualLoja';
 import { fundoTopo } from '../utils/cores';
 
@@ -63,6 +66,9 @@ export default function App() {
   const uid = isDono || trocarSenha ? null : user?.uid ?? null;
 
   // ✅ Suporte ao vivo: enquanto o proprietário acompanha, este aparelho conta o que está aberto
+  // ✅ Agendamento online (só lojas com o módulo): vagas online de hoje e pedidos dos tutores
+  const online = useAgendaOnline(!!uid, dia);
+
   const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
   useEffect(() => {
     setPets([]); // nunca mostra a lista de outra conta / de outro dia
@@ -155,7 +161,27 @@ export default function App() {
     );
   }
 
+  // ✅ Módulo Banho e tosa bloqueado pelo proprietário: a fila não abre
+  if (!temModulo('banhoTosa')) {
+    return (
+      <div className="min-h-screen grid place-items-center bg-slate-50 px-6">
+        <Toaster position="top-right" richColors />
+        <div className="max-w-sm text-center space-y-3">
+          <p className="text-4xl" aria-hidden>🐾</p>
+          <h1 className="text-xl font-bold text-slate-800">Módulo não liberado</h1>
+          <p className="text-sm text-slate-500">O módulo Banho e tosa não está liberado para a {nomeLoja() || 'sua loja'}. Fale com o suporte Pata &amp; Gestão.</p>
+          <button onClick={logout} className="text-sm font-semibold text-sky-700 underline">Sair</button>
+        </div>
+      </div>
+    );
+  }
+
   // ── Handlers ─────────────────────────────────────────────────────────────────
+
+  /** ✅ Agendamento online: o pet chegou e já entrou na fila dos aguardando */
+  const handleChegouOnline = (p: Pedido) => {
+    marcarChegou(p).catch((err) => console.error('[agendamento] chegada', err));
+  };
 
   /** ✅ Dia da fila onde o pet está (para editar no lugar certo) */
   const diaDoPet = (petId: string) => pets.find((p) => p.id === petId)?.dia;
@@ -451,6 +477,7 @@ export default function App() {
         <AdminSidebar
           onClose={() => setShowAdminSidebar(false)}
           currentUserRole={isAdmin ? 'admin' : 'user'}
+          pets={pets}
         />
       )}
 
@@ -517,6 +544,9 @@ export default function App() {
             </div>
           )}
 
+          {/* ✅ Agendamento online: pedidos esperando a loja confirmar */}
+          <PedidosOnlineBanner pedidos={online.aConfirmar} />
+
           {/* ✅ Aviso de pets esquecidos em dias anteriores */}
           {pendentes.length > 0 && (
             <div className="mb-6">
@@ -558,12 +588,15 @@ export default function App() {
                 onDeletePet={handleDeletePet}
                 onCheckout={handleCheckoutWithType}
                 filter={filter}
+                online={online}
+                onChegou={handleChegouOnline}
               />
             </TabsContent>
 
             <TabsContent value="kanban">
               <KanbanBoard
                 pets={pets}
+                vagasOnline={online.vagasHoje}
                 onUpdateStatus={handleUpdateStatus}
                 onCheckout={handleCheckoutWithType}
                 onAddPet={handleAddPet}
