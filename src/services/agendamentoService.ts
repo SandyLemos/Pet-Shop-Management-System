@@ -21,10 +21,9 @@ export interface AgendaPublica {
 
 export interface DiaOnline {
   dia: string;
+  /** lugares online do dia (1..N): só a quantidade importa, não são números da grade */
   vagas: number[];
-  /** vagas com pet da loja (na fila ou já entregue) — só números, para o tutor ver */
-  ocupadas: number[];
-  /** pets na fila da loja agora */
+  /** pets na fila da loja agora (a página do tutor mostra) */
   petsNaLoja: number;
 }
 
@@ -35,7 +34,10 @@ export interface Pedido extends DadosPedido {
   logoUrl?: string | null;
   cores?: { principal: string; destaque: string } | null;
   dia: string;
+  /** lugar online do dia (trava da quantidade); não é o número da grade */
   vaga: number;
+  /** número na grade, dado quando o pet chega na loja */
+  slot?: number;
   status: StatusPedido;
   criadoEm: number;
   atualizadoEm: number;
@@ -68,7 +70,6 @@ export function ouvirDiasOnline(loja: string, hoje: string, cb: (dias: DiaOnline
     (s: any) => cb(s.docs.map((d: any) => ({
       dia: d.id,
       vagas: (d.data().vagas ?? []) as number[],
-      ocupadas: (d.data().ocupadas ?? []) as number[],
       petsNaLoja: Number(d.data().petsNaLoja ?? 0),
     }))
       .sort((a: DiaOnline, b: DiaOnline) => a.dia.localeCompare(b.dia))),
@@ -83,7 +84,7 @@ export function ouvirMarcadas(loja: string, dia: string, cb: (vagas: number[]) =
 
 // ─── Tutor ───────────────────────────────────────────────────────────────────
 
-/** Marca a vaga e cria o pedido juntos. Se outra pessoa marcou antes, lança VAGA_TOMADA. */
+/** Pega um lugar online do dia e cria o pedido juntos. Se outra pessoa pegou antes, lança VAGA_TOMADA. */
 export async function criarPedido(loja: string, agenda: AgendaPublica, dia: string, vaga: number, dados: DadosPedido): Promise<string> {
   const codigo = gerarCodigo(24);
   const agora = Date.now();
@@ -151,9 +152,9 @@ export async function salvarVagasDoDia(dia: string, vagas: number[]): Promise<vo
   await setDoc(refDia(lojaId(), dia), { dia, vagas, atualizadoEm: Date.now() }, { merge: true });
 }
 
-/** A loja conta ao tutor quais vagas do dia já têm pet e quantos pets estão na fila */
-export async function publicarOcupadas(dia: string, ocupadas: number[], petsNaLoja: number): Promise<void> {
-  await setDoc(refDia(lojaId(), dia), { dia, ocupadas, petsNaLoja, atualizadoEm: Date.now() }, { merge: true });
+/** A loja conta ao tutor quantos pets estão na fila agora */
+export async function publicarPetsNaLoja(dia: string, petsNaLoja: number): Promise<void> {
+  await setDoc(refDia(lojaId(), dia), { dia, petsNaLoja, atualizadoEm: Date.now() }, { merge: true });
 }
 
 /** Pedidos em aberto da loja atual, ao vivo */
@@ -193,8 +194,9 @@ export async function liberarCancelado(p: Pedido): Promise<void> {
 
 /** O pet chegou e entrou na fila: a vaga continua presa (agora com o pet dentro).
  *  Com o link do pet, a página do tutor passa a mostrar as etapas ao vivo. */
-export async function marcarChegou(p: Pedido, extra: { petId?: string; linkTutor?: string | null } = {}): Promise<void> {
+export async function marcarChegou(p: Pedido, extra: { petId?: string; linkTutor?: string | null; slot?: number } = {}): Promise<void> {
   await mudarStatus(p.codigo, 'chegou', {
+    ...(extra.slot ? { slot: extra.slot } : {}),
     ...(extra.petId ? { petId: extra.petId } : {}),
     ...(extra.linkTutor ? { linkTutor: extra.linkTutor } : {}),
   });

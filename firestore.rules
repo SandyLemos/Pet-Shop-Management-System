@@ -256,9 +256,6 @@ service cloud.firestore {
     function vagasOnline(lojaId, dia) {
       return get(/databases/$(database)/documents/agendaPublica/$(lojaId)/dias/$(dia)).data.vagas;
     }
-    function vagasOcupadas(lojaId, dia) {
-      return get(/databases/$(database)/documents/agendaPublica/$(lojaId)/dias/$(dia)).data.get('ocupadas', []);
-    }
     function textoAte(v, n) {
       return v is string && v.size() <= n;
     }
@@ -275,24 +272,20 @@ service cloud.firestore {
 
       match /dias/{dia} {
         allow read: if true;
-        // admin: quantas vagas o tutor pode marcar
+        // admin: quantos lugares online o dia tem (não são números da grade)
         allow create, update: if (isDono() || adminDaLoja(lojaId))
                     && dia.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
-                    && request.resource.data.keys().hasOnly(['dia', 'vagas', 'ocupadas', 'petsNaLoja', 'atualizadoEm'])
+                    && request.resource.data.keys().hasOnly(['dia', 'vagas', 'petsNaLoja', 'atualizadoEm'])
                     && request.resource.data.dia == dia
                     && request.resource.data.vagas is list
                     && request.resource.data.vagas.size() <= 30;
-        // qualquer aparelho da loja: vagas que já têm pet e quantos pets estão na fila (só números)
-        allow create, update: if daLoja(lojaId)
-                    && dia.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
+        // qualquer aparelho da loja: quantos pets estão na fila agora (só o número)
+        allow update: if daLoja(lojaId)
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dia', 'petsNaLoja', 'atualizadoEm'])
                     && request.resource.data.dia == dia
-                    && request.resource.data.keys().hasOnly(['dia', 'vagas', 'ocupadas', 'petsNaLoja', 'atualizadoEm'])
-                    && (resource == null
-                        ? !('vagas' in request.resource.data)
-                        : request.resource.data.diff(resource.data).affectedKeys().hasOnly(['dia', 'ocupadas', 'petsNaLoja', 'atualizadoEm']))
-                    && request.resource.data.ocupadas is list
-                    && request.resource.data.ocupadas.size() <= 100
-                    && request.resource.data.petsNaLoja is int;
+                    && request.resource.data.petsNaLoja is int
+                    && request.resource.data.petsNaLoja >= 0
+                    && request.resource.data.petsNaLoja <= 100;
         allow delete: if isDono() || adminDaLoja(lojaId);
 
         // trava de cada vaga marcada: só a data, nenhum dado do tutor
@@ -326,7 +319,6 @@ service cloud.firestore {
                     && request.resource.data.dia.matches('^[0-9]{4}-[0-9]{2}-[0-9]{2}$')
                     && request.resource.data.vaga is int
                     && request.resource.data.vaga in vagasOnline(request.resource.data.lojaId, request.resource.data.dia)
-                    && !(request.resource.data.vaga in vagasOcupadas(request.resource.data.lojaId, request.resource.data.dia))
                     && !exists(/databases/$(database)/documents/agendaPublica/$(request.resource.data.lojaId)/dias/$(request.resource.data.dia)/marcadas/$(string(request.resource.data.vaga)))
                     && existsAfter(/databases/$(database)/documents/agendaPublica/$(request.resource.data.lojaId)/dias/$(request.resource.data.dia)/marcadas/$(string(request.resource.data.vaga)))
                     && request.resource.data.nomeTutor is string && request.resource.data.nomeTutor.size() > 0 && request.resource.data.nomeTutor.size() <= 100
@@ -348,7 +340,8 @@ service cloud.firestore {
 
       // loja: confirma, recusa, chegada, não veio, solta a vaga de um cancelado
       allow update: if daLoja(resource.data.lojaId)
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm', 'motivo', 'petId', 'linkTutor'])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm', 'motivo', 'petId', 'linkTutor', 'slot'])
+                    && (!('slot' in request.resource.data) || (request.resource.data.slot is int && request.resource.data.slot >= 1 && request.resource.data.slot <= 100))
                     && (!('linkTutor' in request.resource.data) || request.resource.data.linkTutor.matches('^[A-Za-z0-9]{20,40}$'))
                     && request.resource.data.status in ['pendente', 'confirmado', 'chegou', 'recusado', 'faltou', 'cancelado_ok']
                     && (!('motivo' in request.resource.data) || textoAte(request.resource.data.motivo, 200));

@@ -20,9 +20,10 @@ import { EntreguesTab } from './components/EntreguesTab';
 import { criarLinkTutor, atualizarLinkTutor } from '../services/acompanhamentoService';
 import type { SituacaoTutor } from '../utils/acompanhamento';
 import { useAgendaOnline } from '../hooks/useAgendaOnline';
-import { marcarChegou, publicarOcupadas, type Pedido } from '../services/agendamentoService';
-import { ocupadasDoDia } from '../utils/agendamento';
+import { marcarChegou, publicarPetsNaLoja, type Pedido } from '../services/agendamentoService';
+import { proximaVagaNaChegada } from '../utils/agendamento';
 import { PedidosOnlineBanner } from './components/agendamento/PedidosOnlineBanner';
+import { ConfirmarChegada } from './components/agendamento/ConfirmarChegada';
 
 import { LogoutModal } from './components/LogoutModal';
 import { LoginScreen, SplashScreen } from './components/TelaLogin';
@@ -69,20 +70,17 @@ export default function App() {
   // ✅ Suporte ao vivo: enquanto o proprietário acompanha, este aparelho conta o que está aberto
   // ✅ Agendamento online (só lojas com o módulo): vagas online de hoje e pedidos dos tutores
   const online = useAgendaOnline(!!uid, dia);
-  // pet recém-cadastrado em cada vaga e o link dele (a chegada de um pedido online usa os dois)
-  const cadastroNaVaga = useRef(new Map<number, Promise<{ id: string; link: string | null }>>());
+  // pedido online cujo pet está chegando (abre o cadastro já preenchido)
+  const [chegando, setChegando] = useState<Pedido | null>(null);
 
-  // ✅ Conta à página do tutor quais vagas de hoje já têm pet (só os números) e quantos pets
-  //    estão na fila. Só grava quando muda, e só se hoje tiver vagas online.
-  const doDia = pets.filter((p) => !p.dia || p.dia === dia);
-  const ocupadasHoje = ocupadasDoDia(doDia.map((p) => p.slotNumber), usados);
-  const chaveOcupadas = `${ocupadasHoje.join(',')}|${doDia.length}`;
+  // ✅ Conta à página do tutor quantos pets estão na fila agora (só grava quando muda,
+  //    e só se hoje tiver agendamento online aberto)
+  const petsHoje = pets.filter((p) => !p.dia || p.dia === dia).length;
   useEffect(() => {
-    const pub = online.publicadoHoje;
-    if (!uid || !pub || online.vagasHoje.size === 0) return;
-    if (`${pub.ocupadas.join(',')}|${pub.petsNaLoja}` === chaveOcupadas) return;
-    publicarOcupadas(dia, ocupadasHoje, doDia.length).catch((e) => console.error('[agendamento] ocupadas', e));
-  }, [uid, dia, chaveOcupadas, online.publicadoHoje, online.vagasHoje.size]); // eslint-disable-line react-hooks/exhaustive-deps
+    const publicado = online.petsNaLojaPublicado;
+    if (!uid || publicado === null || !online.abertoHoje || publicado === petsHoje) return;
+    publicarPetsNaLoja(dia, petsHoje).catch((e) => console.error('[agendamento] pets na loja', e));
+  }, [uid, dia, petsHoje, online.petsNaLojaPublicado, online.abertoHoje]);
 
   const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
   useEffect(() => {
@@ -193,14 +191,38 @@ export default function App() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
-  /** ✅ Agendamento online: o pet chegou e já entrou na fila dos aguardando */
-  const handleChegouOnline = async (p: Pedido) => {
-    try {
-      const cadastro = await cadastroNaVaga.current.get(p.vaga);
-      await marcarChegou(p, { petId: cadastro?.id, linkTutor: cadastro?.link });
-    } catch (err) {
-      console.error('[agendamento] chegada', err);
+  /** ✅ Vagas de hoje que já têm pet ou já foram usadas */
+  const ocupadasHoje = () => [...pets.filter((p) => !p.dia || p.dia === dia).map((p) => p.slotNumber), ...usados];
+
+  /**
+   * ✅ Agendamento online: o pet chegou. Entra na fila dos aguardando na primeira vaga livre
+   *    depois da última ocupada (se outro aparelho pegar a vaga no mesmo instante, tenta a seguinte).
+   */
+  const handleChegadaOnline = async (pedido: Pedido, dados: Omit<Pet, 'id' | 'checkInTime' | 'slotNumber' | 'status'>): Promise<boolean> => {
+    const tentadas: number[] = [];
+    for (let tentativa = 0; tentativa < 5; tentativa++) {
+      const slot = proximaVagaNaChegada([...ocupadasHoje(), ...tentadas]);
+      if (!slot) { toast.error('Não há vaga livre na grade de hoje.'); return false; }
+      try {
+        const petData = { ...dados, slotNumber: slot, status: 'espera' as SlotStatus };
+        const { id, petNumber, isNovo } = await addPet(petData, dia);
+        const link = await criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
+          .catch((err) => { console.error('[link do tutor] não foi criado', err); return null; });
+        await marcarChegou(pedido, { slot, petId: id, linkTutor: link })
+          .catch((err) => console.error('[agendamento] chegada', err));
+        toast.success(`${dados.nomePet} chegou e entrou na fila na vaga ${slot}. 🐾`);
+        if (isNovo) setCodigoModal({ petNumber, nomePet: dados.nomePet });
+        return true;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : '';
+        if (msg === SLOT_OCUPADO || msg === SLOT_USADO) { tentadas.push(slot); continue; }
+        if (msg === CAMPOS_OBRIGATORIOS) toast.error('Preencha espécie, porte e raça antes de finalizar o cadastro.');
+        else { console.error('[chegada online]', err); toast.error('Erro ao cadastrar o pet. Tente novamente.'); }
+        return false;
+      }
     }
+    toast.error('Não foi possível achar uma vaga livre. Tente de novo.');
+    return false;
   };
 
   /** ✅ Dia da fila onde o pet está (para editar no lugar certo) */
@@ -294,9 +316,8 @@ export default function App() {
       const { id, petNumber, isNovo } = await addPet(petData, dia);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
       // ✅ Portal do tutor: o link nasce na entrada do pet (falha aqui não atrapalha o cadastro)
-      const link = criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
-        .catch((err) => { console.error('[link do tutor] não foi criado', err); return null; });
-      cadastroNaVaga.current.set(petData.slotNumber, link.then((codigo) => ({ id, link: codigo })));
+      criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
+        .catch((err) => console.error('[link do tutor] não foi criado', err));
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
       }
@@ -498,7 +519,6 @@ export default function App() {
         <AdminSidebar
           onClose={() => setShowAdminSidebar(false)}
           currentUserRole={isAdmin ? 'admin' : 'user'}
-          pets={pets}
         />
       )}
 
@@ -566,7 +586,15 @@ export default function App() {
           )}
 
           {/* ✅ Agendamento online: pedidos esperando a loja confirmar */}
-          <PedidosOnlineBanner pedidos={online.aConfirmar} />
+          <PedidosOnlineBanner pedidos={online.aConfirmar} aguardando={online.aguardandoChegada} onChegou={setChegando} />
+          <ConfirmarChegada
+            pedido={chegando}
+            proximaVaga={chegando ? proximaVagaNaChegada(ocupadasHoje()) : null}
+            pets={pets}
+            slotsUsados={usados}
+            fechar={() => setChegando(null)}
+            aoCadastrar={handleChegadaOnline}
+          />
 
           {/* ✅ Aviso de pets esquecidos em dias anteriores */}
           {pendentes.length > 0 && (
@@ -609,15 +637,12 @@ export default function App() {
                 onDeletePet={handleDeletePet}
                 onCheckout={handleCheckoutWithType}
                 filter={filter}
-                online={online}
-                onChegou={handleChegouOnline}
               />
             </TabsContent>
 
             <TabsContent value="kanban">
               <KanbanBoard
                 pets={pets}
-                vagasOnline={new Set(online.pedidoNaVaga.keys())}
                 onUpdateStatus={handleUpdateStatus}
                 onCheckout={handleCheckoutWithType}
                 onAddPet={handleAddPet}

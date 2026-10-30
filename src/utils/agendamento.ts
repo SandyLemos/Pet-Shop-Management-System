@@ -63,10 +63,9 @@ export function diaCurto(dia: string): string {
 export const expiraEmDoPedido = expiraEmDoDia;
 
 /**
- * Números das vagas online de um dia, para a quantidade que o admin escolheu.
- * Mantém sempre as vagas já marcadas por tutores e as que já eram online;
- * completa com os menores números que não têm pet nem foram usados hoje.
- * Para baixo, tira primeiro as vagas online livres de número maior.
+ * Lugares online de um dia (1, 2, 3...), para a quantidade que o admin escolheu.
+ * Não são números da grade: só controlam quantos tutores podem marcar.
+ * Mantém sempre os já marcados; para baixo, tira primeiro os livres de número maior.
  */
 export function escolherVagasOnline(
   quantidade: number,
@@ -88,33 +87,23 @@ export function escolherVagasOnline(
   return [...escolhidas].sort((a, b) => a - b);
 }
 
-/** Vagas online que o tutor ainda pode escolher (sem pedido e sem pet da loja) */
-export function vagasLivres(vagas: number[], marcadas: Iterable<number>, ocupadas: Iterable<number> = []): number[] {
-  const m = new Set([...marcadas, ...ocupadas]);
+/** Lugares online do dia que ainda não foram marcados (o tutor fica com o primeiro) */
+export function vagasLivres(vagas: number[], marcadas: Iterable<number>): number[] {
+  const m = new Set(marcadas);
   return vagas.filter((n) => !m.has(n)).sort((a, b) => a - b);
 }
 
-/** Vagas de hoje com pet (na fila ou já entregue), em ordem e sem repetir */
-export function ocupadasDoDia(slotsComPet: Iterable<number>, usados: Iterable<number>): number[] {
-  return [...new Set([...slotsComPet, ...usados])].filter((n) => n >= 1 && n <= TOTAL_VAGAS).sort((a, b) => a - b);
-}
-
-export type SituacaoVaga = 'livre' | 'marcada' | 'ocupada' | 'balcao';
-
 /**
- * Grade que o tutor vê num dia: da vaga 1 até a maior vaga online ou ocupada.
- * livre = online e disponível · marcada = outro tutor marcou · ocupada = pet na loja · balcao = só a loja usa
+ * Vaga da grade para o pet do agendamento online que acabou de chegar:
+ * a primeira livre depois da última ocupada (a ordem da grade é a ordem de atendimento).
+ * Se passar de 100, volta para a primeira livre desde o começo.
  */
-export function gradeDoTutor(vagas: number[], marcadas: Iterable<number>, ocupadas: Iterable<number>): { numero: number; situacao: SituacaoVaga }[] {
-  const online = new Set(vagas);
-  const m = new Set(marcadas);
+export function proximaVagaNaChegada(ocupadas: Iterable<number>): number | null {
   const o = new Set(ocupadas);
-  const maior = Math.max(0, ...vagas, ...o);
-  return Array.from({ length: maior }, (_, i) => {
-    const n = i + 1;
-    const situacao: SituacaoVaga = o.has(n) ? 'ocupada' : m.has(n) && online.has(n) ? 'marcada' : online.has(n) ? 'livre' : 'balcao';
-    return { numero: n, situacao };
-  });
+  const ultima = Math.max(0, ...o);
+  for (let n = ultima + 1; n <= TOTAL_VAGAS; n++) if (!o.has(n)) return n;
+  for (let n = 1; n <= TOTAL_VAGAS; n++) if (!o.has(n)) return n;
+  return null;
 }
 
 /** Só dígitos; aceita com ou sem o 55 */
@@ -149,7 +138,7 @@ export function limparPedido(p: DadosPedido): DadosPedido {
 export function fraseDoPedido(status: StatusPedido, nomePet: string): { titulo: string; texto: string; cor: string } {
   switch (status) {
     case 'pendente':   return { titulo: 'Aguardando a loja confirmar', texto: `Recebemos o pedido do(a) ${nomePet}. A loja vai confirmar em breve. Esta página se atualiza sozinha.`, cor: '#F7931E' };
-    case 'confirmado': return { titulo: 'Confirmado!', texto: `A loja confirmou. É só levar o(a) ${nomePet} no dia marcado. Estamos te esperando!`, cor: '#1E7F4F' };
+    case 'confirmado': return { titulo: 'Confirmado!', texto: `A loja confirmou. É só levar o(a) ${nomePet} no dia marcado: a vaga na fila é dada na ordem de chegada.`, cor: '#1E7F4F' };
     case 'chegou':     return { titulo: 'Aguardando atendimento', texto: `${nomePet} já está na loja, na fila. Logo começa o atendimento.`, cor: '#F7931E' };
     case 'recusado':   return { titulo: 'Não foi possível confirmar', texto: 'A loja não conseguiu confirmar este horário. Fale com a loja ou escolha outra vaga.', cor: '#B91C1C' };
     case 'faltou':     return { titulo: 'Vaga encerrada', texto: 'O pet não chegou no dia marcado e a vaga foi liberada.', cor: '#64748B' };
@@ -165,7 +154,7 @@ const primeiroNome = (nome: string) => (nome || '').trim().split(/\s+/)[0];
 /** Mensagem para a loja avisar o tutor pelo WhatsApp depois de confirmar ou recusar */
 export function mensagemPedido(
   status: 'confirmado' | 'recusado',
-  p: { nomeTutor: string; nomePet: string; servico: string; dia: string; vaga: number },
+  p: { nomeTutor: string; nomePet: string; servico: string; dia: string },
   nomeLoja: string,
   url: string,
   motivo = '',
@@ -174,7 +163,7 @@ export function mensagemPedido(
   const oi = `Olá${tutor ? `, ${tutor}` : ''}! 🐾`;
   const serv = (NOME_SERVICO[p.servico] ?? 'atendimento').toLowerCase();
   if (status === 'confirmado') {
-    return `${oi} Confirmamos o ${serv} do(a) ${p.nomePet} no ${nomeLoja || 'nosso petshop'} para ${diaCurto(p.dia)} (vaga ${p.vaga}). Acompanhe por aqui: ${url}`;
+    return `${oi} Confirmamos o ${serv} do(a) ${p.nomePet} no ${nomeLoja || 'nosso petshop'} para ${diaCurto(p.dia)}. É só trazer o pet no dia. Acompanhe por aqui: ${url}`;
   }
   return `${oi} Infelizmente não conseguimos confirmar o ${serv} do(a) ${p.nomePet} para ${diaCurto(p.dia)}.${motivo ? ` Motivo: ${motivo}.` : ''} Fale com a gente para marcar outro dia.`;
 }

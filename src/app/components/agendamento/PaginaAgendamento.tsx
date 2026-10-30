@@ -6,8 +6,8 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast, Toaster } from 'sonner';
 import {
-  Ban, CalendarCheck, CalendarDays, Check, ChevronRight, ClipboardList, Dog, Droplet, Info, Loader2,
-  MessageCircle, PawPrint, RotateCcw, Scissors, ShieldCheck, Sparkles, Store, User, Wind, X,
+  CalendarCheck, CalendarDays, Check, ChevronRight, ClipboardList, Dog, Droplet, Info, Loader2,
+  MessageCircle, PawPrint, RotateCcw, Scissors, ShieldCheck, Sparkles, User, Wind, X,
 } from 'lucide-react';
 import PawBackground from '../PawBackground';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../../../services/agendamentoService';
 import { ouvirLinkTutor, type Acompanhamento } from '../../../services/acompanhamentoService';
 import {
-  SERVICOS_ONLINE, andamentoDoPedido, diaCurto, problemaNoPedido, vagasLivres, gradeDoTutor, type DadosPedido,
+  SERVICOS_ONLINE, andamentoDoPedido, diaCurto, problemaNoPedido, vagasLivres, type DadosPedido,
 } from '../../../utils/agendamento';
 import { NOME_SERVICO } from '../../../utils/acompanhamento';
 import { CORES_PADRAO, MARCA, coresValidas, fundoTopo } from '../../../utils/cores';
@@ -136,7 +136,6 @@ export function AgendarOnline({ loja }: { loja: string }) {
   const [dias, setDias] = useState<DiaOnline[] | null>(null);
   const [marcadasPorDia, setMarcadasPorDia] = useState<Record<string, number[]>>({});
   const [dia, setDia] = useState<string | null>(null);
-  const [vaga, setVaga] = useState<number | null>(null);
   const [dados, setDados] = useState<DadosPedido>(VAZIO);
   const [consentimento, setConsentimento] = useState(false);
   const [enviando, setEnviando] = useState(false);
@@ -149,7 +148,7 @@ export function AgendarOnline({ loja }: { loja: string }) {
     return () => fins.forEach((f) => f());
   }, [loja, chaveDias]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const livresDe = (d: DiaOnline) => vagasLivres(d.vagas, marcadasPorDia[d.dia] ?? [], d.ocupadas);
+  const livresDe = (d: DiaOnline) => vagasLivres(d.vagas, marcadasPorDia[d.dia] ?? []);
   const diaEscolhido = useMemo(() => (dias ?? []).find((d) => d.dia === dia) ?? null, [dias, dia]);
   const livres = diaEscolhido ? livresDe(diaEscolhido) : [];
 
@@ -160,13 +159,6 @@ export function AgendarOnline({ loja }: { loja: string }) {
     if (primeiro) setDia(primeiro.dia);
   }, [dias, marcadasPorDia]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // a vaga escolhida foi marcada por outra pessoa enquanto o tutor preenchia
-  useEffect(() => {
-    if (vaga !== null && diaEscolhido && !livres.includes(vaga)) {
-      setVaga(null);
-      toast.info('Essa vaga acabou de ser marcada por outra pessoa. Escolha outra.');
-    }
-  }, [livres.join(','), vaga]); // eslint-disable-line react-hooks/exhaustive-deps
 
   if (agenda === undefined || dias === null) return <Carregando />;
   if (!agenda || !agenda.ativo) {
@@ -175,29 +167,34 @@ export function AgendarOnline({ loja }: { loja: string }) {
 
   const mudar = <K extends keyof DadosPedido>(k: K, v: DadosPedido[K]) => setDados((d) => ({ ...d, [k]: v }));
   const dadosOk = !problemaNoPedido(dados) && consentimento;
-  const pronto = !!dia && vaga !== null;
+  const pronto = !!dia && livres.length > 0;
 
+  // o tutor marca só o dia: fica com o primeiro lugar online livre (o número na fila é dado na chegada)
   const enviar = async () => {
-    if (!dia || vaga === null) { toast.error('Escolha o dia e a vaga.'); return; }
+    if (!dia || livres.length === 0) { toast.error('Escolha um dia com vaga.'); return; }
     const problema = problemaNoPedido(dados) ?? (consentimento ? null : 'Marque a autorização para a loja guardar seus dados.');
     if (problema) { toast.error(problema); return; }
     setEnviando(true);
     try {
-      const codigo = await criarPedido(loja, agenda, dia, vaga, dados);
-      window.location.assign(`/agendamento/${codigo}`);
-    } catch (e) {
-      if (e instanceof Error && e.message === VAGA_TOMADA) {
-        toast.error('Essa vaga acabou de ser marcada por outra pessoa. Escolha outra.');
-        setVaga(null);
-      } else {
-        console.error('[agendar]', e);
-        toast.error('Não foi possível enviar. Confira a internet e tente de novo.');
+      for (const lugar of livres) {
+        try {
+          const codigo = await criarPedido(loja, agenda, dia, lugar, dados);
+          window.location.assign(`/agendamento/${codigo}`);
+          return;
+        } catch (e) {
+          if (!(e instanceof Error && e.message === VAGA_TOMADA)) throw e;
+          // outra pessoa pegou este lugar no mesmo instante: tenta o próximo
+        }
       }
-      setEnviando(false);
+      toast.error('As vagas online deste dia acabaram de esgotar. Escolha outro dia.');
+    } catch (e) {
+      console.error('[agendar]', e);
+      toast.error('Não foi possível enviar. Confira a internet e tente de novo.');
     }
+    setEnviando(false);
   };
 
-  const textoBotao = pronto ? `Marcar vaga ${vaga} · ${dia === hoje ? 'hoje' : diaCurto(dia!)}` : 'Escolha o dia e a vaga';
+  const textoBotao = pronto ? `Marcar para ${dia === hoje ? 'hoje' : diaCurto(dia!)}` : 'Escolha um dia com vaga';
   const Botao = ({ classe = '' }: { classe?: string }) => (
     <button onClick={enviar} disabled={enviando || !pronto}
       className={`w-full flex items-center justify-center gap-2 py-3.5 rounded-xl text-white font-bold shadow-md transition disabled:opacity-50 ${classe}`}
@@ -221,11 +218,11 @@ export function AgendarOnline({ loja }: { loja: string }) {
       <div className="mb-4 sm:mb-6 bg-white/80 backdrop-blur rounded-2xl ring-1 ring-white p-4 sm:p-6 flex flex-col lg:flex-row lg:items-center gap-4">
         <div className="flex-1 min-w-0">
           <h1 className="text-xl sm:text-3xl font-extrabold text-slate-900">Agende o banho do seu pet</h1>
-          <p className="text-sm sm:text-base text-slate-600 mt-1">Escolha o dia e uma vaga livre. A loja confirma e você acompanha tudo por um link.</p>
+          <p className="text-sm sm:text-base text-slate-600 mt-1">Escolha o dia. A loja confirma e você acompanha tudo por um link. A vaga na fila é dada na ordem de chegada.</p>
         </div>
         <ol className="grid grid-cols-3 gap-2 lg:w-[460px]">
           {[
-            { icone: CalendarDays, texto: 'Você escolhe a vaga' },
+            { icone: CalendarDays, texto: 'Você escolhe o dia' },
             { icone: ShieldCheck, texto: 'A loja confirma' },
             { icone: PawPrint, texto: 'Leve o pet no dia' },
           ].map(({ icone: I, texto }, i) => (
@@ -249,7 +246,7 @@ export function AgendarOnline({ loja }: { loja: string }) {
                   const n = livresDe(d).length;
                   const sel = d.dia === dia;
                   return (
-                    <button key={d.dia} disabled={n === 0} aria-pressed={sel} onClick={() => { setDia(d.dia); setVaga(null); }}
+                    <button key={d.dia} disabled={n === 0} aria-pressed={sel} onClick={() => setDia(d.dia)}
                       className={`rounded-xl border-2 py-2.5 px-1 text-center transition disabled:opacity-40 disabled:cursor-not-allowed ${
                         sel ? 'text-white shadow-md' : 'border-slate-200 bg-white hover:border-sky-300'}`}
                       style={sel ? { background: MARCA.petroleo, borderColor: MARCA.petroleo } : undefined}>
@@ -267,67 +264,25 @@ export function AgendarOnline({ loja }: { loja: string }) {
                 })}
               </div>
             )}
-          </Passo>
-
-          {/* 2. Vaga */}
-          <Passo numero={2} titulo="Escolha a vaga"
-            descricao={diaEscolhido ? `${diaDaSemana(diaEscolhido.dia)}, ${diaCurto(diaEscolhido.dia).split(', ')[1]}. Não tem horário: é só levar o pet na loja no dia.` : 'Escolha um dia primeiro'}
-            feito={vaga !== null}>
-            {!diaEscolhido ? (
-              <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-4 text-center">As vagas aparecem aqui quando você escolher o dia.</p>
-            ) : (
-              <>
-                {(() => {
-                  const grade = gradeDoTutor(diaEscolhido.vagas, marcadasPorDia[diaEscolhido.dia] ?? [], diaEscolhido.ocupadas);
-                  const ocupadas = grade.filter((g) => g.situacao === 'ocupada' || g.situacao === 'marcada').length;
-                  return (
-                    <div className="flex flex-wrap gap-2 mb-3">
-                      {diaEscolhido.dia === hoje && (
-                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-amber-50 text-amber-800 ring-1 ring-amber-200">
-                          <PawPrint size={13} /> {diaEscolhido.petsNaLoja} {diaEscolhido.petsNaLoja === 1 ? 'pet na loja agora' : 'pets na loja agora'}
-                        </span>
-                      )}
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-slate-100 text-slate-700">
-                        <Ban size={13} /> {ocupadas} {ocupadas === 1 ? 'vaga ocupada' : 'vagas ocupadas'}
-                      </span>
-                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">
-                        <Dog size={13} /> {livres.length} {livres.length === 1 ? 'vaga livre para você' : 'vagas livres para você'}
-                      </span>
-                    </div>
-                  );
-                })()}
-                <div className="grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-2.5">
-                  {gradeDoTutor(diaEscolhido.vagas, marcadasPorDia[diaEscolhido.dia] ?? [], diaEscolhido.ocupadas).map(({ numero: n, situacao }) => {
-                    const livre = situacao === 'livre' && livres.includes(n);
-                    const sel = n === vaga;
-                    const rotuloVaga = { livre: '', marcada: ' (ocupada)', ocupada: ' (ocupada)', balcao: ' (não disponível online)' }[situacao];
-                    return (
-                      <button key={n} disabled={!livre} onClick={() => setVaga(n)} aria-pressed={sel} aria-label={`Vaga ${n}${rotuloVaga}`}
-                        title={situacao === 'balcao' ? 'Vaga só para quem chega na loja' : situacao === 'livre' ? 'Livre' : 'Ocupada'}
-                        className={`relative aspect-square rounded-lg border-2 flex flex-col items-center justify-center gap-0.5 transition ${
-                          sel ? 'text-white shadow-md scale-[1.03]'
-                            : livre ? 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-700'
-                              : situacao === 'balcao' ? 'bg-white/70 border-dashed border-slate-300 text-slate-300 cursor-not-allowed'
-                                : 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed'}`}
-                        style={sel ? { background: MARCA.petroleo, borderColor: MARCA.petroleo } : undefined}>
-                        {sel ? <Check className="w-4 h-4" /> : livre ? <Dog className="w-4 h-4" /> : situacao === 'balcao' ? <Store className="w-3.5 h-3.5" /> : <PawPrint className="w-4 h-4" />}
-                        <span className="text-sm font-bold">{n}</span>
-                      </button>
-                    );
-                  })}
+            {diaEscolhido && (
+              <div className="mt-4 rounded-xl bg-sky-50 p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-3">
+                <div className="flex flex-wrap gap-2">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">
+                    <Dog size={13} /> {livres.length} {livres.length === 1 ? 'vaga online livre' : 'vagas online livres'}
+                  </span>
+                  {diaEscolhido.dia === hoje && (
+                    <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-amber-50 text-amber-800 ring-1 ring-amber-200">
+                      <PawPrint size={13} /> {diaEscolhido.petsNaLoja} {diaEscolhido.petsNaLoja === 1 ? 'pet na loja agora' : 'pets na loja agora'}
+                    </span>
+                  )}
                 </div>
-                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-slate-500">
-                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-100 border-2 border-emerald-300" /> Livre para você</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-slate-200 border-2 border-slate-300" /> Ocupada</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-white border-2 border-dashed border-slate-300" /> Só na loja</span>
-                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2" style={{ background: MARCA.petroleo, borderColor: MARCA.petroleo }} /> Sua escolha</span>
-                </div>
-              </>
+                <p className="text-xs text-slate-600 sm:ml-auto">Não tem horário: leve o pet no dia. A vaga na fila é dada quando ele chega.</p>
+              </div>
             )}
           </Passo>
 
-          {/* 3. Dados */}
-          <Passo numero={3} titulo="Seus dados e do pet" descricao="A loja usa estes dados para confirmar e receber o pet" feito={dadosOk}>
+          {/* 2. Dados */}
+          <Passo numero={2} titulo="Seus dados e do pet" descricao="A loja usa estes dados para confirmar e receber o pet" feito={dadosOk}>
             <div className="space-y-5">
               <fieldset className="space-y-3">
                 <legend className="flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-500 mb-2"><User size={14} /> Tutor</legend>
@@ -394,7 +349,7 @@ export function AgendarOnline({ loja }: { loja: string }) {
             <dl className="px-5 py-3 divide-y divide-slate-100 text-sm">
               {[
                 { nome: 'Dia', valor: dia ? `${diaDaSemana(dia)}, ${diaCurto(dia).split(', ')[1]}` : null },
-                { nome: 'Vaga', valor: vaga !== null ? `Vaga ${vaga}` : null },
+                { nome: 'Vagas livres', valor: diaEscolhido ? String(livres.length) : null },
                 { nome: 'Pet', valor: dados.nomePet.trim() || null },
                 { nome: 'Serviço', valor: NOME_SERVICO[dados.servico] ?? null },
               ].map((l) => (
@@ -472,7 +427,7 @@ export function AcompanharPedido({ codigo }: { codigo: string }) {
                 <div className="flex flex-wrap justify-center sm:justify-start gap-2 pt-1">
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-3 py-1"><IconeServico size={13} /> {NOME_SERVICO[pedido.servico] ?? pedido.servico}</span>
                   <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-3 py-1"><CalendarDays size={13} /> {diaDaSemana(pedido.dia)}, {diaCurto(pedido.dia).split(', ')[1]}</span>
-                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-3 py-1"><Dog size={13} /> Vaga {pedido.vaga}</span>
+                  {pedido.slot && <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 bg-slate-100 rounded-full px-3 py-1"><Dog size={13} /> Vaga {pedido.slot} na fila</span>}
                 </div>
               </div>
             </div>

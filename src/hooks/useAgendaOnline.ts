@@ -3,17 +3,17 @@ import { lojaId, temModulo } from '../lib/lojaAtual';
 import { liberarCancelado, ouvirDiasOnline, ouvirPedidosDaLoja, type DiaOnline, type Pedido } from '../services/agendamentoService';
 
 export interface AgendaOnline {
-  /** vagas da grade de hoje reservadas para o agendamento online */
-  vagasHoje: Set<number>;
-  /** pedido em aberto de cada vaga de hoje (a confirmar ou aguardando chegada) */
-  pedidoNaVaga: Map<number, Pedido>;
+  /** hoje tem agendamento online aberto */
+  abertoHoje: boolean;
   /** pedidos de qualquer dia esperando a loja confirmar */
   aConfirmar: Pedido[];
-  /** o que a página do tutor mostra hoje como ocupado (null = ainda não leu) */
-  publicadoHoje: { ocupadas: number[]; petsNaLoja: number } | null;
+  /** confirmados para hoje, esperando o pet chegar na loja */
+  aguardandoChegada: Pedido[];
+  /** quantos pets a página do tutor mostra na loja agora (null = ainda não leu) */
+  petsNaLojaPublicado: number | null;
 }
 
-const VAZIA: AgendaOnline = { vagasHoje: new Set(), pedidoNaVaga: new Map(), aConfirmar: [], publicadoHoje: null };
+const VAZIA: AgendaOnline = { abertoHoje: false, aConfirmar: [], aguardandoChegada: [], petsNaLojaPublicado: null };
 
 /**
  * ✅ Agendamento online na loja: vagas online de hoje e pedidos em aberto, ao vivo.
@@ -42,16 +42,12 @@ export function useAgendaOnline(ativo: boolean, dia: string): AgendaOnline {
 
   return useMemo(() => {
     if (!ligado) return VAZIA;
-    const pedidoNaVaga = new Map<number, Pedido>();
-    pedidos.forEach((p) => {
-      if (p.dia === dia && (p.status === 'pendente' || p.status === 'confirmado')) pedidoNaVaga.set(p.vaga, p);
-    });
     return {
-      vagasHoje: new Set(diaPublico?.vagas ?? []),
-      pedidoNaVaga,
+      abertoHoje: (diaPublico?.vagas.length ?? 0) > 0,
       aConfirmar: pedidos.filter((p) => p.status === 'pendente'),
-      publicadoHoje: diaPublico === undefined ? null
-        : { ocupadas: diaPublico?.ocupadas ?? [], petsNaLoja: diaPublico?.petsNaLoja ?? 0 },
+      // confirmados de hoje (e de dias anteriores que ninguém encerrou), na ordem em que foram marcados
+      aguardandoChegada: pedidos.filter((p) => p.status === 'confirmado' && p.dia <= dia),
+      petsNaLojaPublicado: diaPublico === undefined ? null : diaPublico?.petsNaLoja ?? 0,
     };
   }, [ligado, diaPublico, pedidos, dia]);
 }

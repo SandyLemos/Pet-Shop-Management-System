@@ -14,17 +14,13 @@ import { SecaoProfissionais } from './AdminProfissionais';
 import { SecaoPersonalizacao } from './AdminPersonalizacao';
 import { nomeLoja, temModulo } from '../../lib/lojaAtual';
 import { AdminVagasOnline } from './agendamento/AdminVagasOnline';
-import type { Pet } from '../types/pet';
 
 // ─── AdminSidebar — Componente Principal (export default) ─────────────────────
 export default function AdminSidebar({
   onClose,
-  pets = [],
 }: {
   onClose: () => void;
   currentUserRole?: 'admin' | 'user';
-  /** fila de hoje (para não liberar online uma vaga que já tem pet) */
-  pets?: Pet[];
 }) {
   const [abaAtiva, setAbaAtiva]             = useState<'usuarios' | 'profissionais' | 'pets' | 'relatorios' | 'personalizacao'>('usuarios');
   const [showRelatorios, setShowRelatorios] = useState(false);
@@ -33,7 +29,7 @@ export default function AdminSidebar({
 
   return (
     <div className="painel-admin">
-      {showVagasOnline && <AdminVagasOnline pets={pets} onClose={() => setShowVagasOnline(false)} />}
+      {showVagasOnline && <AdminVagasOnline onClose={() => setShowVagasOnline(false)} />}
       {showRelatorios && <ModalRelatorios onClose={() => setShowRelatorios(false)} />}
       {showAnalises && (
         <Suspense fallback={null}>

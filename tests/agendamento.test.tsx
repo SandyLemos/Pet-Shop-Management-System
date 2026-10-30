@@ -25,7 +25,7 @@ vi.mock('firebase/firestore', async () => {
 });
 
 import {
-  andamentoDoPedido, escolherVagasOnline, vagasLivres, gradeDoTutor, ocupadasDoDia, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
+  andamentoDoPedido, escolherVagasOnline, vagasLivres, proximaVagaNaChegada, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
   type DadosPedido,
 } from '../src/utils/agendamento';
 import { modulosDaLoja } from '../src/utils/modulos';
@@ -33,7 +33,6 @@ import {
   criarPedido, cancelarPedido, confirmarPedido, recusarPedido, liberarCancelado, marcarChegou, VAGA_TOMADA, type Pedido,
 } from '../src/services/agendamentoService';
 import { PedidosOnlineBanner } from '../src/app/components/agendamento/PedidosOnlineBanner';
-import { SlotGrid } from '../src/app/components/SlotGrid';
 
 const fs = () => ff.ref as ReturnType<typeof criarFirestoreFalso>;
 const LOJA = 'teste-01';
@@ -61,9 +60,8 @@ describe('Módulos por loja', () => {
 });
 
 describe('Agendamento: regras puras', () => {
-  it('libera os menores números livres e respeita pets e vagas usadas de hoje', () => {
+  it('lugares online do dia: 1..N (não são números da grade)', () => {
     expect(escolherVagasOnline(3, [], [])).toEqual([1, 2, 3]);
-    expect(escolherVagasOnline(3, [], [], [1, 3])).toEqual([2, 4, 5]);
   });
 
   it('nunca tira uma vaga já marcada por tutor; para baixo tira primeiro as maiores livres', () => {
@@ -71,15 +69,15 @@ describe('Agendamento: regras puras', () => {
     expect(escolherVagasOnline(0, [1, 2, 3], [2])).toEqual([2]);
   });
 
-  it('vagas livres = liberadas menos marcadas e menos as que a loja usou', () => {
+  it('lugares livres = liberados menos marcados', () => {
     expect(vagasLivres([3, 1, 2], [2])).toEqual([1, 3]);
-    expect(vagasLivres([3, 1, 2], [2], [1])).toEqual([3]);
   });
 
-  it('o tutor vê a grade toda do dia: livre, ocupada pela loja, marcada e só na loja', () => {
-    expect(ocupadasDoDia([5, 1, 5], [7])).toEqual([1, 5, 7]);
-    expect(gradeDoTutor([2, 3], [3], [1, 2, 5]).map((g) => g.situacao))
-      .toEqual(['ocupada', 'ocupada', 'marcada', 'balcao', 'ocupada']);
+  it('na chegada o pet vai para a primeira vaga livre depois da última ocupada', () => {
+    expect(proximaVagaNaChegada([])).toBe(1);
+    expect(proximaVagaNaChegada([1, 2, 5])).toBe(6); // não volta para 3 e 4
+    expect(proximaVagaNaChegada([1, 2, 5, 6])).toBe(7);
+    expect(proximaVagaNaChegada([99, 100])).toBe(1); // passou de 100: primeira livre do começo
   });
 
   it('confere o formulário do tutor', () => {
@@ -92,9 +90,9 @@ describe('Agendamento: regras puras', () => {
   it('dias e mensagens', () => {
     expect(proximosDias('2026-10-30', 3)).toEqual(['2026-10-30', '2026-10-31', '2026-11-01']);
     expect(diaCurto('2026-10-30')).toBe('sex, 30/10');
-    const msg = mensagemPedido('confirmado', { nomeTutor: 'Ana Souza', nomePet: 'Thor', servico: 'banho', dia: DIA, vaga: 2 }, 'Teste 01', 'https://x/agendamento/abc');
+    const msg = mensagemPedido('confirmado', { nomeTutor: 'Ana Souza', nomePet: 'Thor', servico: 'banho', dia: DIA }, 'Teste 01', 'https://x/agendamento/abc');
     expect(msg).toContain('Ana');
-    expect(msg).toContain('vaga 2');
+    expect(msg).toContain('sex, 30/10');
   });
 });
 
@@ -161,27 +159,19 @@ describe('Agendamento: telas da loja', () => {
     status: 'pendente', criadoEm: 1, atualizadoEm: 1, expiraEm: 9e15, ...extra,
   });
 
-  it('aviso: "pet X foi marcado na vaga Y, necessário confirmar"', () => {
+  it('aviso: "pet X foi agendado online, necessário confirmar"', () => {
     render(<PedidosOnlineBanner pedidos={[pedido()]} />);
-    expect(screen.getByRole('region', { name: /agendamentos online/i }).textContent)
-      .toMatch(/Thor foi marcado na vaga 2.*Necessário confirmar/);
-    expect(screen.getByRole('button', { name: /confirmar/i })).toBeTruthy();
+    expect(screen.getByRole('region', { name: /agendamentos online a confirmar/i }).textContent)
+      .toMatch(/Thor foi agendado online para.*Necessário confirmar/);
+    expect(screen.getByRole('button', { name: /^confirmar$/i })).toBeTruthy();
   });
 
-  it('grade: vaga online livre, a confirmar e aguardando chegada', () => {
-    definirLoja({ id: LOJA, nome: 'Teste 01', modulos: { agendamento: true } });
-    const online = {
-      publicadoHoje: null,
-      vagasHoje: new Set([1, 2, 3]),
-      pedidoNaVaga: new Map([[2, pedido()], [3, pedido({ vaga: 3, nomePet: 'Mel', status: 'confirmado', codigo: 'd'.repeat(24) })]]),
-      aConfirmar: [],
-    };
-    render(<SlotGrid pets={[]} onAddPet={() => true} onEditPet={() => {}} onDeletePet={() => {}} onCheckout={() => {}} filter="all" online={online} />);
-    // vaga online sem pedido: a loja também pode usar no balcão
-    const livreOnline = screen.getByTitle(/Slot 1 - Livre \(também aberta no agendamento online\)/);
-    expect(livreOnline).toHaveProperty('disabled', false);
-    expect(screen.getByTitle(/Thor .*a confirmar/)).toBeTruthy();
-    fireEvent.click(screen.getByTitle(/Mel .*aguardando chegada/));
-    expect(screen.getByRole('button', { name: /confirmar chegada/i })).toBeTruthy();
+  it('confirmados de hoje: lista "aguardando chegada" com Confirmar chegada', () => {
+    const chegou = vi.fn();
+    const mel = pedido({ nomePet: 'Mel', status: 'confirmado', codigo: 'd'.repeat(24) });
+    render(<PedidosOnlineBanner pedidos={[]} aguardando={[mel]} onChegou={chegou} />);
+    expect(screen.getByRole('region', { name: /aguardando chegada/i }).textContent).toMatch(/Mel/);
+    fireEvent.click(screen.getByRole('button', { name: /confirmar chegada/i }));
+    expect(chegou).toHaveBeenCalledWith(mel);
   });
 });

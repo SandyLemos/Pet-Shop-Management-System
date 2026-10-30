@@ -14,7 +14,7 @@ const avisarNoWhats = (url: string | null) =>
 export async function confirmar(p: Pedido): Promise<boolean> {
   try {
     await confirmarPedido(p);
-    toast.success(`${p.nomePet} confirmado na vaga ${p.vaga}. Status: aguardando chegada.`, { duration: 10000, ...avisarNoWhats(whatsDoPedido(p, 'confirmado')) });
+    toast.success(`${p.nomePet} confirmado. Status: aguardando chegada.`, { duration: 10000, ...avisarNoWhats(whatsDoPedido(p, 'confirmado')) });
     return true;
   } catch (e) {
     console.error('[agendamento] confirmar', e);
@@ -26,7 +26,7 @@ export async function confirmar(p: Pedido): Promise<boolean> {
 export async function recusar(p: Pedido, motivo: string): Promise<boolean> {
   try {
     await recusarPedido(p, motivo);
-    toast.success(`Pedido do ${p.nomePet} recusado. A vaga ${p.vaga} ficou livre de novo.`, { duration: 10000, ...avisarNoWhats(whatsDoPedido(p, 'recusado', motivo.trim())) });
+    toast.success(`Pedido do ${p.nomePet} recusado. O lugar online ficou livre de novo.`, { duration: 10000, ...avisarNoWhats(whatsDoPedido(p, 'recusado', motivo.trim())) });
     return true;
   } catch (e) {
     console.error('[agendamento] recusar', e);
@@ -38,7 +38,7 @@ export async function recusar(p: Pedido, motivo: string): Promise<boolean> {
 export async function naoVeio(p: Pedido): Promise<boolean> {
   try {
     await marcarFaltou(p);
-    toast.success(`${p.nomePet} marcado como "não veio". A vaga ${p.vaga} ficou livre.`);
+    toast.success(`${p.nomePet} marcado como "não veio".`);
     return true;
   } catch (e) {
     console.error('[agendamento] faltou', e);

@@ -2,16 +2,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import { toast } from 'sonner';
 import { CalendarCheck, Copy, Minus, Plus, Share2, X, Loader2 } from 'lucide-react';
-import type { Pet } from '../../types/pet';
 import { lojaId, nomeLoja } from '../../../lib/lojaAtual';
-import { useSlotsUsadosHoje } from '../../../hooks/useSlotsUsadosHoje';
 import {
   ouvirDiasOnline, ouvirMarcadas, publicarAgendaDaLojaAtual, salvarVagasDoDia, type DiaOnline,
 } from '../../../services/agendamentoService';
 import { MAX_VAGAS_ONLINE, diaCurto, escolherVagasOnline, proximosDias, urlAgendar } from '../../../utils/agendamento';
 import { idDoDia } from '../../../utils/dias';
 
-export function AdminVagasOnline({ pets, onClose }: { pets: Pet[]; onClose: () => void }) {
+export function AdminVagasOnline({ onClose }: { onClose: () => void }) {
   const hoje = idDoDia();
   const dias = useMemo(() => proximosDias(hoje), [hoje]);
   const [online, setOnline] = useState<DiaOnline[]>([]);
@@ -19,7 +17,6 @@ export function AdminVagasOnline({ pets, onClose }: { pets: Pet[]; onClose: () =
   const [marcadas, setMarcadas] = useState<number[]>([]);
   const [qtd, setQtd] = useState(0);
   const [salvando, setSalvando] = useState(false);
-  const { usados } = useSlotsUsadosHoje();
   const loja = lojaId();
   const link = urlAgendar(loja, window.location.origin);
 
@@ -30,9 +27,8 @@ export function AdminVagasOnline({ pets, onClose }: { pets: Pet[]; onClose: () =
   // ao trocar de dia (ou quando o banco responde), o número começa no que está salvo
   useEffect(() => { setQtd(atuais.length); }, [dia, atuais.length]);
 
-  // hoje: não oferece vaga que já tem pet ou já foi usada
-  const bloqueadas = dia === hoje ? [...pets.filter((p) => p.dia === hoje || !p.dia).map((p) => p.slotNumber), ...usados] : [];
-  const previa = escolherVagasOnline(qtd, atuais, marcadas, bloqueadas);
+  // as "vagas" online são só lugares do dia (sem número na grade): o pet recebe o número na chegada
+  const previa = escolherVagasOnline(qtd, atuais, marcadas);
   const minimo = marcadas.length;
   const mudou = previa.join(',') !== [...atuais].sort((a, b) => a - b).join(',');
 
@@ -113,21 +109,19 @@ export function AdminVagasOnline({ pets, onClose }: { pets: Pet[]; onClose: () =
               <button aria-label="Mais uma vaga" onClick={() => setQtd((q) => Math.min(MAX_VAGAS_ONLINE, Math.max(q, previa.length) + 1))} disabled={previa.length >= MAX_VAGAS_ONLINE}
                 className="w-11 h-11 rounded-full border-2 border-slate-200 grid place-items-center text-slate-600 disabled:opacity-30"><Plus size={18} /></button>
             </div>
-            {previa.length > 0 ? (
-              <div className="flex flex-wrap gap-1.5 justify-center">
-                {previa.map((n) => {
-                  const marcada = marcadas.includes(n);
-                  return (
-                    <span key={n} title={marcada ? 'Já marcada por um tutor' : 'Livre para o tutor'}
-                      className={`text-xs font-semibold px-2 py-1 rounded-md border ${marcada ? 'bg-indigo-100 border-indigo-300 text-indigo-800' : 'bg-cyan-50 border-dashed border-cyan-300 text-cyan-700'}`}>
-                      Vaga {n}{marcada ? ' 🐾' : ''}
-                    </span>
-                  );
-                })}
+            <div className="grid grid-cols-2 gap-2 text-center">
+              <div className="rounded-lg bg-indigo-50 py-2">
+                <p className="text-lg font-bold text-indigo-800">{marcadas.length}</p>
+                <p className="text-[11px] text-indigo-700">marcadas por clientes</p>
               </div>
-            ) : <p className="text-xs text-slate-500 text-center">Nenhuma vaga online neste dia. O tutor não consegue marcar.</p>}
-            {minimo > 0 && <p className="text-[11px] text-slate-500 text-center">{minimo} {minimo === 1 ? 'vaga já foi marcada' : 'vagas já foram marcadas'} por tutores e não pode sair.</p>}
-            <p className="text-[11px] text-slate-500">As vagas online aparecem na grade com a borda tracejada. A loja também pode usar uma delas no balcão: aí ela aparece como ocupada para o cliente.</p>
+              <div className="rounded-lg bg-emerald-50 py-2">
+                <p className="text-lg font-bold text-emerald-800">{Math.max(0, previa.length - marcadas.length)}</p>
+                <p className="text-[11px] text-emerald-700">ainda livres online</p>
+              </div>
+            </div>
+            {previa.length === 0 && <p className="text-xs text-slate-500 text-center">Nenhuma vaga online neste dia. O cliente não consegue marcar.</p>}
+            {minimo > 0 && <p className="text-[11px] text-slate-500 text-center">Não dá para liberar menos que as {minimo} já marcadas.</p>}
+            <p className="text-[11px] text-slate-500">As vagas online não reservam número na grade. Quando o pet chega, a loja confirma a chegada e ele recebe a próxima vaga livre depois da última ocupada, na ordem de chegada.</p>
           </div>
         </div>
 
