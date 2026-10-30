@@ -6,7 +6,7 @@
 //   agendaPublica/{lojaId}/dias/{dia}/marcadas/{n} → trava da vaga n (sem dados do tutor)
 //   agendamentos/{codigo}                          → o pedido (só quem tem o código lê)
 import { telefoneWhatsApp } from './whatsapp';
-import { NOME_SERVICO, expiraEmDoDia } from './acompanhamento';
+import { NOME_SERVICO, NOME_ETAPA, etapasDoServico, expiraEmDoDia, fraseDaSituacao, type SituacaoTutor } from './acompanhamento';
 
 export { gerarCodigo, CODIGO_VALIDO } from './acompanhamento';
 
@@ -127,7 +127,7 @@ export function fraseDoPedido(status: StatusPedido, nomePet: string): { titulo: 
   switch (status) {
     case 'pendente':   return { titulo: 'Aguardando a loja confirmar', texto: `Recebemos o pedido do(a) ${nomePet}. A loja vai confirmar em breve. Esta página se atualiza sozinha.`, cor: '#F7931E' };
     case 'confirmado': return { titulo: 'Confirmado!', texto: `A loja confirmou. É só levar o(a) ${nomePet} no dia marcado. Estamos te esperando!`, cor: '#1E7F4F' };
-    case 'chegou':     return { titulo: 'Chegou na loja', texto: `${nomePet} já chegou e está na fila do atendimento.`, cor: '#0B5A70' };
+    case 'chegou':     return { titulo: 'Aguardando atendimento', texto: `${nomePet} já está na loja, na fila. Logo começa o atendimento.`, cor: '#F7931E' };
     case 'recusado':   return { titulo: 'Não foi possível confirmar', texto: 'A loja não conseguiu confirmar este horário. Fale com a loja ou escolha outra vaga.', cor: '#B91C1C' };
     case 'faltou':     return { titulo: 'Vaga encerrada', texto: 'O pet não chegou no dia marcado e a vaga foi liberada.', cor: '#64748B' };
     default:           return { titulo: 'Cancelado', texto: 'Você cancelou este agendamento.', cor: '#64748B' };
@@ -159,4 +159,50 @@ export function mensagemPedido(
 export function linkWhatsAppPedido(telefone: string, mensagem: string): string | null {
   const numero = telefoneWhatsApp(telefone);
   return numero ? `https://wa.me/${numero}?text=${encodeURIComponent(mensagem)}` : null;
+}
+
+// ─── Andamento mostrado ao tutor (pedido + etapas do pet na loja) ────────────
+
+export type EstadoEtapa = 'feito' | 'agora' | 'futuro';
+export interface EtapaPedido { id: string; nome: string; estado: EstadoEtapa; hora?: number }
+
+const COR_ETAPA: Record<string, string> = {
+  espera: '#F7931E', banho: '#0B5A70', escovar: '#0B5A70', tosa: '#0B5A70', finalizado: '#1E7F4F', entregue: '#1E7F4F', removido: '#64748B',
+};
+
+/**
+ * Frase e etapas da página do pedido. Depois da chegada, segue a situação do pet
+ * na fila (link de acompanhamento): aguardando → banho → … → pronto → entregue.
+ */
+export function andamentoDoPedido(
+  p: { status: StatusPedido; nomePet: string; servico: string; criadoEm: number; atualizadoEm: number },
+  ao?: { status: SituacaoTutor; [campo: string]: any } | null,
+): { titulo: string; texto: string; cor: string; etapas: EtapaPedido[] } {
+  const naLoja = p.status === 'chegou';
+  const situacao: SituacaoTutor | null = naLoja ? (ao?.status ?? 'espera') : null;
+  const frase = situacao && situacao !== 'espera'
+    ? { ...fraseDaSituacao(situacao, p.nomePet), cor: COR_ETAPA[situacao] ?? '#0B5A70' }
+    : fraseDoPedido(p.status, p.nomePet);
+
+  const daLoja = etapasDoServico(p.servico); // espera, banho, escovar, (tosa), finalizado
+  const ids = ['enviado', 'confirmado', ...daLoja, 'entregue'];
+  const nomes: Record<string, string> = {
+    ...NOME_ETAPA, enviado: 'Pedido enviado', confirmado: 'Confirmado pela loja', espera: naLoja ? 'Na loja, aguardando atendimento' : 'Chegada na loja', entregue: 'Entregue',
+  };
+  let atual: number;
+  if (p.status === 'pendente') atual = 1;
+  else if (p.status === 'confirmado') atual = 2;
+  else if (naLoja) atual = situacao === 'entregue' ? ids.length : Math.max(2, ids.indexOf(situacao === 'removido' ? 'espera' : situacao!));
+  else atual = 1;
+  const horas: Record<string, number | undefined> = {
+    enviado: p.criadoEm,
+    espera: ao?.chegouEm, banho: ao?.banhoEm, escovar: ao?.escovarEm, tosa: ao?.tosaEm, finalizado: ao?.prontoEm, entregue: ao?.entregueEm,
+  };
+  const etapas = ids.map((id, i): EtapaPedido => ({
+    id,
+    nome: nomes[id] ?? id,
+    estado: i < atual ? 'feito' : i === atual ? 'agora' : 'futuro',
+    hora: i <= atual ? horas[id] : undefined,
+  }));
+  return { ...frase, etapas };
 }

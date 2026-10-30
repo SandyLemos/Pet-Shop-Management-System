@@ -68,6 +68,8 @@ export default function App() {
   // ✅ Suporte ao vivo: enquanto o proprietário acompanha, este aparelho conta o que está aberto
   // ✅ Agendamento online (só lojas com o módulo): vagas online de hoje e pedidos dos tutores
   const online = useAgendaOnline(!!uid, dia);
+  // pet recém-cadastrado em cada vaga e o link dele (a chegada de um pedido online usa os dois)
+  const cadastroNaVaga = useRef(new Map<number, Promise<{ id: string; link: string | null }>>());
 
   const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
   useEffect(() => {
@@ -179,8 +181,13 @@ export default function App() {
   // ── Handlers ─────────────────────────────────────────────────────────────────
 
   /** ✅ Agendamento online: o pet chegou e já entrou na fila dos aguardando */
-  const handleChegouOnline = (p: Pedido) => {
-    marcarChegou(p).catch((err) => console.error('[agendamento] chegada', err));
+  const handleChegouOnline = async (p: Pedido) => {
+    try {
+      const cadastro = await cadastroNaVaga.current.get(p.vaga);
+      await marcarChegou(p, { petId: cadastro?.id, linkTutor: cadastro?.link });
+    } catch (err) {
+      console.error('[agendamento] chegada', err);
+    }
   };
 
   /** ✅ Dia da fila onde o pet está (para editar no lugar certo) */
@@ -274,8 +281,9 @@ export default function App() {
       const { id, petNumber, isNovo } = await addPet(petData, dia);
       toast.success(`${petData.nomePet} cadastrado com sucesso! 🐾`);
       // ✅ Portal do tutor: o link nasce na entrada do pet (falha aqui não atrapalha o cadastro)
-      criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
-        .catch((err) => console.error('[link do tutor] não foi criado', err));
+      const link = criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
+        .catch((err) => { console.error('[link do tutor] não foi criado', err); return null; });
+      cadastroNaVaga.current.set(petData.slotNumber, link.then((codigo) => ({ id, link: codigo })));
       if (isNovo) {
         setCodigoModal({ petNumber, nomePet: petData.nomePet });
       }

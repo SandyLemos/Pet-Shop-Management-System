@@ -332,7 +332,8 @@ service cloud.firestore {
 
       // loja: confirma, recusa, chegada, não veio, solta a vaga de um cancelado
       allow update: if daLoja(resource.data.lojaId)
-                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm', 'motivo', 'petId'])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['status', 'atualizadoEm', 'motivo', 'petId', 'linkTutor'])
+                    && (!('linkTutor' in request.resource.data) || request.resource.data.linkTutor.matches('^[A-Za-z0-9]{20,40}$'))
                     && request.resource.data.status in ['pendente', 'confirmado', 'chegou', 'recusado', 'faltou', 'cancelado_ok']
                     && (!('motivo' in request.resource.data) || textoAte(request.resource.data.motivo, 200));
       allow delete: if isDono() || adminDaLoja(resource.data.lojaId);

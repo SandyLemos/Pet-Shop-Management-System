@@ -25,7 +25,7 @@ vi.mock('firebase/firestore', async () => {
 });
 
 import {
-  escolherVagasOnline, vagasLivres, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
+  andamentoDoPedido, escolherVagasOnline, vagasLivres, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
   type DadosPedido,
 } from '../src/utils/agendamento';
 import { modulosDaLoja } from '../src/utils/modulos';
@@ -91,6 +91,24 @@ describe('Agendamento: regras puras', () => {
   });
 });
 
+describe('Agendamento: andamento na página do tutor', () => {
+  const p = { nomePet: 'Thor', servico: 'banho', criadoEm: 1, atualizadoEm: 1 };
+  it('depois da chegada mostra "Aguardando atendimento" (não "Chegou")', () => {
+    const a = andamentoDoPedido({ ...p, status: 'chegou' }, null);
+    expect(a.titulo).toBe('Aguardando atendimento');
+    expect(a.etapas.find((e) => e.estado === 'agora')?.nome).toBe('Na loja, aguardando atendimento');
+  });
+  it('segue as etapas do pet na loja pelo link de acompanhamento', () => {
+    const a = andamentoDoPedido({ ...p, status: 'chegou' }, { status: 'banho', banhoEm: 5 });
+    expect(a.titulo).toBe('No banho');
+    expect(a.etapas.find((e) => e.estado === 'agora')).toMatchObject({ id: 'banho', hora: 5 });
+  });
+  it('confirmado: a próxima etapa é a chegada na loja', () => {
+    const a = andamentoDoPedido({ ...p, status: 'confirmado' });
+    expect(a.etapas.find((e) => e.estado === 'agora')?.nome).toBe('Chegada na loja');
+  });
+});
+
 describe('Agendamento: pedido do tutor e ações da loja', () => {
   const travas = () => fs().lista(`agendaPublica/${LOJA}/dias/${DIA}/marcadas`);
 
@@ -111,8 +129,8 @@ describe('Agendamento: pedido do tutor e ações da loja', () => {
     const p = { ...fs().get(`agendamentos/${codigo}`), codigo } as Pedido;
     await confirmarPedido(p);
     expect(fs().get(`agendamentos/${codigo}`).status).toBe('confirmado');
-    await marcarChegou(p);
-    expect(fs().get(`agendamentos/${codigo}`).status).toBe('chegou');
+    await marcarChegou(p, { petId: 'pet1', linkTutor: 'L'.repeat(20) });
+    expect(fs().get(`agendamentos/${codigo}`)).toMatchObject({ status: 'chegou', petId: 'pet1', linkTutor: 'L'.repeat(20) });
     expect(fs().get(`agendaPublica/${LOJA}/dias/${DIA}/marcadas/2`)).toBeTruthy();
   });
 

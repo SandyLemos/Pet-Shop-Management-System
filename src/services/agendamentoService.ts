@@ -38,6 +38,8 @@ export interface Pedido extends DadosPedido {
   expiraEm: number;
   motivo?: string;
   petId?: string;
+  /** link de acompanhamento do pet na fila (acompanhamentos/{código}), criado na chegada */
+  linkTutor?: string;
 }
 
 export const VAGA_TOMADA = 'VAGA_TOMADA';
@@ -175,7 +177,11 @@ export async function liberarCancelado(p: Pedido): Promise<void> {
   await mudarStatus(p.codigo, 'cancelado_ok');
 }
 
-/** O pet chegou e entrou na fila: a vaga continua presa (agora com o pet dentro) */
-export async function marcarChegou(p: Pedido, petId?: string): Promise<void> {
-  await mudarStatus(p.codigo, 'chegou', petId ? { petId } : {});
+/** O pet chegou e entrou na fila: a vaga continua presa (agora com o pet dentro).
+ *  Com o link do pet, a página do tutor passa a mostrar as etapas ao vivo. */
+export async function marcarChegou(p: Pedido, extra: { petId?: string; linkTutor?: string | null } = {}): Promise<void> {
+  await mudarStatus(p.codigo, 'chegou', {
+    ...(extra.petId ? { petId: extra.petId } : {}),
+    ...(extra.linkTutor ? { linkTutor: extra.linkTutor } : {}),
+  });
 }
