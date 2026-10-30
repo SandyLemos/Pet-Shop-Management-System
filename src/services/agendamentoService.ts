@@ -43,6 +43,8 @@ export interface Pedido extends DadosPedido {
   atualizadoEm: number;
   expiraEm: number;
   motivo?: string;
+  /** quando a loja saiu para buscar o pet (pedidos com busca) */
+  buscaSaiuEm?: number;
   petId?: string;
   /** link de acompanhamento do pet na fila (acompanhamentos/{código}), criado na chegada */
   linkTutor?: string;
@@ -174,6 +176,11 @@ const soltarVaga = (p: Pedido) => deleteDoc(refMarcada(p.lojaId, p.dia, p.vaga))
 
 export async function confirmarPedido(p: Pedido): Promise<void> {
   await mudarStatus(p.codigo, 'confirmado');
+}
+
+/** Pedido com busca: a loja saiu para buscar o pet (ele só ganha vaga quando chegar na loja) */
+export async function saiuParaBuscar(p: Pedido): Promise<void> {
+  await mudarStatus(p.codigo, 'buscando', { buscaSaiuEm: Date.now() });
 }
 
 export async function recusarPedido(p: Pedido, motivo: string): Promise<void> {

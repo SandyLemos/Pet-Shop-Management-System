@@ -7,7 +7,7 @@ export interface AgendaOnline {
   abertoHoje: boolean;
   /** pedidos de qualquer dia esperando a loja confirmar */
   aConfirmar: Pedido[];
-  /** confirmados para hoje, esperando o pet chegar na loja */
+  /** confirmados para hoje, esperando o pet chegar na loja (ou a loja buscar) */
   aguardandoChegada: Pedido[];
   /** quantos pets a página do tutor mostra na loja agora (null = ainda não leu) */
   petsNaLojaPublicado: number | null;
@@ -46,7 +46,7 @@ export function useAgendaOnline(ativo: boolean, dia: string): AgendaOnline {
       abertoHoje: (diaPublico?.vagas.length ?? 0) > 0,
       aConfirmar: pedidos.filter((p) => p.status === 'pendente'),
       // confirmados de hoje (e de dias anteriores que ninguém encerrou), na ordem em que foram marcados
-      aguardandoChegada: pedidos.filter((p) => p.status === 'confirmado' && p.dia <= dia),
+      aguardandoChegada: pedidos.filter((p) => (p.status === 'confirmado' || p.status === 'buscando') && p.dia <= dia),
       petsNaLojaPublicado: diaPublico === undefined ? null : diaPublico?.petsNaLoja ?? 0,
     };
   }, [ligado, diaPublico, pedidos, dia]);

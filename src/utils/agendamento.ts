@@ -12,15 +12,16 @@ export { gerarCodigo, CODIGO_VALIDO } from './acompanhamento';
 
 /**
  * pendente → a loja ainda não confirmou
- * confirmado → "Aguardando chegada"
+ * confirmado → "Aguardando chegada" (ou, com busca, aguardando a loja sair para buscar)
+ * buscando → a loja saiu para buscar o pet
  * chegou → entrou na fila dos aguardando
  * recusado / faltou → a loja liberou a vaga
  * cancelado → o tutor cancelou (a loja ainda vai liberar a vaga) · cancelado_ok → vaga já liberada
  */
-export type StatusPedido = 'pendente' | 'confirmado' | 'chegou' | 'recusado' | 'faltou' | 'cancelado' | 'cancelado_ok';
+export type StatusPedido = 'pendente' | 'confirmado' | 'buscando' | 'chegou' | 'recusado' | 'faltou' | 'cancelado' | 'cancelado_ok';
 
 /** Pedidos que a loja acompanha na tela (os outros já terminaram) */
-export const STATUS_ABERTOS: StatusPedido[] = ['pendente', 'confirmado', 'cancelado'];
+export const STATUS_ABERTOS: StatusPedido[] = ['pendente', 'confirmado', 'buscando', 'cancelado'];
 
 export type Transporte = 'nenhum' | 'busca_entrega' | 'busca' | 'entrega';
 
@@ -71,6 +72,8 @@ export function problemaNoEndereco(e: Endereco): string | null {
 }
 
 export const precisaEndereco = (t?: Transporte) => !!t && t !== 'nenhum';
+/** A loja vai buscar o pet em casa (busca e entrega, ou só busca) */
+export const temBusca = (t?: Transporte) => t === 'busca_entrega' || t === 'busca';
 
 /** "Rua X, 12 - apto 3 - Centro, Cidade - CEP 00000-000 (perto de ...)" */
 export function textoEndereco(e?: Partial<Endereco> | null): string {
@@ -208,10 +211,13 @@ export function limparPedido(p: DadosPedido): DadosPedido {
 }
 
 /** Frase grande da página do pedido */
-export function fraseDoPedido(status: StatusPedido, nomePet: string): { titulo: string; texto: string; cor: string } {
+export function fraseDoPedido(status: StatusPedido, nomePet: string, busca = false): { titulo: string; texto: string; cor: string } {
   switch (status) {
     case 'pendente':   return { titulo: 'Aguardando a loja confirmar', texto: `Recebemos o pedido do(a) ${nomePet}. A loja vai confirmar em breve. Esta página se atualiza sozinha.`, cor: '#F7931E' };
-    case 'confirmado': return { titulo: 'Confirmado!', texto: `A loja confirmou. É só levar o(a) ${nomePet} no dia marcado: a vaga na fila é dada na ordem de chegada.`, cor: '#1E7F4F' };
+    case 'confirmado': return busca
+      ? { titulo: 'Confirmado!', texto: `A loja confirmou e vai buscar o(a) ${nomePet} no endereço informado. Você vê aqui quando sair para buscar.`, cor: '#1E7F4F' }
+      : { titulo: 'Confirmado!', texto: `A loja confirmou. É só levar o(a) ${nomePet} no dia marcado: a vaga na fila é dada na ordem de chegada.`, cor: '#1E7F4F' };
+    case 'buscando':   return { titulo: 'A caminho para buscar', texto: `A loja saiu para buscar o(a) ${nomePet}. Deixe o pet pronto, por favor!`, cor: '#1A90D0' };
     case 'chegou':     return { titulo: 'Aguardando atendimento', texto: `${nomePet} já está na loja, na fila. Logo começa o atendimento.`, cor: '#F7931E' };
     case 'recusado':   return { titulo: 'Não foi possível confirmar', texto: 'A loja não conseguiu confirmar este horário. Fale com a loja ou escolha outra vaga.', cor: '#B91C1C' };
     case 'faltou':     return { titulo: 'Vaga encerrada', texto: 'O pet não chegou no dia marcado e a vaga foi liberada.', cor: '#64748B' };
@@ -226,8 +232,8 @@ const primeiroNome = (nome: string) => (nome || '').trim().split(/\s+/)[0];
 
 /** Mensagem para a loja avisar o tutor pelo WhatsApp depois de confirmar ou recusar */
 export function mensagemPedido(
-  status: 'confirmado' | 'recusado',
-  p: { nomeTutor: string; nomePet: string; servico: string; dia: string },
+  status: 'confirmado' | 'recusado' | 'buscando',
+  p: { nomeTutor: string; nomePet: string; servico: string; dia: string; transporte?: Transporte },
   nomeLoja: string,
   url: string,
   motivo = '',
@@ -235,8 +241,12 @@ export function mensagemPedido(
   const tutor = primeiroNome(p.nomeTutor);
   const oi = `Olá${tutor ? `, ${tutor}` : ''}! 🐾`;
   const serv = (NOME_SERVICO[p.servico] ?? 'atendimento').toLowerCase();
+  if (status === 'buscando') {
+    return `${oi} Saímos para buscar o(a) ${p.nomePet}. Deixe o pet pronto, por favor. Acompanhe por aqui: ${url}`;
+  }
   if (status === 'confirmado') {
-    return `${oi} Confirmamos o ${serv} do(a) ${p.nomePet} no ${nomeLoja || 'nosso petshop'} para ${diaCurto(p.dia)}. É só trazer o pet no dia. Acompanhe por aqui: ${url}`;
+    const como = temBusca(p.transporte) ? 'Vamos buscar o pet no endereço informado.' : 'É só trazer o pet no dia.';
+    return `${oi} Confirmamos o ${serv} do(a) ${p.nomePet} no ${nomeLoja || 'nosso petshop'} para ${diaCurto(p.dia)}. ${como} Acompanhe por aqui: ${url}`;
   }
   return `${oi} Infelizmente não conseguimos confirmar o ${serv} do(a) ${p.nomePet} para ${diaCurto(p.dia)}.${motivo ? ` Motivo: ${motivo}.` : ''} Fale com a gente para marcar outro dia.`;
 }
@@ -260,27 +270,34 @@ const COR_ETAPA: Record<string, string> = {
  * na fila (link de acompanhamento): aguardando → banho → … → pronto → entregue.
  */
 export function andamentoDoPedido(
-  p: { status: StatusPedido; nomePet: string; servico: string; criadoEm: number; atualizadoEm: number },
+  p: { status: StatusPedido; nomePet: string; servico: string; criadoEm: number; atualizadoEm: number; transporte?: Transporte; buscaSaiuEm?: number },
   ao?: { status: SituacaoTutor; [campo: string]: any } | null,
 ): { titulo: string; texto: string; cor: string; etapas: EtapaPedido[] } {
   const naLoja = p.status === 'chegou';
+  const busca = temBusca(p.transporte);
   const situacao: SituacaoTutor | null = naLoja ? (ao?.status ?? 'espera') : null;
   const frase = situacao && situacao !== 'espera'
     ? { ...fraseDaSituacao(situacao, p.nomePet), cor: COR_ETAPA[situacao] ?? '#0B5A70' }
-    : fraseDoPedido(p.status, p.nomePet);
+    : fraseDoPedido(p.status, p.nomePet, busca);
 
   const daLoja = etapasDoServico(p.servico); // espera, banho, escovar, (tosa), finalizado
-  const ids = ['enviado', 'confirmado', ...daLoja, 'entregue'];
+  // com busca, a loja vai até a casa antes do pet entrar na fila
+  const ids = ['enviado', 'confirmado', ...(busca ? ['busca'] : []), ...daLoja, 'entregue'];
   const nomes: Record<string, string> = {
-    ...NOME_ETAPA, enviado: 'Pedido enviado', confirmado: 'Confirmado pela loja', espera: naLoja ? 'Na loja, aguardando atendimento' : 'Chegada na loja', entregue: 'Entregue',
+    ...NOME_ETAPA, enviado: 'Pedido enviado', confirmado: 'Confirmado pela loja',
+    busca: p.status === 'buscando' ? 'A loja está a caminho para buscar' : naLoja ? 'Buscado em casa' : 'Busca em casa',
+    espera: naLoja ? 'Na loja, aguardando atendimento' : 'Chegada na loja', entregue: 'Entregue',
   };
+  const primeiraDaLoja = ids.indexOf('espera');
   let atual: number;
   if (p.status === 'pendente') atual = 1;
-  else if (p.status === 'confirmado') atual = 2;
-  else if (naLoja) atual = situacao === 'entregue' ? ids.length : Math.max(2, ids.indexOf(situacao === 'removido' ? 'espera' : situacao!));
+  else if (p.status === 'confirmado') atual = 2; // com busca: aguardando a loja sair; sem busca: aguardando a chegada
+  else if (p.status === 'buscando') atual = ids.indexOf('busca');
+  else if (naLoja) atual = situacao === 'entregue' ? ids.length : Math.max(primeiraDaLoja, ids.indexOf(situacao === 'removido' ? 'espera' : situacao!));
   else atual = 1;
   const horas: Record<string, number | undefined> = {
     enviado: p.criadoEm,
+    busca: p.buscaSaiuEm,
     espera: ao?.chegouEm, banho: ao?.banhoEm, escovar: ao?.escovarEm, tosa: ao?.tosaEm, finalizado: ao?.prontoEm, entregue: ao?.entregueEm,
   };
   const etapas = ids.map((id, i): EtapaPedido => ({

@@ -1,10 +1,10 @@
 // ✅ Ações da equipe sobre um pedido online, com os avisos na tela e o atalho do WhatsApp.
 import { toast } from 'sonner';
 import { nomeLoja } from '../../../lib/lojaAtual';
-import { confirmarPedido, marcarFaltou, recusarPedido, type Pedido } from '../../../services/agendamentoService';
+import { confirmarPedido, marcarFaltou, recusarPedido, saiuParaBuscar, type Pedido } from '../../../services/agendamentoService';
 import { linkWhatsAppPedido, mensagemPedido, urlPedido } from '../../../utils/agendamento';
 
-export function whatsDoPedido(p: Pedido, status: 'confirmado' | 'recusado', motivo = ''): string | null {
+export function whatsDoPedido(p: Pedido, status: 'confirmado' | 'recusado' | 'buscando', motivo = ''): string | null {
   return linkWhatsAppPedido(p.telefone, mensagemPedido(status, p, nomeLoja(), urlPedido(p.codigo, window.location.origin), motivo));
 }
 
@@ -31,6 +31,18 @@ export async function recusar(p: Pedido, motivo: string): Promise<boolean> {
   } catch (e) {
     console.error('[agendamento] recusar', e);
     toast.error('Não foi possível recusar. Tente de novo.');
+    return false;
+  }
+}
+
+export async function saiuBuscar(p: Pedido): Promise<boolean> {
+  try {
+    await saiuParaBuscar(p);
+    toast.success(`Saiu para buscar o ${p.nomePet}. Quando voltar, confirme a chegada.`, { duration: 10000, ...avisarNoWhats(whatsDoPedido(p, 'buscando')) });
+    return true;
+  } catch (e) {
+    console.error('[agendamento] saiu para buscar', e);
+    toast.error('Não foi possível salvar. Tente de novo.');
     return false;
   }
 }

@@ -1,14 +1,15 @@
 // ✅ Agendamento online no topo da fila:
 //   • pedidos esperando a loja confirmar (com bipe a cada pedido novo)
 //   • confirmados de hoje esperando o pet chegar → "Confirmar chegada" dá a vaga na hora
+//   • com busca: primeiro "Saiu para buscar"; a vaga só é dada quando o pet chega na loja
 import { useEffect, useRef, useState } from 'react';
 import { CalendarCheck, Check, LogIn, MessageCircle, Truck, UserX, X } from 'lucide-react';
 import type { Pedido } from '../../../services/agendamentoService';
-import { NOME_TRANSPORTE, diaCurto, linkMapa, precisaEndereco, textoEndereco } from '../../../utils/agendamento';
+import { NOME_TRANSPORTE, diaCurto, linkMapa, precisaEndereco, temBusca, textoEndereco } from '../../../utils/agendamento';
 import { NOME_SERVICO } from '../../../utils/acompanhamento';
 import { tocarAviso } from '../../../utils/som';
 import { idDoDia } from '../../../utils/dias';
-import { confirmar, naoVeio, whatsDoPedido } from './acoesPedido';
+import { confirmar, naoVeio, saiuBuscar, whatsDoPedido } from './acoesPedido';
 import { RecusarPedido } from './RecusarPedido';
 
 const detalhes = (p: Pedido) =>
@@ -89,21 +90,29 @@ export function PedidosOnlineBanner({ pedidos, aguardando = [], onChegou }:
           <div className="flex items-center gap-2 px-4 py-2.5 bg-indigo-100 text-indigo-900">
             <LogIn size={18} className="shrink-0" />
             <p className="font-bold text-sm">
-              {aguardando.length === 1 ? '1 agendado online aguardando chegada' : `${aguardando.length} agendados online aguardando chegada`}
+              {aguardando.length === 1 ? '1 agendado online aguardando chegada ou busca' : `${aguardando.length} agendados online aguardando chegada ou busca`}
             </p>
             <span className="hidden sm:inline text-xs text-indigo-700 ml-auto">Ao chegar, o pet vai para a próxima vaga livre da grade</span>
           </div>
           <ul className="divide-y divide-indigo-200">
             {aguardando.map((p) => {
-              const whats = whatsDoPedido(p, 'confirmado');
+              const busca = temBusca(p.transporte);
+              const aBuscar = busca && p.status === 'confirmado'; // ainda não saiu para buscar
+              const whats = whatsDoPedido(p, p.status === 'buscando' ? 'buscando' : 'confirmado');
               return (
                 <li key={p.codigo} className="px-4 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
                   <div className="flex-1 min-w-0">
                     <p className="text-sm text-slate-800">
-                      <span aria-hidden>🐾 </span><strong>{p.nomePet}</strong> · aguardando chegada{p.dia !== hoje ? ` (marcado para ${diaCurto(p.dia)})` : ''}
+                      <span aria-hidden>🐾 </span><strong>{p.nomePet}</strong> · {aBuscar ? 'aguardando a busca' : p.status === 'buscando' ? 'saiu para buscar' : 'aguardando chegada'}
+                      {p.dia !== hoje ? ` (marcado para ${diaCurto(p.dia)})` : ''}
+                      {p.status === 'buscando' && (
+                        <span className="ml-2 inline-flex items-center gap-1 text-[11px] font-bold rounded-full px-2 py-0.5 bg-sky-100 text-sky-800">
+                          <Truck size={12} /> a caminho{p.buscaSaiuEm ? ` desde ${new Date(p.buscaSaiuEm).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo' })}` : ''}
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-slate-500 truncate">{detalhes(p)}</p>
-                  <LinhaTransporte p={p} />
+                    <LinhaTransporte p={p} />
                   </div>
                   <div className="flex gap-2 shrink-0">
                     {whats && (
@@ -116,10 +125,17 @@ export function PedidosOnlineBanner({ pedidos, aguardando = [], onChegou }:
                       className="flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg border border-slate-300 bg-white text-slate-600 text-sm font-semibold hover:bg-slate-50 disabled:opacity-50">
                       <UserX size={15} /> Não veio
                     </button>
-                    <button disabled={!!ocupado} onClick={() => onChegou?.(p)}
-                      className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
-                      <LogIn size={15} /> Confirmar chegada
-                    </button>
+                    {aBuscar ? (
+                      <button disabled={!!ocupado} onClick={() => fazer(p, () => saiuBuscar(p))}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-sky-600 text-white text-sm font-semibold hover:bg-sky-700 disabled:opacity-50">
+                        <Truck size={15} /> Saiu para buscar
+                      </button>
+                    ) : (
+                      <button disabled={!!ocupado} onClick={() => onChegou?.(p)}
+                        className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-indigo-600 text-white text-sm font-semibold hover:bg-indigo-700 disabled:opacity-50">
+                        <LogIn size={15} /> {p.status === 'buscando' ? 'Voltou: confirmar chegada' : 'Confirmar chegada'}
+                      </button>
+                    )}
                   </div>
                 </li>
               );

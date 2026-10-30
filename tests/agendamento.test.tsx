@@ -123,6 +123,17 @@ describe('Agendamento: andamento na página do tutor', () => {
     expect(a.titulo).toBe('No banho');
     expect(a.etapas.find((e) => e.estado === 'agora')).toMatchObject({ id: 'banho', hora: 5 });
   });
+  it('com busca: confirmado aguarda a busca; saiu para buscar mostra "a caminho"', () => {
+    const conf = andamentoDoPedido({ ...p, status: 'confirmado', transporte: 'busca_entrega' });
+    expect(conf.etapas.map((e) => e.id)).toContain('busca');
+    expect(conf.etapas.find((e) => e.estado === 'agora')?.id).toBe('busca');
+    const indo = andamentoDoPedido({ ...p, status: 'buscando', transporte: 'busca', buscaSaiuEm: 7 });
+    expect(indo.titulo).toBe('A caminho para buscar');
+    expect(indo.etapas.find((e) => e.estado === 'agora')).toMatchObject({ id: 'busca', hora: 7, nome: 'A loja está a caminho para buscar' });
+    const chegou = andamentoDoPedido({ ...p, status: 'chegou', transporte: 'busca' }, null);
+    expect(chegou.etapas.find((e) => e.estado === 'agora')?.id).toBe('espera');
+  });
+
   it('confirmado: a próxima etapa é a chegada na loja', () => {
     const a = andamentoDoPedido({ ...p, status: 'confirmado' });
     expect(a.etapas.find((e) => e.estado === 'agora')?.nome).toBe('Chegada na loja');
@@ -188,5 +199,15 @@ describe('Agendamento: telas da loja', () => {
     expect(screen.getByRole('region', { name: /aguardando chegada/i }).textContent).toMatch(/Mel/);
     fireEvent.click(screen.getByRole('button', { name: /confirmar chegada/i }));
     expect(chegou).toHaveBeenCalledWith(mel);
+  });
+
+  it('com busca: primeiro "Saiu para buscar"; depois "Voltou: confirmar chegada"', () => {
+    const end = { cep: '', rua: 'Rua A', numero: '1', complemento: '', bairro: 'B', cidade: 'C', referencia: '' };
+    const bob = pedido({ nomePet: 'Bob', status: 'confirmado', transporte: 'busca', endereco: end, codigo: 'e'.repeat(24) });
+    const { rerender } = render(<PedidosOnlineBanner pedidos={[]} aguardando={[bob]} />);
+    expect(screen.getByRole('button', { name: /saiu para buscar/i })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /confirmar chegada/i })).toBeNull();
+    rerender(<PedidosOnlineBanner pedidos={[]} aguardando={[{ ...bob, status: 'buscando', buscaSaiuEm: Date.now() }]} />);
+    expect(screen.getByRole('button', { name: /voltou: confirmar chegada/i })).toBeTruthy();
   });
 });
