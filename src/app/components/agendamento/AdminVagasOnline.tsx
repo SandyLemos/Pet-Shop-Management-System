@@ -127,7 +127,7 @@ export function AdminVagasOnline({ pets, onClose }: { pets: Pet[]; onClose: () =
               </div>
             ) : <p className="text-xs text-slate-500 text-center">Nenhuma vaga online neste dia. O tutor não consegue marcar.</p>}
             {minimo > 0 && <p className="text-[11px] text-slate-500 text-center">{minimo} {minimo === 1 ? 'vaga já foi marcada' : 'vagas já foram marcadas'} por tutores e não pode sair.</p>}
-            <p className="text-[11px] text-slate-500">As vagas online ficam reservadas na grade (borda tracejada) e não podem ser usadas no balcão. Para usar uma delas no balcão, diminua a quantidade.</p>
+            <p className="text-[11px] text-slate-500">As vagas online aparecem na grade com a borda tracejada. A loja também pode usar uma delas no balcão: aí ela aparece como ocupada para o cliente.</p>
           </div>
         </div>
 

@@ -7,7 +7,7 @@ import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { toast, Toaster } from 'sonner';
 import {
   Ban, CalendarCheck, CalendarDays, Check, ChevronRight, ClipboardList, Dog, Droplet, Info, Loader2,
-  MessageCircle, PawPrint, RotateCcw, Scissors, ShieldCheck, Sparkles, User, Wind, X,
+  MessageCircle, PawPrint, RotateCcw, Scissors, ShieldCheck, Sparkles, Store, User, Wind, X,
 } from 'lucide-react';
 import PawBackground from '../PawBackground';
 import {
@@ -16,7 +16,7 @@ import {
 } from '../../../services/agendamentoService';
 import { ouvirLinkTutor, type Acompanhamento } from '../../../services/acompanhamentoService';
 import {
-  SERVICOS_ONLINE, andamentoDoPedido, diaCurto, problemaNoPedido, vagasLivres, type DadosPedido,
+  SERVICOS_ONLINE, andamentoDoPedido, diaCurto, problemaNoPedido, vagasLivres, gradeDoTutor, type DadosPedido,
 } from '../../../utils/agendamento';
 import { NOME_SERVICO } from '../../../utils/acompanhamento';
 import { CORES_PADRAO, MARCA, coresValidas, fundoTopo } from '../../../utils/cores';
@@ -149,7 +149,7 @@ export function AgendarOnline({ loja }: { loja: string }) {
     return () => fins.forEach((f) => f());
   }, [loja, chaveDias]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const livresDe = (d: DiaOnline) => vagasLivres(d.vagas, marcadasPorDia[d.dia] ?? []);
+  const livresDe = (d: DiaOnline) => vagasLivres(d.vagas, marcadasPorDia[d.dia] ?? [], d.ocupadas);
   const diaEscolhido = useMemo(() => (dias ?? []).find((d) => d.dia === dia) ?? null, [dias, dia]);
   const livres = diaEscolhido ? livresDe(diaEscolhido) : [];
 
@@ -277,26 +277,49 @@ export function AgendarOnline({ loja }: { loja: string }) {
               <p className="text-sm text-slate-400 bg-slate-50 rounded-xl p-4 text-center">As vagas aparecem aqui quando você escolher o dia.</p>
             ) : (
               <>
-                <div className="grid grid-cols-4 sm:grid-cols-6 xl:grid-cols-8 gap-2 sm:gap-2.5">
-                  {[...diaEscolhido.vagas].sort((a, b) => a - b).map((n) => {
-                    const livre = livres.includes(n);
+                {(() => {
+                  const grade = gradeDoTutor(diaEscolhido.vagas, marcadasPorDia[diaEscolhido.dia] ?? [], diaEscolhido.ocupadas);
+                  const ocupadas = grade.filter((g) => g.situacao === 'ocupada' || g.situacao === 'marcada').length;
+                  return (
+                    <div className="flex flex-wrap gap-2 mb-3">
+                      {diaEscolhido.dia === hoje && (
+                        <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-amber-50 text-amber-800 ring-1 ring-amber-200">
+                          <PawPrint size={13} /> {diaEscolhido.petsNaLoja} {diaEscolhido.petsNaLoja === 1 ? 'pet na loja agora' : 'pets na loja agora'}
+                        </span>
+                      )}
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-slate-100 text-slate-700">
+                        <Ban size={13} /> {ocupadas} {ocupadas === 1 ? 'vaga ocupada' : 'vagas ocupadas'}
+                      </span>
+                      <span className="inline-flex items-center gap-1.5 text-xs font-semibold rounded-full px-3 py-1.5 bg-emerald-50 text-emerald-800 ring-1 ring-emerald-200">
+                        <Dog size={13} /> {livres.length} {livres.length === 1 ? 'vaga livre para você' : 'vagas livres para você'}
+                      </span>
+                    </div>
+                  );
+                })()}
+                <div className="grid grid-cols-5 sm:grid-cols-8 xl:grid-cols-10 gap-2 sm:gap-2.5">
+                  {gradeDoTutor(diaEscolhido.vagas, marcadasPorDia[diaEscolhido.dia] ?? [], diaEscolhido.ocupadas).map(({ numero: n, situacao }) => {
+                    const livre = situacao === 'livre' && livres.includes(n);
                     const sel = n === vaga;
+                    const rotuloVaga = { livre: '', marcada: ' (ocupada)', ocupada: ' (ocupada)', balcao: ' (não disponível online)' }[situacao];
                     return (
-                      <button key={n} disabled={!livre} onClick={() => setVaga(n)} aria-pressed={sel} aria-label={`Vaga ${n}${livre ? '' : ' (ocupada)'}`}
+                      <button key={n} disabled={!livre} onClick={() => setVaga(n)} aria-pressed={sel} aria-label={`Vaga ${n}${rotuloVaga}`}
+                        title={situacao === 'balcao' ? 'Vaga só para quem chega na loja' : situacao === 'livre' ? 'Livre' : 'Ocupada'}
                         className={`relative aspect-square rounded-lg border-2 flex flex-col items-center justify-center gap-0.5 transition ${
                           sel ? 'text-white shadow-md scale-[1.03]'
                             : livre ? 'bg-emerald-100 hover:bg-emerald-200 border-emerald-300 text-emerald-700'
-                              : 'bg-slate-200 border-slate-300 text-slate-400 cursor-not-allowed opacity-70'}`}
+                              : situacao === 'balcao' ? 'bg-white/70 border-dashed border-slate-300 text-slate-300 cursor-not-allowed'
+                                : 'bg-slate-200 border-slate-300 text-slate-500 cursor-not-allowed'}`}
                         style={sel ? { background: MARCA.petroleo, borderColor: MARCA.petroleo } : undefined}>
-                        {sel ? <Check className="w-4 h-4" /> : livre ? <Dog className="w-4 h-4" /> : <Ban className="w-4 h-4" />}
+                        {sel ? <Check className="w-4 h-4" /> : livre ? <Dog className="w-4 h-4" /> : situacao === 'balcao' ? <Store className="w-3.5 h-3.5" /> : <PawPrint className="w-4 h-4" />}
                         <span className="text-sm font-bold">{n}</span>
                       </button>
                     );
                   })}
                 </div>
-                <div className="flex flex-wrap gap-4 mt-3 text-xs text-slate-500">
-                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-100 border-2 border-emerald-300" /> Livre</span>
+                <div className="flex flex-wrap gap-x-4 gap-y-2 mt-3 text-xs text-slate-500">
+                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-emerald-100 border-2 border-emerald-300" /> Livre para você</span>
                   <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-slate-200 border-2 border-slate-300" /> Ocupada</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded bg-white border-2 border-dashed border-slate-300" /> Só na loja</span>
                   <span className="flex items-center gap-1.5"><span className="w-3.5 h-3.5 rounded border-2" style={{ background: MARCA.petroleo, borderColor: MARCA.petroleo }} /> Sua escolha</span>
                 </div>
               </>

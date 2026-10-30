@@ -20,7 +20,8 @@ import { EntreguesTab } from './components/EntreguesTab';
 import { criarLinkTutor, atualizarLinkTutor } from '../services/acompanhamentoService';
 import type { SituacaoTutor } from '../utils/acompanhamento';
 import { useAgendaOnline } from '../hooks/useAgendaOnline';
-import { marcarChegou, type Pedido } from '../services/agendamentoService';
+import { marcarChegou, publicarOcupadas, type Pedido } from '../services/agendamentoService';
+import { ocupadasDoDia } from '../utils/agendamento';
 import { PedidosOnlineBanner } from './components/agendamento/PedidosOnlineBanner';
 
 import { LogoutModal } from './components/LogoutModal';
@@ -40,7 +41,7 @@ export default function App() {
   useAplicarCoresLoja(visual);    // e as mesmas cores no Painel Admin
 
   // ✅ NOVO: slots já queimados hoje (compartilhado entre todos os dispositivos)
-  const { marcarUsado } = useSlotsUsadosHoje();
+  const { marcarUsado, usados } = useSlotsUsadosHoje();
 
   const [pets, setPets]                         = useState<Pet[]>([]);
   const [filter, setFilter]                     = useState<'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao'>('all');
@@ -70,6 +71,18 @@ export default function App() {
   const online = useAgendaOnline(!!uid, dia);
   // pet recém-cadastrado em cada vaga e o link dele (a chegada de um pedido online usa os dois)
   const cadastroNaVaga = useRef(new Map<number, Promise<{ id: string; link: string | null }>>());
+
+  // ✅ Conta à página do tutor quais vagas de hoje já têm pet (só os números) e quantos pets
+  //    estão na fila. Só grava quando muda, e só se hoje tiver vagas online.
+  const doDia = pets.filter((p) => !p.dia || p.dia === dia);
+  const ocupadasHoje = ocupadasDoDia(doDia.map((p) => p.slotNumber), usados);
+  const chaveOcupadas = `${ocupadasHoje.join(',')}|${doDia.length}`;
+  useEffect(() => {
+    const pub = online.publicadoHoje;
+    if (!uid || !pub || online.vagasHoje.size === 0) return;
+    if (`${pub.ocupadas.join(',')}|${pub.petsNaLoja}` === chaveOcupadas) return;
+    publicarOcupadas(dia, ocupadasHoje, doDia.length).catch((e) => console.error('[agendamento] ocupadas', e));
+  }, [uid, dia, chaveOcupadas, online.publicadoHoje, online.vagasHoje.size]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const acompanhando = useSuporteAcompanhando(!!uid, user?.displayName || user?.email?.split('@')[0] || 'Aparelho');
   useEffect(() => {
@@ -604,7 +617,7 @@ export default function App() {
             <TabsContent value="kanban">
               <KanbanBoard
                 pets={pets}
-                vagasOnline={online.vagasHoje}
+                vagasOnline={new Set(online.pedidoNaVaga.keys())}
                 onUpdateStatus={handleUpdateStatus}
                 onCheckout={handleCheckoutWithType}
                 onAddPet={handleAddPet}

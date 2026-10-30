@@ -88,10 +88,33 @@ export function escolherVagasOnline(
   return [...escolhidas].sort((a, b) => a - b);
 }
 
-/** Vagas online que o tutor ainda pode escolher */
-export function vagasLivres(vagas: number[], marcadas: Iterable<number>): number[] {
-  const m = new Set(marcadas);
+/** Vagas online que o tutor ainda pode escolher (sem pedido e sem pet da loja) */
+export function vagasLivres(vagas: number[], marcadas: Iterable<number>, ocupadas: Iterable<number> = []): number[] {
+  const m = new Set([...marcadas, ...ocupadas]);
   return vagas.filter((n) => !m.has(n)).sort((a, b) => a - b);
+}
+
+/** Vagas de hoje com pet (na fila ou já entregue), em ordem e sem repetir */
+export function ocupadasDoDia(slotsComPet: Iterable<number>, usados: Iterable<number>): number[] {
+  return [...new Set([...slotsComPet, ...usados])].filter((n) => n >= 1 && n <= TOTAL_VAGAS).sort((a, b) => a - b);
+}
+
+export type SituacaoVaga = 'livre' | 'marcada' | 'ocupada' | 'balcao';
+
+/**
+ * Grade que o tutor vê num dia: da vaga 1 até a maior vaga online ou ocupada.
+ * livre = online e disponível · marcada = outro tutor marcou · ocupada = pet na loja · balcao = só a loja usa
+ */
+export function gradeDoTutor(vagas: number[], marcadas: Iterable<number>, ocupadas: Iterable<number>): { numero: number; situacao: SituacaoVaga }[] {
+  const online = new Set(vagas);
+  const m = new Set(marcadas);
+  const o = new Set(ocupadas);
+  const maior = Math.max(0, ...vagas, ...o);
+  return Array.from({ length: maior }, (_, i) => {
+    const n = i + 1;
+    const situacao: SituacaoVaga = o.has(n) ? 'ocupada' : m.has(n) && online.has(n) ? 'marcada' : online.has(n) ? 'livre' : 'balcao';
+    return { numero: n, situacao };
+  });
 }
 
 /** Só dígitos; aceita com ou sem o 55 */

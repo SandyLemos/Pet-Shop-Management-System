@@ -22,6 +22,10 @@ export interface AgendaPublica {
 export interface DiaOnline {
   dia: string;
   vagas: number[];
+  /** vagas com pet da loja (na fila ou já entregue) — só números, para o tutor ver */
+  ocupadas: number[];
+  /** pets na fila da loja agora */
+  petsNaLoja: number;
 }
 
 export interface Pedido extends DadosPedido {
@@ -61,7 +65,12 @@ export function ouvirAgenda(loja: string, cb: (a: AgendaPublica | null) => void)
 export function ouvirDiasOnline(loja: string, hoje: string, cb: (dias: DiaOnline[]) => void): () => void {
   return onSnapshot(
     query(colDias(loja), where('dia', '>=', hoje)),
-    (s: any) => cb(s.docs.map((d: any) => ({ dia: d.id, vagas: (d.data().vagas ?? []) as number[] }))
+    (s: any) => cb(s.docs.map((d: any) => ({
+      dia: d.id,
+      vagas: (d.data().vagas ?? []) as number[],
+      ocupadas: (d.data().ocupadas ?? []) as number[],
+      petsNaLoja: Number(d.data().petsNaLoja ?? 0),
+    }))
       .sort((a: DiaOnline, b: DiaOnline) => a.dia.localeCompare(b.dia))),
     () => cb([]),
   );
@@ -139,7 +148,12 @@ export async function publicarAgendaDaLojaAtual(): Promise<void> {
 }
 
 export async function salvarVagasDoDia(dia: string, vagas: number[]): Promise<void> {
-  await setDoc(refDia(lojaId(), dia), { dia, vagas, atualizadoEm: Date.now() });
+  await setDoc(refDia(lojaId(), dia), { dia, vagas, atualizadoEm: Date.now() }, { merge: true });
+}
+
+/** A loja conta ao tutor quais vagas do dia já têm pet e quantos pets estão na fila */
+export async function publicarOcupadas(dia: string, ocupadas: number[], petsNaLoja: number): Promise<void> {
+  await setDoc(refDia(lojaId(), dia), { dia, ocupadas, petsNaLoja, atualizadoEm: Date.now() }, { merge: true });
 }
 
 /** Pedidos em aberto da loja atual, ao vivo */

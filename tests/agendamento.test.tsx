@@ -25,7 +25,7 @@ vi.mock('firebase/firestore', async () => {
 });
 
 import {
-  andamentoDoPedido, escolherVagasOnline, vagasLivres, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
+  andamentoDoPedido, escolherVagasOnline, vagasLivres, gradeDoTutor, ocupadasDoDia, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
   type DadosPedido,
 } from '../src/utils/agendamento';
 import { modulosDaLoja } from '../src/utils/modulos';
@@ -71,8 +71,15 @@ describe('Agendamento: regras puras', () => {
     expect(escolherVagasOnline(0, [1, 2, 3], [2])).toEqual([2]);
   });
 
-  it('vagas livres = liberadas menos marcadas', () => {
+  it('vagas livres = liberadas menos marcadas e menos as que a loja usou', () => {
     expect(vagasLivres([3, 1, 2], [2])).toEqual([1, 3]);
+    expect(vagasLivres([3, 1, 2], [2], [1])).toEqual([3]);
+  });
+
+  it('o tutor vê a grade toda do dia: livre, ocupada pela loja, marcada e só na loja', () => {
+    expect(ocupadasDoDia([5, 1, 5], [7])).toEqual([1, 5, 7]);
+    expect(gradeDoTutor([2, 3], [3], [1, 2, 5]).map((g) => g.situacao))
+      .toEqual(['ocupada', 'ocupada', 'marcada', 'balcao', 'ocupada']);
   });
 
   it('confere o formulário do tutor', () => {
@@ -164,12 +171,15 @@ describe('Agendamento: telas da loja', () => {
   it('grade: vaga online livre, a confirmar e aguardando chegada', () => {
     definirLoja({ id: LOJA, nome: 'Teste 01', modulos: { agendamento: true } });
     const online = {
+      publicadoHoje: null,
       vagasHoje: new Set([1, 2, 3]),
       pedidoNaVaga: new Map([[2, pedido()], [3, pedido({ vaga: 3, nomePet: 'Mel', status: 'confirmado', codigo: 'd'.repeat(24) })]]),
       aConfirmar: [],
     };
     render(<SlotGrid pets={[]} onAddPet={() => true} onEditPet={() => {}} onDeletePet={() => {}} onCheckout={() => {}} filter="all" online={online} />);
-    expect(screen.getByTitle(/Slot 1 - Reservado para o agendamento online/)).toHaveProperty('disabled', true);
+    // vaga online sem pedido: a loja também pode usar no balcão
+    const livreOnline = screen.getByTitle(/Slot 1 - Livre \(também aberta no agendamento online\)/);
+    expect(livreOnline).toHaveProperty('disabled', false);
     expect(screen.getByTitle(/Thor .*a confirmar/)).toBeTruthy();
     fireEvent.click(screen.getByTitle(/Mel .*aguardando chegada/));
     expect(screen.getByRole('button', { name: /confirmar chegada/i })).toBeTruthy();

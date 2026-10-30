@@ -39,7 +39,7 @@ interface SlotGridProps {
   onChegou?: (pedido: Pedido) => void;
 }
 
-const SEM_ONLINE: AgendaOnline = { vagasHoje: new Set(), pedidoNaVaga: new Map(), aConfirmar: [] };
+const SEM_ONLINE: AgendaOnline = { vagasHoje: new Set(), pedidoNaVaga: new Map(), aConfirmar: [], publicadoHoje: null };
 
 export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, filter, online = SEM_ONLINE, onChegou }: SlotGridProps) {
   const [selectedSlot, setSelectedSlot] = useState<number | null>(null);
@@ -95,10 +95,10 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
     let livres = 0;
     for (let n = 1; n <= visibleSlots; n++) {
       const ocupado = pets.some(p => p.slotNumber === n);
-      if (!ocupado && !usados.has(n) && !online.vagasHoje.has(n)) livres++;
+      if (!ocupado && !usados.has(n) && !online.pedidoNaVaga.has(n)) livres++;
     }
     return livres;
-  }, [pets, visibleSlots, usados, online.vagasHoje]);
+  }, [pets, visibleSlots, usados, online.pedidoNaVaga]);
 
   // ✅ garante que a grade sempre alcance a maior vaga ocupada/usada
   const maiorSlotOcupado = useMemo(() => {
@@ -199,10 +199,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
 
   const handleSlotClick = (slotNumber: number) => {
     const { status, pet } = getSlotStatus(slotNumber);
-    if (status === 'livre' && vagaOnline(slotNumber)) {
-      // ✅ vaga online: só abre quando um tutor marcou
-      const pedido = online.pedidoNaVaga.get(slotNumber);
-      if (pedido) setPedidoAberto(pedido);
+    // ✅ vaga online marcada por um tutor: abre o pedido. Sem pedido, a loja usa normalmente
+    //    (e a página do tutor passa a mostrar a vaga como ocupada).
+    const pedidoDaVaga = status === 'livre' && vagaOnline(slotNumber) ? online.pedidoNaVaga.get(slotNumber) : undefined;
+    if (pedidoDaVaga) {
+      setPedidoAberto(pedidoDaVaga);
       return;
     }
     if (status === 'livre') {
@@ -393,7 +394,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
 
         // ✅ vaga do agendamento online (livre, a confirmar ou aguardando chegada)
         const corOnline = !pedido
-          ? 'bg-cyan-50 border-dashed border-cyan-300 text-cyan-700'
+          ? 'bg-emerald-50 hover:bg-emerald-100 border-dashed border-cyan-400 text-emerald-700'
           : pedido.status === 'pendente'
             ? 'bg-orange-100 hover:bg-orange-200 border-dashed border-orange-400 text-orange-800 animate-pulse'
             : 'bg-indigo-100 hover:bg-indigo-200 border-indigo-400 text-indigo-800';
@@ -413,11 +414,11 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             <DialogTrigger asChild>
               <button
                 onClick={() => handleSlotClick(slotNumber)}
-                disabled={slotUsado || (ehOnline && !pedido)}
+                disabled={slotUsado}
                 className={`
                   relative aspect-square rounded-lg border-2 transition-all
                   flex flex-col items-center justify-center gap-1
-                  ${slotUsado || (ehOnline && !pedido) ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
+                  ${slotUsado ? 'cursor-not-allowed opacity-70' : 'cursor-pointer'}
                   ${ehOnline ? corOnline : getStatusColor(status, avisado, slotUsado)}
                   ${status !== 'livre' ? 'hover:ring-2 hover:ring-blue-400 hover:ring-offset-1' : ''}
                   ${parado ? 'ring-2 ring-red-500 ring-offset-1' : ''}
@@ -428,7 +429,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                     : pedido
                       ? `${pedido.nomePet} - ${pedido.nomeTutor} (agendamento online: ${pedido.status === 'pendente' ? 'a confirmar' : 'aguardando chegada'})`
                       : ehOnline
-                        ? `Slot ${slotNumber} - Reservado para o agendamento online`
+                        ? `Slot ${slotNumber} - Livre (também aberta no agendamento online)`
                         : slotUsado
                           ? `Slot ${slotNumber} - Já utilizado hoje`
                           : `Slot ${slotNumber} - Livre`
@@ -457,7 +458,7 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
               </button>
             </DialogTrigger>
 
-            {status === 'livre' && !slotUsado && (!ehOnline || chegada?.vaga === slotNumber) && (
+            {status === 'livre' && !slotUsado && (!pedido || chegada?.vaga === slotNumber) && (
               /* ✅ altura FIXA para o scroll interno do formulário funcionar */
               <DialogContent
                 className="sm:max-w-2xl h-[85vh]"
@@ -559,8 +560,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
         </div>
         {online.vagasHoje.size > 0 && (<>
           <div className="flex items-center gap-2">
-            <div className="w-4 h-4 rounded bg-cyan-50 border-2 border-dashed border-cyan-300" />
-            <span className="text-sm text-gray-600">Online (livre)</span>
+            <div className="w-4 h-4 rounded bg-emerald-50 border-2 border-dashed border-cyan-400" />
+            <span className="text-sm text-gray-600">Livre (também online)</span>
           </div>
           <div className="flex items-center gap-2">
             <div className="w-4 h-4 rounded bg-orange-100 border-2 border-dashed border-orange-400" />
