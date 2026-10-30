@@ -25,7 +25,7 @@ vi.mock('firebase/firestore', async () => {
 });
 
 import {
-  andamentoDoPedido, escolherVagasOnline, vagasLivres, proximaVagaNaChegada, problemaNoPedido, limparPedido, proximosDias, diaCurto, mensagemPedido,
+  andamentoDoPedido, escolherVagasOnline, vagasLivres, proximaVagaNaChegada, problemaNoPedido, textoEndereco, linkMapa, limparPedido, proximosDias, diaCurto, mensagemPedido,
   type DadosPedido,
 } from '../src/utils/agendamento';
 import { modulosDaLoja } from '../src/utils/modulos';
@@ -85,6 +85,21 @@ describe('Agendamento: regras puras', () => {
     expect(problemaNoPedido({ ...DADOS, telefone: '123' })).toMatch(/WhatsApp/);
     expect(problemaNoPedido({ ...DADOS, especie: '' })).toMatch(/cão ou gato/);
     expect(limparPedido(DADOS)).toMatchObject({ nomeTutor: 'Ana Souza', telefone: '24999991234' });
+  });
+
+  it('busca e entrega: exige endereço completo; localização é opcional', () => {
+    const end = { cep: '27000-000', rua: 'Rua A', numero: '12', complemento: '', bairro: 'Centro', cidade: 'Resende', referencia: '' };
+    expect(problemaNoPedido({ ...DADOS, transporte: 'busca_entrega' })).toMatch(/Endereço da busca e entrega/);
+    expect(problemaNoPedido({ ...DADOS, transporte: 'busca', endereco: { ...end, rua: '' } })).toMatch(/rua/);
+    expect(problemaNoPedido({ ...DADOS, transporte: 'entrega', endereco: end })).toBeNull();
+    // sem transporte não grava endereço; com transporte grava, e a localização só se veio
+    expect(limparPedido({ ...DADOS, transporte: 'nenhum', endereco: end })).not.toHaveProperty('endereco');
+    expect(limparPedido({ ...DADOS, transporte: 'busca', endereco: end })).not.toHaveProperty('localizacao');
+    expect(limparPedido({ ...DADOS, transporte: 'busca', endereco: end, localizacao: { lat: -22.4687651, lng: -44.4466123, precisao: 9 } }).localizacao)
+      .toEqual({ lat: -22.468765, lng: -44.446612 });
+    expect(textoEndereco(end)).toBe('Rua A, 12 - Centro, Resende - CEP 27000-000');
+    expect(linkMapa(end, { lat: 1, lng: 2 })).toBe('https://www.google.com/maps?q=1,2');
+    expect(linkMapa(end)).toContain('maps/search');
   });
 
   it('dias e mensagens', () => {

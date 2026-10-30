@@ -26,12 +26,14 @@ import {
   PackageCheck,
   PhoneCall,
   HeartPulse,
+  Truck,
 } from 'lucide-react';
 import type { Pet } from '../types/pet';
 import { PetRegistration } from './PetRegistration';
 import { HEALTH_ISSUES, NO_ISSUES_ID } from '../constants/healthIssues';
 import { AlertaSelos } from './AlertasPet';
 import { LinkTutorPet } from './LinkTutorPet';
+import { NOME_TRANSPORTE } from '../../utils/agendamento';
 
 interface PetDetailModalProps {
   pet: Pet | null;
@@ -208,6 +210,18 @@ export function PetDetailModal({
                   Tutor avisado às{' '}
                   <span className="font-semibold">{formatTime(pet.avisadoEm)}</span>
                   . Aguardando retirada.
+                </p>
+              </div>
+            )}
+
+            {/* ── Agendamento online: busca e entrega ── */}
+            {pet.transporte && (
+              <div className="flex items-start gap-2 bg-sky-50 border border-sky-200 rounded-lg px-2.5 py-1.5">
+                <Truck className="w-3.5 h-3.5 text-sky-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-sky-800 min-w-0 break-words">
+                  <span className="font-semibold">{NOME_TRANSPORTE[pet.transporte]}</span>
+                  {pet.enderecoTransporte ? ` · ${pet.enderecoTransporte}` : ''}
+                  {pet.mapaTransporte && <> · <a href={pet.mapaTransporte} target="_blank" rel="noopener noreferrer" className="underline font-semibold">ver no mapa</a></>}
                 </p>
               </div>
             )}

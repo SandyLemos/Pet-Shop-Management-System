@@ -19,6 +19,8 @@ import {
   SERVICOS_ONLINE, andamentoDoPedido, diaCurto, problemaNoPedido, vagasLivres, type DadosPedido,
 } from '../../../utils/agendamento';
 import { NOME_SERVICO } from '../../../utils/acompanhamento';
+import { NOME_TRANSPORTE, TRANSPORTES, precisaEndereco, type Transporte } from '../../../utils/agendamento';
+import { JanelaEndereco, ResumoEndereco } from './EnderecoTransporte';
 import { CORES_PADRAO, MARCA, coresValidas, fundoTopo } from '../../../utils/cores';
 import { idDoDia } from '../../../utils/dias';
 
@@ -139,6 +141,8 @@ export function AgendarOnline({ loja }: { loja: string }) {
   const [dados, setDados] = useState<DadosPedido>(VAZIO);
   const [consentimento, setConsentimento] = useState(false);
   const [enviando, setEnviando] = useState(false);
+  // busca e entrega: janela do endereço aberta para este tipo
+  const [janelaPara, setJanelaPara] = useState<Transporte | null>(null);
 
   useEffect(() => { document.title = 'Agende o banho do seu pet'; return ouvirAgenda(loja, setAgenda); }, [loja]);
   useEffect(() => ouvirDiasOnline(loja, hoje, (d) => setDias(d.filter((x) => x.vagas.length > 0))), [loja, hoje]);
@@ -326,6 +330,19 @@ export function AgendarOnline({ loja }: { loja: string }) {
                     opcoes={SERVICOS_ONLINE.map((s) => { const I = ICONE_SERVICO[s] ?? Droplet; return { id: s, nome: NOME_SERVICO[s], icone: <I size={15} /> }; })} />
                 </div>
                 <div>
+                  <span className={rotulo}>Busca e entrega</span>
+                  <Escolha nome="Busca e entrega" colunas="grid-cols-2 sm:grid-cols-4" valor={dados.transporte ?? 'nenhum'}
+                    aoEscolher={(t) => (t === 'nenhum' ? mudar('transporte', 'nenhum') : setJanelaPara(t))}
+                    opcoes={TRANSPORTES.map((t) => ({ id: t.id, nome: t.nome }))} />
+                  <p className="text-[11px] text-slate-500 mt-1.5">{TRANSPORTES.find((t) => t.id === (dados.transporte ?? 'nenhum'))?.descricao}</p>
+                  {precisaEndereco(dados.transporte) && dados.endereco && (
+                    <div className="mt-2">
+                      <ResumoEndereco transporte={dados.transporte!} endereco={dados.endereco} localizacao={dados.localizacao}
+                        aoAlterar={() => setJanelaPara(dados.transporte!)} />
+                    </div>
+                  )}
+                </div>
+                <div>
                   <label className={rotulo} htmlFor="ag-obs">Observação <span className="font-normal text-slate-400">(opcional)</span></label>
                   <textarea id="ag-obs" className={`${campo} min-h-20`} maxLength={300} placeholder="Ex.: tem medo de secador, alergia a algum produto" value={dados.obs} onChange={(e) => mudar('obs', e.target.value)} />
                 </div>
@@ -337,6 +354,18 @@ export function AgendarOnline({ loja }: { loja: string }) {
               </label>
             </div>
           </Passo>
+          {janelaPara && (
+            <JanelaEndereco
+              transporte={janelaPara}
+              inicial={dados.endereco}
+              localInicial={dados.localizacao}
+              fechar={() => setJanelaPara(null)}
+              salvar={(endereco, localizacao) => {
+                setDados((d) => ({ ...d, transporte: janelaPara, endereco, localizacao }));
+                setJanelaPara(null);
+              }}
+            />
+          )}
         </div>
 
         {/* computador: resumo fixo ao lado */}
@@ -352,6 +381,7 @@ export function AgendarOnline({ loja }: { loja: string }) {
                 { nome: 'Vagas livres', valor: diaEscolhido ? String(livres.length) : null },
                 { nome: 'Pet', valor: dados.nomePet.trim() || null },
                 { nome: 'Serviço', valor: NOME_SERVICO[dados.servico] ?? null },
+                { nome: 'Busca e entrega', valor: precisaEndereco(dados.transporte) ? NOME_TRANSPORTE[dados.transporte!] : 'Não' },
               ].map((l) => (
                 <div key={l.nome} className="flex justify-between gap-3 py-2.5">
                   <dt className="text-slate-500">{l.nome}</dt>
@@ -480,6 +510,11 @@ export function AcompanharPedido({ codigo }: { codigo: string }) {
                 </div>
               ))}
             </dl>
+            {precisaEndereco(pedido.transporte) && (
+              <div className="mt-2">
+                <ResumoEndereco transporte={pedido.transporte!} endereco={pedido.endereco} localizacao={pedido.localizacao} />
+              </div>
+            )}
           </section>
 
           <section className="bg-white rounded-2xl shadow-sm ring-1 ring-slate-100 p-5 space-y-2.5">

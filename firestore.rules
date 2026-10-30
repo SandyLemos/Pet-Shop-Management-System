@@ -259,6 +259,23 @@ service cloud.firestore {
     function textoAte(v, n) {
       return v is string && v.size() <= n;
     }
+    // busca e entrega: sem transporte, nada de endereço; com transporte, endereço completo e localização opcional
+    function enderecoValido(d) {
+      return (!('transporte' in d) && !('endereco' in d) && !('localizacao' in d))
+        || (d.transporte in ['busca_entrega', 'busca', 'entrega']
+            && d.endereco is map
+            && d.endereco.keys().hasOnly(['cep', 'rua', 'numero', 'complemento', 'bairro', 'cidade', 'referencia'])
+            && d.endereco.rua is string && d.endereco.rua.size() > 0 && d.endereco.rua.size() <= 120
+            && d.endereco.numero is string && d.endereco.numero.size() > 0 && d.endereco.numero.size() <= 20
+            && d.endereco.bairro is string && d.endereco.bairro.size() > 0 && d.endereco.bairro.size() <= 80
+            && d.endereco.cidade is string && d.endereco.cidade.size() > 0 && d.endereco.cidade.size() <= 80
+            && textoAte(d.endereco.cep, 9) && textoAte(d.endereco.complemento, 60) && textoAte(d.endereco.referencia, 120)
+            && (!('localizacao' in d)
+                || (d.localizacao is map && d.localizacao.keys().hasOnly(['lat', 'lng'])
+                    && d.localizacao.lat is number && d.localizacao.lng is number
+                    && d.localizacao.lat >= -90 && d.localizacao.lat <= 90
+                    && d.localizacao.lng >= -180 && d.localizacao.lng <= 180)));
+    }
 
     match /agendaPublica/{lojaId} {
       allow get: if true;
@@ -311,7 +328,9 @@ service cloud.firestore {
                     && request.resource.data.keys().hasOnly([
                          'lojaId', 'nomeLoja', 'logoUrl', 'cores', 'dia', 'vaga', 'status',
                          'nomeTutor', 'telefone', 'nomePet', 'especie', 'raca', 'porte', 'servico', 'obs',
+                         'transporte', 'endereco', 'localizacao',
                          'criadoEm', 'atualizadoEm', 'expiraEm'])
+                    && enderecoValido(request.resource.data)
                     && request.resource.data.status == 'pendente'
                     && request.resource.data.lojaId is string
                     && agendaAtiva(request.resource.data.lojaId)

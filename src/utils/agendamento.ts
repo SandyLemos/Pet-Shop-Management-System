@@ -22,6 +22,30 @@ export type StatusPedido = 'pendente' | 'confirmado' | 'chegou' | 'recusado' | '
 /** Pedidos que a loja acompanha na tela (os outros já terminaram) */
 export const STATUS_ABERTOS: StatusPedido[] = ['pendente', 'confirmado', 'cancelado'];
 
+export type Transporte = 'nenhum' | 'busca_entrega' | 'busca' | 'entrega';
+
+export const TRANSPORTES: { id: Transporte; nome: string; descricao: string }[] = [
+  { id: 'nenhum', nome: 'Não preciso', descricao: 'Eu levo e busco o pet' },
+  { id: 'busca_entrega', nome: 'Busca e entrega', descricao: 'A loja busca e devolve em casa' },
+  { id: 'busca', nome: 'Só busca', descricao: 'A loja busca; eu retiro na loja' },
+  { id: 'entrega', nome: 'Só entrega', descricao: 'Eu levo; a loja devolve em casa' },
+];
+export const NOME_TRANSPORTE: Record<Transporte, string> = Object.fromEntries(TRANSPORTES.map((t) => [t.id, t.nome])) as Record<Transporte, string>;
+
+export interface Endereco {
+  cep: string;
+  rua: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  referencia: string;
+}
+export const ENDERECO_VAZIO: Endereco = { cep: '', rua: '', numero: '', complemento: '', bairro: '', cidade: '', referencia: '' };
+
+/** Localização do aparelho do tutor (opcional) */
+export interface Localizacao { lat: number; lng: number; precisao?: number }
+
 export interface DadosPedido {
   nomeTutor: string;
   telefone: string;
@@ -31,6 +55,38 @@ export interface DadosPedido {
   porte: 'pequeno' | 'medio' | 'grande' | '';
   servico: string;
   obs: string;
+  /** busca e/ou entrega em casa (sem o campo = não precisa) */
+  transporte?: Transporte;
+  endereco?: Endereco;
+  localizacao?: Localizacao | null;
+}
+
+/** Confere o endereço da busca/entrega. Devolve o primeiro problema ou null. */
+export function problemaNoEndereco(e: Endereco): string | null {
+  if (!e.rua.trim()) return 'Informe a rua.';
+  if (!e.numero.trim()) return 'Informe o número (ou "s/n").';
+  if (!e.bairro.trim()) return 'Informe o bairro.';
+  if (!e.cidade.trim()) return 'Informe a cidade.';
+  return null;
+}
+
+export const precisaEndereco = (t?: Transporte) => !!t && t !== 'nenhum';
+
+/** "Rua X, 12 - apto 3 - Centro, Cidade - CEP 00000-000 (perto de ...)" */
+export function textoEndereco(e?: Partial<Endereco> | null): string {
+  if (!e) return '';
+  const ruaNum = [e.rua, e.numero].filter(Boolean).join(', ');
+  const partes = [ruaNum, e.complemento, [e.bairro, e.cidade].filter(Boolean).join(', ')].filter(Boolean).join(' - ');
+  const cep = e.cep ? ` - CEP ${e.cep}` : '';
+  const ref = e.referencia ? ` (${e.referencia})` : '';
+  return `${partes}${cep}${ref}`;
+}
+
+/** Link do mapa: pela localização, se o tutor mandou; senão, pelo endereço */
+export function linkMapa(endereco?: Partial<Endereco> | null, loc?: Localizacao | null): string | null {
+  if (loc && Number.isFinite(loc.lat) && Number.isFinite(loc.lng)) return `https://www.google.com/maps?q=${loc.lat},${loc.lng}`;
+  const t = textoEndereco(endereco ? { ...endereco, referencia: '' } : null);
+  return t ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}` : null;
 }
 
 export const SERVICOS_ONLINE = ['banho', 'banho_tosa', 'tosa', 'higienica', 'hidratacao', 'ozonio'] as const;
@@ -117,12 +173,16 @@ export function problemaNoPedido(p: DadosPedido): string | null {
   if (!p.especie) return 'Escolha se é cão ou gato.';
   if (!p.porte) return 'Escolha o porte do pet.';
   if (!p.servico) return 'Escolha o serviço.';
+  if (precisaEndereco(p.transporte)) {
+    const e = p.endereco ? problemaNoEndereco(p.endereco) : 'Informe o endereço.';
+    if (e) return `Endereço da ${NOME_TRANSPORTE[p.transporte!].toLowerCase()}: ${e}`;
+  }
   return null;
 }
 
 /** Corta e limpa os campos antes de gravar (as regras do banco conferem os mesmos limites) */
 export function limparPedido(p: DadosPedido): DadosPedido {
-  return {
+  const base: DadosPedido = {
     nomeTutor: p.nomeTutor.trim().slice(0, 100),
     telefone: soDigitos(p.telefone).slice(0, 13),
     nomePet: p.nomePet.trim().slice(0, 100),
@@ -131,6 +191,19 @@ export function limparPedido(p: DadosPedido): DadosPedido {
     porte: p.porte,
     servico: p.servico,
     obs: p.obs.trim().slice(0, 300),
+  };
+  if (!precisaEndereco(p.transporte) || !p.endereco) return base;
+  const corta = (v: string, n: number) => (v ?? '').trim().slice(0, n);
+  const e = p.endereco;
+  return {
+    ...base,
+    transporte: p.transporte,
+    endereco: {
+      cep: corta(e.cep, 9), rua: corta(e.rua, 120), numero: corta(e.numero, 20), complemento: corta(e.complemento, 60),
+      bairro: corta(e.bairro, 80), cidade: corta(e.cidade, 80), referencia: corta(e.referencia, 120),
+    },
+    // só manda a localização se o tutor quis
+    ...(p.localizacao ? { localizacao: { lat: +p.localizacao.lat.toFixed(6), lng: +p.localizacao.lng.toFixed(6) } } : {}),
   };
 }
 

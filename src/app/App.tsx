@@ -21,7 +21,7 @@ import { criarLinkTutor, atualizarLinkTutor } from '../services/acompanhamentoSe
 import type { SituacaoTutor } from '../utils/acompanhamento';
 import { useAgendaOnline } from '../hooks/useAgendaOnline';
 import { marcarChegou, publicarPetsNaLoja, type Pedido } from '../services/agendamentoService';
-import { proximaVagaNaChegada } from '../utils/agendamento';
+import { linkMapa, precisaEndereco, proximaVagaNaChegada, textoEndereco } from '../utils/agendamento';
 import { PedidosOnlineBanner } from './components/agendamento/PedidosOnlineBanner';
 import { ConfirmarChegada } from './components/agendamento/ConfirmarChegada';
 
@@ -204,7 +204,17 @@ export default function App() {
       const slot = proximaVagaNaChegada([...ocupadasHoje(), ...tentadas]);
       if (!slot) { toast.error('Não há vaga livre na grade de hoje.'); return false; }
       try {
-        const petData = { ...dados, slotNumber: slot, status: 'espera' as SlotStatus };
+        const petData = {
+          ...dados,
+          slotNumber: slot,
+          status: 'espera' as SlotStatus,
+          // busca e entrega pedida no agendamento vai junto para a ficha do atendimento
+          ...(precisaEndereco(pedido.transporte) ? {
+            transporte: pedido.transporte as Pet['transporte'],
+            enderecoTransporte: textoEndereco(pedido.endereco),
+            mapaTransporte: linkMapa(pedido.endereco, pedido.localizacao) ?? undefined,
+          } : {}),
+        };
         const { id, petNumber, isNovo } = await addPet(petData, dia);
         const link = await criarLinkTutor({ ...petData, id, dia, checkInTime: new Date().toISOString() } as Pet)
           .catch((err) => { console.error('[link do tutor] não foi criado', err); return null; });

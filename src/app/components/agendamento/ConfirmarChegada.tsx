@@ -5,7 +5,8 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { PetRegistration } from '../PetRegistration';
 import type { Pet } from '../../types/pet';
 import type { Pedido } from '../../../services/agendamentoService';
-import { soDigitos } from '../../../utils/agendamento';
+import { precisaEndereco, soDigitos } from '../../../utils/agendamento';
+import { ResumoEndereco } from './EnderecoTransporte';
 
 type DadosPet = Omit<Pet, 'id' | 'checkInTime' | 'slotNumber' | 'status'>;
 
@@ -33,6 +34,9 @@ export function ConfirmarChegada({ pedido, proximaVaga, pets, slotsUsados, fecha
             A vaga é a próxima livre depois da última ocupada.
           </DialogDescription>
         </DialogHeader>
+        {precisaEndereco(pedido.transporte) && (
+          <ResumoEndereco transporte={pedido.transporte!} endereco={pedido.endereco} localizacao={pedido.localizacao} />
+        )}
         <PetRegistration
           key={pedido.codigo}
           allPets={pets}

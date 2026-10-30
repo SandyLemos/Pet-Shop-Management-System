@@ -71,6 +71,11 @@ export interface Pet {
   linkTutor?: string;
   /** quando a equipe enviou o link ao tutor (ISO) */
   linkTutorEnviadoEm?: string;
+
+  // ✅ Agendamento online: busca e entrega pedida pelo tutor
+  transporte?: 'busca_entrega' | 'busca' | 'entrega';
+  enderecoTransporte?: string;
+  mapaTransporte?: string;
 }
 
 // ─── Ficha permanente do pet (coleção petsCadastro) ───────────────────────

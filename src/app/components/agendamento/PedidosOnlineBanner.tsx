@@ -2,9 +2,9 @@
 //   • pedidos esperando a loja confirmar (com bipe a cada pedido novo)
 //   • confirmados de hoje esperando o pet chegar → "Confirmar chegada" dá a vaga na hora
 import { useEffect, useRef, useState } from 'react';
-import { CalendarCheck, Check, LogIn, MessageCircle, UserX, X } from 'lucide-react';
+import { CalendarCheck, Check, LogIn, MessageCircle, Truck, UserX, X } from 'lucide-react';
 import type { Pedido } from '../../../services/agendamentoService';
-import { diaCurto } from '../../../utils/agendamento';
+import { NOME_TRANSPORTE, diaCurto, linkMapa, precisaEndereco, textoEndereco } from '../../../utils/agendamento';
 import { NOME_SERVICO } from '../../../utils/acompanhamento';
 import { tocarAviso } from '../../../utils/som';
 import { idDoDia } from '../../../utils/dias';
@@ -13,6 +13,21 @@ import { RecusarPedido } from './RecusarPedido';
 
 const detalhes = (p: Pedido) =>
   `${NOME_SERVICO[p.servico] ?? p.servico} · ${p.especie === 'gato' ? 'Gato' : 'Cão'}${p.raca ? ` ${p.raca}` : ''} · Tutor: ${p.nomeTutor} · ${p.telefone}${p.obs ? ` · Obs.: ${p.obs}` : ''}`;
+
+/** Busca e entrega: tipo, endereço e mapa */
+function LinhaTransporte({ p }: { p: Pedido }) {
+  if (!precisaEndereco(p.transporte)) return null;
+  const mapa = linkMapa(p.endereco, p.localizacao);
+  return (
+    <p className="text-xs text-sky-800 mt-0.5 flex items-start gap-1.5 min-w-0">
+      <Truck size={13} className="shrink-0 mt-0.5" />
+      <span className="min-w-0 break-words">
+        <strong>{NOME_TRANSPORTE[p.transporte!]}</strong> · {textoEndereco(p.endereco)}
+        {mapa && <> · <a href={mapa} target="_blank" rel="noopener noreferrer" className="underline font-semibold">{p.localizacao ? 'localização' : 'mapa'}</a></>}
+      </span>
+    </p>
+  );
+}
 
 export function PedidosOnlineBanner({ pedidos, aguardando = [], onChegou }:
   { pedidos: Pedido[]; aguardando?: Pedido[]; onChegou?: (p: Pedido) => void }) {
@@ -51,6 +66,7 @@ export function PedidosOnlineBanner({ pedidos, aguardando = [], onChegou }:
                     <span className="font-semibold text-orange-700">Necessário confirmar.</span>
                   </p>
                   <p className="text-xs text-slate-500 truncate">{detalhes(p)}</p>
+                  <LinhaTransporte p={p} />
                 </div>
                 <div className="flex gap-2 shrink-0">
                   <button disabled={!!ocupado} onClick={() => setRecusando(p)}
@@ -87,6 +103,7 @@ export function PedidosOnlineBanner({ pedidos, aguardando = [], onChegou }:
                       <span aria-hidden>🐾 </span><strong>{p.nomePet}</strong> · aguardando chegada{p.dia !== hoje ? ` (marcado para ${diaCurto(p.dia)})` : ''}
                     </p>
                     <p className="text-xs text-slate-500 truncate">{detalhes(p)}</p>
+                  <LinhaTransporte p={p} />
                   </div>
                   <div className="flex gap-2 shrink-0">
                     {whats && (
