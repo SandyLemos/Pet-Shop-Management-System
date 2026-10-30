@@ -10,7 +10,7 @@ import {
 import { Badge } from './ui/badge';
 import {
   Dog, Clock, Droplet, Wind, Scissors,
-  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall, Ban,
+  CheckCircle2, ChevronDown, Minus, MinusCircle, PhoneCall, Ban, Truck,
 } from 'lucide-react';
 import { PetRegistration } from './PetRegistration';
 import { Button } from './ui/button';
@@ -27,7 +27,7 @@ interface SlotGridProps {
   onAddPet: (pet: Omit<Pet, 'id' | 'checkInTime'>) => void | Promise<boolean>;
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void;
   onDeletePet: (petId: string) => void;
-  onCheckout: (petId: string, tipo: 'entregue' | 'avisado') => void;
+  onCheckout: (petId: string, tipo: 'entregue' | 'avisado' | 'saiu_entrega') => void;
   filter: 'all' | 'banho' | 'tosa' | 'banho_tosa' | 'higienica' | 'ozonio' | 'hidratacao';
 }
 
@@ -356,7 +356,8 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
       {Array.from({ length: visibleSlots }, (_, i) => {
         const slotNumber = i + 1;
         const { status, pet } = getSlotStatus(slotNumber);
-        const avisado = !!pet?.avisado;
+        const saiuEntrega = !!pet?.saiuEntregaEm; // ✅ busca e entrega: a caminho da casa do tutor
+        const avisado = !!pet?.avisado || saiuEntrega;
         const slotUsado = usados.has(slotNumber) && !pet; // ✅ NOVO
         const parado = !!pet && estaParado(pet, agora);
 
@@ -390,14 +391,14 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
                 `}
                 title={
                   pet
-                    ? `${pet.nomePet} - ${pet.nomeTutor}${avisado ? ' 📞 Tutor avisado' : ''}${pet.alertas?.length ? ` ⚠️ ${pet.alertas.join(', ')}` : ''} (clique para detalhes)`
+                    ? `${pet.nomePet} - ${pet.nomeTutor}${saiuEntrega ? ' 🚚 Saiu para entrega' : avisado ? ' 📞 Tutor avisado' : ''}${pet.alertas?.length ? ` ⚠️ ${pet.alertas.join(', ')}` : ''} (clique para detalhes)`
                     : slotUsado
                       ? `Slot ${slotNumber} - Já utilizado hoje`
                       : `Slot ${slotNumber} - Livre`
                 }
               >
                 {pet && <AlertaSeloVaga alertas={pet.alertas} />}
-                {getStatusIcon(status, avisado, slotUsado)}
+                {saiuEntrega ? <Truck className="w-4 h-4" /> : getStatusIcon(status, avisado, slotUsado)}
                 <span className="text-sm sm:text-xs font-semibold">{slotNumber}</span>
                 {pet && (
                   <span className="text-[11px] sm:text-[8px] font-medium truncate w-full px-1 text-center">
@@ -487,6 +488,12 @@ export function SlotGrid({ pets, onAddPet, onEditPet, onDeletePet, onCheckout, f
             <PhoneCall className="w-2.5 h-2.5 text-blue-600" />
           </div>
           <span className="text-sm text-gray-600">Tutor Avisado</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="w-4 h-4 rounded bg-blue-100 border-2 border-blue-400 flex items-center justify-center">
+            <Truck className="w-2.5 h-2.5 text-blue-600" />
+          </div>
+          <span className="text-sm text-gray-600">Saiu para entrega</span>
         </div>
         {/* ✅ NOVO */}
         <div className="flex items-center gap-2">

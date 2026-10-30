@@ -13,7 +13,7 @@ interface KanbanBoardProps {
   pets: Pet[]
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
-  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado' | 'saiu_entrega') => void
   onAddPet: (pet: Omit<Pet, "id" | "checkInTime">) => void | Promise<boolean>
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
@@ -43,7 +43,7 @@ interface KanbanColumnProps {
   pets: Pet[]
   onRevertService: (id: string, etapa: string, motivo: string) => void
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
-  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado' | 'saiu_entrega') => void
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
   onAssignProfessional: (

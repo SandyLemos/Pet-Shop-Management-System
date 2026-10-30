@@ -11,7 +11,7 @@ import { useSlotsUsadosHoje } from '../hooks/useSlotsUsadosHoje'; // ✅ NOVO
 import { useDiaAtual } from '../hooks/useDiaAtual';
 import type { Pet, SlotStatus } from './types/pet';
 import { mesmosAlertas } from '../utils/alertas';
-import { addPet, subscribeToPets, encerrarPet, updatePet, marcarComoAvisado, getPetsPendentes, SLOT_OCUPADO, SLOT_USADO, JA_ENCERRADO, CAMPOS_OBRIGATORIOS, garantirReservasDeVaga, atualizarFichaComEdicao, CAMPOS_FICHA } from '../services/petService';
+import { addPet, subscribeToPets, encerrarPet, updatePet, marcarComoAvisado, marcarSaiuEntrega, getPetsPendentes, SLOT_OCUPADO, SLOT_USADO, JA_ENCERRADO, CAMPOS_OBRIGATORIOS, garantirReservasDeVaga, atualizarFichaComEdicao, CAMPOS_FICHA } from '../services/petService';
 import { PendentesBanner } from './components/PendentesBanner';
 import { LayoutGrid, LayoutList, Filter, LogOut, Settings, PackageCheck, Eye } from 'lucide-react';
 import { useSuporteAcompanhando } from '../hooks/useSuporteAcompanhando';
@@ -349,7 +349,7 @@ export default function App() {
   };
 
   // ✅ ATUALIZADO: SlotGrid — 'avisado' não queima, 'entregue' queima
-  const handleCheckoutWithType = async (petId: string, tipo?: 'entregue' | 'avisado') => {
+  const handleCheckoutWithType = async (petId: string, tipo?: 'entregue' | 'avisado' | 'saiu_entrega') => {
     const pet = pets.find((p) => p.id === petId);
     if (!pet) return;
 
@@ -359,6 +359,10 @@ export default function App() {
       if (tipo === 'avisado') {
         await marcarComoAvisado(pet);
         toast.success(`${pet.nomePet} marcado como avisado! 📞`);
+      } else if (tipo === 'saiu_entrega') {
+        await marcarSaiuEntrega(pet);
+        void atualizarLinkTutor(pet.linkTutor, 'saiu_entrega');
+        toast.success(`${pet.nomePet} saiu para entrega! 🚚 Clique em Entregue quando entregar.`);
       } else {
         await encerrarPet(pet, 'entregue');
         void atualizarLinkTutor(pet.linkTutor, 'entregue');

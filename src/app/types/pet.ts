@@ -76,6 +76,9 @@ export interface Pet {
   transporte?: 'busca_entrega' | 'busca' | 'entrega';
   enderecoTransporte?: string;
   mapaTransporte?: string;
+  /** pronto e a caminho da casa do tutor (ISO) */
+  saiuEntregaEm?: string;
+  saiuEntregaPorNome?: string | null;
 }
 
 // ─── Ficha permanente do pet (coleção petsCadastro) ───────────────────────

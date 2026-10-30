@@ -25,6 +25,7 @@ export interface Acompanhamento {
   escovarEm?: number;
   tosaEm?: number;
   prontoEm?: number;
+  saiuEntregaEm?: number;
   entregueEm?: number;
 }
 

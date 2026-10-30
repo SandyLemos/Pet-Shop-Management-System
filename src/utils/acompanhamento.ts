@@ -3,7 +3,7 @@
 import { telefoneWhatsApp } from './whatsapp';
 
 /** Situação mostrada ao tutor: as etapas do Fluxo + entregue */
-export type SituacaoTutor = 'espera' | 'banho' | 'escovar' | 'tosa' | 'finalizado' | 'entregue' | 'removido';
+export type SituacaoTutor = 'espera' | 'banho' | 'escovar' | 'tosa' | 'finalizado' | 'saiu_entrega' | 'entregue' | 'removido';
 
 /** Campo do horário de cada etapa no documento do link */
 export const CAMPO_HORA: Record<Exclude<SituacaoTutor, 'removido'>, string> = {
@@ -12,13 +12,14 @@ export const CAMPO_HORA: Record<Exclude<SituacaoTutor, 'removido'>, string> = {
   escovar: 'escovarEm',
   tosa: 'tosaEm',
   finalizado: 'prontoEm',
+  saiu_entrega: 'saiuEntregaEm',
   entregue: 'entregueEm',
 };
 
 const SERVICOS_COM_TOSA = ['tosa', 'banho_tosa', 'higienica'];
 
 /** Etapas que o tutor vê, na ordem, conforme o serviço (sem tosa, a etapa Tosa não aparece) */
-export function etapasDoServico(servico: string): Exclude<SituacaoTutor, 'removido' | 'entregue'>[] {
+export function etapasDoServico(servico: string): Exclude<SituacaoTutor, 'removido' | 'entregue' | 'saiu_entrega'>[] {
   return SERVICOS_COM_TOSA.includes(servico)
     ? ['espera', 'banho', 'escovar', 'tosa', 'finalizado']
     : ['espera', 'banho', 'escovar', 'finalizado'];
@@ -49,6 +50,7 @@ export function fraseDaSituacao(situacao: SituacaoTutor, nomePet: string): { tit
     case 'escovar':    return { titulo: 'Secando e escovando', texto: `Banho feito! Agora é a vez de secar e escovar ${nomePet}.` };
     case 'tosa':       return { titulo: 'Na tosa', texto: `Últimos retoques: ${nomePet} está na tosa. ✂️` };
     case 'finalizado': return { titulo: 'Pronto para buscar', texto: `${nomePet} está prontinho(a) e esperando por você!` };
+    case 'saiu_entrega': return { titulo: 'Saiu para entrega', texto: `${nomePet} está pronto(a) e a caminho da sua casa! 🚚` };
     case 'entregue':   return { titulo: 'Entregue', texto: `${nomePet} já foi entregue. Obrigado pela visita!` };
     default:           return { titulo: 'Atendimento encerrado', texto: 'Este atendimento foi encerrado pela loja.' };
   }

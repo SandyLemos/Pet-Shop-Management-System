@@ -33,7 +33,7 @@ import { PetRegistration } from './PetRegistration';
 import { HEALTH_ISSUES, NO_ISSUES_ID } from '../constants/healthIssues';
 import { AlertaSelos } from './AlertasPet';
 import { LinkTutorPet } from './LinkTutorPet';
-import { NOME_TRANSPORTE } from '../../utils/agendamento';
+import { NOME_TRANSPORTE, temEntrega } from '../../utils/agendamento';
 
 interface PetDetailModalProps {
   pet: Pet | null;
@@ -41,7 +41,7 @@ interface PetDetailModalProps {
   onClose: () => void;
   onEdit: (petId: string, updatedData: Partial<Pet>) => void;
   onDelete: (petId: string) => void;
-  onCheckout?: (petId: string, tipo: 'entregue' | 'avisado') => void;
+  onCheckout?: (petId: string, tipo: 'entregue' | 'avisado' | 'saiu_entrega') => void;
 }
 
 export function PetDetailModal({
@@ -121,6 +121,9 @@ export function PetDetailModal({
   const canDelete    = pet.status === 'espera';
   const isFinalizado = pet.status === 'finalizado';
   const jaAvisado    = !!pet.avisado;
+  // ✅ busca e entrega / só entrega: em vez de avisar para retirar, a loja sai para entregar
+  const vaiEntregar  = temEntrega(pet.transporte);
+  const saiuEntrega  = !!pet.saiuEntregaEm;
 
   // ── Saúde observada ─────────────────────────────────────────────
   const issueMap = new Map(HEALTH_ISSUES.map((i) => [i.id, i]));
@@ -358,6 +361,32 @@ export function PetDetailModal({
                 <p className="text-[10px] font-semibold text-purple-500 uppercase tracking-wider">
                   Encerrar Atendimento
                 </p>
+                {vaiEntregar ? (<>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className={`flex-1 h-8 text-xs ${saiuEntrega ? 'bg-gray-100 text-gray-400 border border-gray-200 cursor-not-allowed opacity-60' : 'bg-sky-600 hover:bg-sky-700 text-white'}`}
+                      disabled={saiuEntrega}
+                      onClick={() => { if (!saiuEntrega) onCheckout(pet.id, 'saiu_entrega'); }}
+                    >
+                      <Truck className="w-3.5 h-3.5 mr-1" />
+                      {saiuEntrega ? '✓ Saiu para entrega' : 'Saiu para entrega'}
+                    </Button>
+                    <Button
+                      size="sm"
+                      className="flex-1 bg-green-500 hover:bg-green-600 text-white h-8 text-xs"
+                      onClick={() => onCheckout(pet.id, 'entregue')}
+                    >
+                      <PackageCheck className="w-3.5 h-3.5 mr-1" />
+                      Entregue
+                    </Button>
+                  </div>
+                  <p className="text-[11px] text-sky-700 text-center break-words">
+                    {saiuEntrega
+                      ? <>🚚 Saiu para entrega às <strong>{formatTime(pet.saiuEntregaEm!)}</strong>. Clique em <strong>Entregue</strong> quando entregar.</>
+                      : <>🚚 Este pet volta para casa pela loja ({NOME_TRANSPORTE[pet.transporte!]}).</>}
+                  </p>
+                </>) : (<>
                 <div className="flex gap-2">
                   <Button
                     size="sm"
@@ -386,6 +415,7 @@ export function PetDetailModal({
                     📞 Tutor já foi avisado. Clique em <strong>Entregue</strong> quando retirar o pet.
                   </p>
                 )}
+                </>)}
               </div>
             )}
 

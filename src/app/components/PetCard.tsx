@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from './ui/card';
+import { temEntrega } from '../../utils/agendamento';
 import { Badge } from './ui/badge';
 import { Button } from './ui/button';
 import { Droplet, Wind, Scissors, CheckCircle2, AlertCircle, ArrowLeft, RotateCcw, PackageCheck } from "lucide-react";
@@ -24,7 +25,7 @@ interface PetCardProps {
   onOpenDetail?: (pet: Pet) => void;
   onUpdateStatus: (petId: string, newStatus: SlotStatus) => void
   onRevertService: (petId: string, etapa: string, motivo: string) => void
-  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado') => void
+  onCheckout: (petId: string, tipo?: 'entregue' | 'avisado' | 'saiu_entrega') => void
   onEditPet: (petId: string, updatedData: Partial<Pet>) => void
   onDeletePet: (petId: string) => void
   onAssignProfessional: (
@@ -412,7 +413,7 @@ export function PetCard({
                 <DialogHeader>
                   <DialogTitle className="flex items-center gap-2 text-green-700">
                     <PackageCheck className="w-5 h-5" />
-                    Disponibilizar para Retirada
+                    {temEntrega(pet.transporte) ? 'Disponibilizar para Entrega' : 'Disponibilizar para Retirada'}
                   </DialogTitle>
                   <DialogDescription className="pt-1">
                     Tem certeza que deseja finalizar o serviço de{' '}
@@ -520,7 +521,7 @@ export function PetCard({
                   </Button>
                 ) : (
                   <Button onClick={(e) => { e.stopPropagation(); handleMarkAsReady() }} className="w-full h-7 text-xs bg-green-500 hover:bg-green-600">
-                    <PackageCheck className="w-3.5 h-3.5 mr-1.5" /> Disponibilizar para Retirada
+                    <PackageCheck className="w-3.5 h-3.5 mr-1.5" /> {temEntrega(pet.transporte) ? 'Disponibilizar para Entrega' : 'Disponibilizar para Retirada'}
                   </Button>
                 )}
                 <Button onClick={(e) => { e.stopPropagation(); handlePreviousStatus() }} variant="outline" className="w-full h-6 text-[11px]">
@@ -537,7 +538,7 @@ export function PetCard({
                   </Button>
                 ) : (
                   <Button onClick={(e) => { e.stopPropagation(); handleMarkAsReady() }} className="w-full h-7 text-xs bg-green-500 hover:bg-green-600">
-                    <PackageCheck className="w-3.5 h-3.5 mr-1.5" /> Disponibilizar para Retirada
+                    <PackageCheck className="w-3.5 h-3.5 mr-1.5" /> {temEntrega(pet.transporte) ? 'Disponibilizar para Entrega' : 'Disponibilizar para Retirada'}
                   </Button>
                 )}
                 <Button onClick={(e) => { e.stopPropagation(); handlePreviousStatus() }} variant="outline" className="w-full h-6 text-[11px]">
@@ -551,7 +552,9 @@ export function PetCard({
                 <div className="flex items-center gap-2 bg-green-50 border border-green-200 rounded-lg px-2.5 py-1.5">
                   <PackageCheck className="w-3.5 h-3.5 text-green-600 flex-shrink-0" />
                   <p className="text-[11px] font-semibold text-green-700">
-                    Serviço finalizado — aguardando retirada
+                    {temEntrega(pet.transporte)
+                      ? (pet.saiuEntregaEm ? 'Saiu para entrega 🚚' : 'Serviço finalizado — aguardando entrega')
+                      : 'Serviço finalizado — aguardando retirada'}
                   </p>
                 </div>
                 {/* ✅ marcação do slot é feita no App.tsx (handleCheckout) */}

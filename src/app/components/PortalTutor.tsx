@@ -10,7 +10,7 @@ const hora = (ms?: number) =>
 
 const COR_SITUACAO: Record<string, string> = {
   espera: '#F7931E', banho: '#0B5A70', escovar: '#0B5A70', tosa: '#0B5A70',
-  finalizado: '#1E7F4F', entregue: '#1E7F4F', removido: '#64748B',
+  finalizado: '#1E7F4F', saiu_entrega: '#1A90D0', entregue: '#1E7F4F', removido: '#64748B',
 };
 
 export function PortalTutor({ codigo }: { codigo: string }) {
@@ -44,7 +44,7 @@ export function PortalTutor({ codigo }: { codigo: string }) {
   const cores = coresValidas(dados.cores) ?? CORES_PADRAO;
   const etapas = etapasDoServico(dados.servico);
   const encerrado = dados.status === 'entregue' || dados.status === 'removido';
-  const indiceAtual = encerrado ? etapas.length : Math.max(0, etapas.indexOf(dados.status as any));
+  const indiceAtual = encerrado ? etapas.length : dados.status === 'saiu_entrega' ? etapas.length - 1 : Math.max(0, etapas.indexOf(dados.status as any));
   const frase = fraseDaSituacao(dados.status, dados.nomePet);
   const diaFmt = dados.dia.split('-').reverse().slice(0, 2).join('/');
 

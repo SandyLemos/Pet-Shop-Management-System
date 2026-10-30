@@ -229,7 +229,7 @@ service cloud.firestore {
                     && codigo.matches('^[A-Za-z0-9]{20,40}$')
                     && request.resource.data.keys().hasOnly([
                          'lojaId', 'nomeLoja', 'logoUrl', 'cores', 'nomePet', 'especie', 'servico', 'status', 'dia',
-                         'expiraEm', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'entregueEm'])
+                         'expiraEm', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'saiuEntregaEm', 'entregueEm'])
                     && request.resource.data.nomePet is string
                     && request.resource.data.nomePet.size() > 0
                     && request.resource.data.nomePet.size() <= 100
@@ -237,9 +237,9 @@ service cloud.firestore {
                     && request.resource.data.expiraEm <= request.time.toMillis() + 3 * 24 * 60 * 60 * 1000;
       allow update: if daLoja(resource.data.lojaId)
                     && request.resource.data.diff(resource.data).affectedKeys().hasOnly([
-                         'status', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'entregueEm'])
+                         'status', 'atualizadoEm', 'chegouEm', 'banhoEm', 'escovarEm', 'tosaEm', 'prontoEm', 'saiuEntregaEm', 'entregueEm'])
                     && request.resource.data.status in
-                         ['espera', 'banho', 'escovar', 'tosa', 'finalizado', 'entregue', 'removido'];
+                         ['espera', 'banho', 'escovar', 'tosa', 'finalizado', 'saiu_entrega', 'entregue', 'removido'];
       allow delete: if isDono() || daLoja(resource.data.lojaId);
     }
 

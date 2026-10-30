@@ -134,6 +134,24 @@ describe('Agendamento: andamento na página do tutor', () => {
     expect(chegou.etapas.find((e) => e.estado === 'agora')?.id).toBe('espera');
   });
 
+  it('só busca: depois de pronto segue normal (pronto para buscar → entregue)', () => {
+    const a = andamentoDoPedido({ ...p, status: 'chegou', transporte: 'busca' }, { status: 'finalizado' });
+    expect(a.titulo).toBe('Pronto para buscar');
+    expect(a.etapas.map((e) => e.id)).not.toContain('saiu_entrega');
+  });
+
+  it('com entrega: pronto aguarda a entrega → saiu para entrega → entregue em casa', () => {
+    const pronto = andamentoDoPedido({ ...p, status: 'chegou', transporte: 'entrega' }, { status: 'finalizado' });
+    expect(pronto.titulo).toBe('Pronto! Aguardando a entrega');
+    expect(pronto.etapas.find((e) => e.estado === 'agora')?.nome).toBe('Pronto, aguardando a entrega');
+    const saiu = andamentoDoPedido({ ...p, status: 'chegou', transporte: 'busca_entrega' }, { status: 'saiu_entrega', saiuEntregaEm: 9 });
+    expect(saiu.titulo).toBe('Saiu para entrega');
+    expect(saiu.etapas.find((e) => e.estado === 'agora')).toMatchObject({ id: 'saiu_entrega', hora: 9 });
+    const fim = andamentoDoPedido({ ...p, status: 'chegou', transporte: 'entrega' }, { status: 'entregue' });
+    expect(fim.etapas.every((e) => e.estado === 'feito')).toBe(true);
+    expect(fim.etapas.at(-1)?.nome).toBe('Entregue em casa');
+  });
+
   it('confirmado: a próxima etapa é a chegada na loja', () => {
     const a = andamentoDoPedido({ ...p, status: 'confirmado' });
     expect(a.etapas.find((e) => e.estado === 'agora')?.nome).toBe('Chegada na loja');

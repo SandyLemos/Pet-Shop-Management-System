@@ -791,6 +791,20 @@ export async function marcarComoAvisado(pet: Pet): Promise<void> {
   });
 }
 
+/** ✅ Busca e entrega: pet pronto saiu para ser entregue em casa (o "Entregue" encerra depois) */
+export async function marcarSaiuEntrega(pet: Pet): Promise<void> {
+  const user = getAuth().currentUser;
+  let nome: string | null = null;
+  if (user) {
+    const userDoc = await getDoc(doc(db, 'usuarios', user.uid));
+    if (userDoc.exists()) nome = userDoc.data().nome ?? null;
+  }
+  await updateDoc(docLoja('dias', pet.dia ?? getTodayKey(), 'pets', pet.id), {
+    saiuEntregaEm: new Date().toISOString(),
+    saiuEntregaPorNome: nome,
+  });
+}
+
 // ─── Tipos para Relatório ─────────────────────────────────────────────────
 
 export interface LogEntry {

@@ -74,6 +74,8 @@ export function problemaNoEndereco(e: Endereco): string | null {
 export const precisaEndereco = (t?: Transporte) => !!t && t !== 'nenhum';
 /** A loja vai buscar o pet em casa (busca e entrega, ou só busca) */
 export const temBusca = (t?: Transporte) => t === 'busca_entrega' || t === 'busca';
+/** A loja devolve o pet em casa (busca e entrega, ou só entrega) */
+export const temEntrega = (t?: string) => t === 'busca_entrega' || t === 'entrega';
 
 /** "Rua X, 12 - apto 3 - Centro, Cidade - CEP 00000-000 (perto de ...)" */
 export function textoEndereco(e?: Partial<Endereco> | null): string {
@@ -262,7 +264,7 @@ export type EstadoEtapa = 'feito' | 'agora' | 'futuro';
 export interface EtapaPedido { id: string; nome: string; estado: EstadoEtapa; hora?: number }
 
 const COR_ETAPA: Record<string, string> = {
-  espera: '#F7931E', banho: '#0B5A70', escovar: '#0B5A70', tosa: '#0B5A70', finalizado: '#1E7F4F', entregue: '#1E7F4F', removido: '#64748B',
+  espera: '#F7931E', banho: '#0B5A70', escovar: '#0B5A70', tosa: '#0B5A70', finalizado: '#1E7F4F', saiu_entrega: '#1A90D0', entregue: '#1E7F4F', removido: '#64748B',
 };
 
 /**
@@ -276,29 +278,38 @@ export function andamentoDoPedido(
   const naLoja = p.status === 'chegou';
   const busca = temBusca(p.transporte);
   const situacao: SituacaoTutor | null = naLoja ? (ao?.status ?? 'espera') : null;
-  const frase = situacao && situacao !== 'espera'
-    ? { ...fraseDaSituacao(situacao, p.nomePet), cor: COR_ETAPA[situacao] ?? '#0B5A70' }
-    : fraseDoPedido(p.status, p.nomePet, busca);
+  const entrega = temEntrega(p.transporte);
+  const frase = situacao === 'finalizado' && entrega
+    ? { titulo: 'Pronto! Aguardando a entrega', texto: `${p.nomePet} está prontinho(a). Avisamos aqui quando sair para entregar.`, cor: COR_ETAPA.finalizado }
+    : situacao === 'entregue' && entrega
+      ? { titulo: 'Entregue', texto: `${p.nomePet} já foi entregue em casa. Obrigado!`, cor: COR_ETAPA.entregue }
+      : situacao && situacao !== 'espera'
+        ? { ...fraseDaSituacao(situacao, p.nomePet), cor: COR_ETAPA[situacao] ?? '#0B5A70' }
+        : fraseDoPedido(p.status, p.nomePet, busca);
 
   const daLoja = etapasDoServico(p.servico); // espera, banho, escovar, (tosa), finalizado
   // com busca, a loja vai até a casa antes do pet entrar na fila
-  const ids = ['enviado', 'confirmado', ...(busca ? ['busca'] : []), ...daLoja, 'entregue'];
+  // com entrega, depois de pronto a loja sai para entregar em casa
+  const ids = ['enviado', 'confirmado', ...(busca ? ['busca'] : []), ...daLoja, ...(entrega ? ['saiu_entrega'] : []), 'entregue'];
   const nomes: Record<string, string> = {
     ...NOME_ETAPA, enviado: 'Pedido enviado', confirmado: 'Confirmado pela loja',
     busca: p.status === 'buscando' ? 'A loja está a caminho para buscar' : naLoja ? 'Buscado em casa' : 'Busca em casa',
-    espera: naLoja ? 'Na loja, aguardando atendimento' : 'Chegada na loja', entregue: 'Entregue',
+    espera: naLoja ? 'Na loja, aguardando atendimento' : 'Chegada na loja',
+    finalizado: entrega ? 'Pronto, aguardando a entrega' : NOME_ETAPA.finalizado,
+    saiu_entrega: 'Saiu para entrega',
+    entregue: entrega ? 'Entregue em casa' : 'Entregue',
   };
   const primeiraDaLoja = ids.indexOf('espera');
   let atual: number;
   if (p.status === 'pendente') atual = 1;
   else if (p.status === 'confirmado') atual = 2; // com busca: aguardando a loja sair; sem busca: aguardando a chegada
   else if (p.status === 'buscando') atual = ids.indexOf('busca');
-  else if (naLoja) atual = situacao === 'entregue' ? ids.length : Math.max(primeiraDaLoja, ids.indexOf(situacao === 'removido' ? 'espera' : situacao!));
+  else if (naLoja) atual = situacao === 'entregue' ? ids.length : Math.max(primeiraDaLoja, ids.indexOf(situacao === 'removido' ? 'espera' : situacao === 'saiu_entrega' && !entrega ? 'finalizado' : situacao!));
   else atual = 1;
   const horas: Record<string, number | undefined> = {
     enviado: p.criadoEm,
     busca: p.buscaSaiuEm,
-    espera: ao?.chegouEm, banho: ao?.banhoEm, escovar: ao?.escovarEm, tosa: ao?.tosaEm, finalizado: ao?.prontoEm, entregue: ao?.entregueEm,
+    espera: ao?.chegouEm, banho: ao?.banhoEm, escovar: ao?.escovarEm, tosa: ao?.tosaEm, finalizado: ao?.prontoEm, saiu_entrega: ao?.saiuEntregaEm, entregue: ao?.entregueEm,
   };
   const etapas = ids.map((id, i): EtapaPedido => ({
     id,
