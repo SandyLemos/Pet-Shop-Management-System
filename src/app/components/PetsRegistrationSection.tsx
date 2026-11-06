@@ -10,6 +10,7 @@ import {
   updatePetCadastro,
   apagarDadosTutor,
   PET_NA_FILA,
+  PEDIDO_ABERTO,
 } from '../../services/petService';
 import type { PetCadastro } from '../types/pet';
 
@@ -139,13 +140,13 @@ function ModalConfirmDeletePet({
             />
             <span className="text-sm text-gray-700">
               <span className="font-semibold">O tutor pediu para apagar os dados (LGPD).</span>{' '}
-              Tirar também o nome dele do histórico.
+              Tirar também o nome e o telefone dele do histórico.
             </span>
           </label>
           <div className="bg-red-50 border border-red-200 rounded-lg px-4 py-2">
             <p className="text-xs text-red-600 font-medium">
               {lgpd
-                ? '⚠️ O nome do tutor vira "Removido (LGPD)" em todo o histórico. Os atendimentos continuam contando nas Análises. Isso não tem volta.'
+                ? '⚠️ O nome do tutor vira "Removido (LGPD)" e o telefone é apagado em todo o histórico e nos pedidos do agendamento online. Os atendimentos continuam contando nas Análises. Isso não tem volta.'
                 : '⚠️ Isso remove apenas o cadastro permanente. Os atendimentos do dia e o histórico de logs NÃO são afetados.'}
             </p>
           </div>
@@ -371,6 +372,8 @@ const filtrados = useMemo(() => {
     } catch (err) {
       if (err instanceof Error && err.message === PET_NA_FILA) {
         toast.error(`${deletando.nomePet} ainda está na fila. Entregue ou remova o pet antes de apagar os dados.`);
+      } else if (err instanceof Error && err.message === PEDIDO_ABERTO) {
+        toast.error(`${deletando.nomePet} tem pedido do agendamento online em andamento. Recuse ou receba o pet antes de apagar os dados.`);
       } else {
         toast.error(lgpd ? 'Erro ao apagar os dados. Tente novamente.' : 'Erro ao excluir cadastro.');
       }

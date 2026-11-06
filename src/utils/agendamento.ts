@@ -94,7 +94,10 @@ export function linkMapa(endereco?: Partial<Endereco> | null, loc?: Localizacao 
   return t ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(t)}` : null;
 }
 
-export const SERVICOS_ONLINE = ['banho', 'banho_tosa', 'tosa', 'higienica', 'hidratacao', 'ozonio'] as const;
+/** Serviços que o tutor pode pedir online. "Banho + Tosa" (banho_tosa) saiu de propósito:
+ *  toda tosa já inclui o banho. Pedidos antigos com banho_tosa continuam aparecendo
+ *  normalmente (NOME_SERVICO e os ícones ainda conhecem esse serviço). */
+export const SERVICOS_ONLINE = ['banho', 'tosa', 'higienica', 'hidratacao', 'ozonio'] as const;
 
 /** Quantos dias para a frente o admin pode liberar vagas (hoje incluso) */
 export const DIAS_LIBERAVEIS = 14;
@@ -177,7 +180,7 @@ export function problemaNoPedido(p: DadosPedido): string | null {
   if (!p.nomePet.trim()) return 'Informe o nome do pet.';
   if (!p.especie) return 'Escolha se é cão ou gato.';
   if (!p.porte) return 'Escolha o porte do pet.';
-  if (!p.servico) return 'Escolha o serviço.';
+  if (!p.servico || !(SERVICOS_ONLINE as readonly string[]).includes(p.servico)) return 'Escolha o serviço.';
   if (precisaEndereco(p.transporte)) {
     const e = p.endereco ? problemaNoEndereco(p.endereco) : 'Informe o endereço.';
     if (e) return `Endereço da ${NOME_TRANSPORTE[p.transporte!].toLowerCase()}: ${e}`;

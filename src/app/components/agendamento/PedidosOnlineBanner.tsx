@@ -13,7 +13,7 @@ import { confirmar, naoVeio, saiuBuscar, whatsDoPedido } from './acoesPedido';
 import { RecusarPedido } from './RecusarPedido';
 
 const detalhes = (p: Pedido) =>
-  `${NOME_SERVICO[p.servico] ?? p.servico} · ${p.especie === 'gato' ? 'Gato' : 'Cão'}${p.raca ? ` ${p.raca}` : ''} · Tutor: ${p.nomeTutor} · ${p.telefone}${p.obs ? ` · Obs.: ${p.obs}` : ''}`;
+  `${NOME_SERVICO[p.servico] ?? p.servico} · ${p.especie === 'gato' ? 'Gato' : 'Cão'}${p.raca ? ` ${p.raca}` : ''} · Tutor: ${p.nomeTutor}${p.telefone ? ` · ${p.telefone}` : ''}${p.obs ? ` · Obs.: ${p.obs}` : ''}`;
 
 /** Busca e entrega: tipo, endereço e mapa */
 function LinhaTransporte({ p }: { p: Pedido }) {

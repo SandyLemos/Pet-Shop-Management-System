@@ -3,13 +3,14 @@
 type Data = Record<string, any>;
 
 /** raiz: prefixo dos caminhos relativos usados em get/set/lista (ex.: 'lojas/elite-pet-shop').
- *  Caminhos que já começam em usuarios/, donos/, lojas/, cobrancas/ ou comunicados/ não recebem prefixo. */
+ *  Caminhos que já começam em usuarios/, donos/, lojas/, cobrancas/, comunicados/ ou agendamentos/ não recebem prefixo. */
 export function criarFirestoreFalso(opcoes: { raiz?: string } = {}) {
   const absoluto = (p: string) =>
-    !opcoes.raiz || /^(usuarios|donos|lojas|cobrancas|comunicados)(\/|$)/.test(p) ? p : `${opcoes.raiz}/${p}`;
+    !opcoes.raiz || /^(usuarios|donos|lojas|cobrancas|comunicados|agendamentos)(\/|$)/.test(p) ? p : `${opcoes.raiz}/${p}`;
   const store = new Map<string, { data: Data; v: number }>();
   let auto = 0;
   let commits = 0;
+  let lotes = 0;
 
   const resolver = (base: Data | undefined, novo: Data, merge: boolean): Data => {
     const out: Data = merge && base ? { ...base } : {};
@@ -70,6 +71,17 @@ export function criarFirestoreFalso(opcoes: { raiz?: string } = {}) {
       gravar(r.path, d, true);
     },
     deleteDoc: async (r: any) => { store.delete(r.path); },
+    // lote: grava tudo junto no commit (conta quantos lotes foram gravados)
+    writeBatch: () => {
+      const escritas: (() => void)[] = [];
+      const lote = {
+        update: (r: any, d: Data) => { escritas.push(() => { if (!store.has(r.path)) throw new Error('not-found'); gravar(r.path, d, true); }); return lote; },
+        set: (r: any, d: Data, o?: any) => { escritas.push(() => gravar(r.path, d, !!o?.merge)); return lote; },
+        delete: (r: any) => { escritas.push(() => store.delete(r.path)); return lote; },
+        commit: async () => { escritas.forEach((w) => w()); lotes++; },
+      };
+      return lote;
+    },
     addDoc: async (c: any, d: Data) => { const r = mod.doc(c); gravar(r.path, d); return { id: r.path.split('/').at(-1) }; },
     runTransaction: async (_db: any, fn: (tx: any) => Promise<any>) => {
       for (let tentativa = 0; tentativa < 5; tentativa++) {
@@ -106,6 +118,7 @@ export function criarFirestoreFalso(opcoes: { raiz?: string } = {}) {
       return [...store.keys()].filter((k) => k.startsWith(p + '/') && !k.slice(p.length + 1).includes('/'));
     },
     commits: () => commits,
-    limpar: () => { store.clear(); auto = 0; commits = 0; },
+    lotes: () => lotes,
+    limpar: () => { store.clear(); auto = 0; commits = 0; lotes = 0; },
   };
 }

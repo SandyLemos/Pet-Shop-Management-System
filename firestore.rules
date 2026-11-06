@@ -211,9 +211,11 @@ service cloud.firestore {
           allow read:   if daLoja(lojaId);
           allow create: if daLoja(lojaId);
           // LGPD: só o admin, e só para trocar o nome do tutor por "Removido (LGPD)"
+          // e apagar o telefone (se o registro tiver)
           allow update: if adminDaLoja(lojaId)
-                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor'])
-                      && request.resource.data.nomeTutor == 'Removido (LGPD)';
+                      && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor', 'telefone'])
+                      && request.resource.data.nomeTutor == 'Removido (LGPD)'
+                      && (!('telefone' in request.resource.data) || request.resource.data.telefone == '');
           allow delete: if adminDaLoja(lojaId);
         }
       }
@@ -345,7 +347,8 @@ service cloud.firestore {
                     && request.resource.data.nomePet is string && request.resource.data.nomePet.size() > 0 && request.resource.data.nomePet.size() <= 100
                     && request.resource.data.especie in ['cao', 'gato']
                     && request.resource.data.porte in ['pequeno', 'medio', 'grande']
-                    && request.resource.data.servico in ['banho', 'tosa', 'banho_tosa', 'higienica', 'ozonio', 'hidratacao']
+                    // banho_tosa saiu do pedido novo (toda tosa inclui banho); pedidos antigos continuam valendo
+                    && request.resource.data.servico in ['banho', 'tosa', 'higienica', 'ozonio', 'hidratacao']
                     && textoAte(request.resource.data.raca, 60)
                     && textoAte(request.resource.data.obs, 300)
                     && textoAte(request.resource.data.nomeLoja, 100)
@@ -364,6 +367,16 @@ service cloud.firestore {
                     && (!('linkTutor' in request.resource.data) || request.resource.data.linkTutor.matches('^[A-Za-z0-9]{20,40}$'))
                     && request.resource.data.status in ['pendente', 'confirmado', 'buscando', 'chegou', 'recusado', 'faltou', 'cancelado_ok']
                     && (!('motivo' in request.resource.data) || textoAte(request.resource.data.motivo, 200));
+
+      // LGPD: o admin apaga os dados do tutor (nome, telefone, endereço e localização)
+      // de pedidos que não estão mais em andamento
+      allow update: if adminDaLoja(resource.data.lojaId)
+                    && !(resource.data.status in ['pendente', 'confirmado', 'buscando'])
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['nomeTutor', 'telefone', 'endereco', 'localizacao'])
+                    && request.resource.data.nomeTutor == 'Removido (LGPD)'
+                    && request.resource.data.telefone == ''
+                    && (!('endereco' in request.resource.data) || request.resource.data.endereco == null)
+                    && (!('localizacao' in request.resource.data) || request.resource.data.localizacao == null);
       allow delete: if isDono() || adminDaLoja(resource.data.lojaId);
     }
 

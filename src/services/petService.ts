@@ -17,10 +17,12 @@ import {
   Timestamp,
   arrayUnion,
   arrayRemove,
+  collection,
+  writeBatch,
 } from 'firebase/firestore';
 import { getAuth } from 'firebase/auth';
 import { db } from '../lib/firebase';
-import { colLoja, docLoja } from '../lib/loja';
+import { colLoja, docLoja, lojaId } from '../lib/loja';
 import type { Pet, PetCadastro, Profissional } from '../app/types/pet';
 import { idDoDia, idDoDiaDe } from '../utils/dias';
 import { TUTOR_REMOVIDO } from '../utils/lgpd';
@@ -230,14 +232,21 @@ export async function deletePetCadastro(petNumber: string): Promise<void> {
 
 export { TUTOR_REMOVIDO };
 export const PET_NA_FILA = 'PET_NA_FILA'; // pet ainda está na fila de algum dia
+export const PEDIDO_ABERTO = 'PEDIDO_ABERTO'; // tutor tem pedido online ainda em andamento
 const INICIO_DO_SISTEMA = '2026-01-01';
 
 /**
  * ✅ LGPD: apaga os dados do tutor a pedido dele.
- * Troca o nome do tutor por "Removido (LGPD)" nos registros de todos os dias
- * (os atendimentos continuam contando nas Análises) e depois exclui a ficha.
- * Se o pet ainda estiver na fila, não faz nada e lança Error(PET_NA_FILA).
- * Devolve quantos registros do histórico foram anonimizados.
+ * - Registros do histórico (todos os dias): nome vira "Removido (LGPD)" e o
+ *   telefone (se algum registro tiver) é apagado. Os atendimentos continuam
+ *   contando nas Análises.
+ * - Pedidos do agendamento online desse tutor: nome vira "Removido (LGPD)" e
+ *   telefone, endereço e localização são apagados.
+ * - Por último a ficha (que tem o telefone) é excluída.
+ * O link do portal do tutor não guarda nome nem telefone, então não muda.
+ * Se o pet ainda estiver na fila lança Error(PET_NA_FILA); se houver pedido
+ * online em andamento lança Error(PEDIDO_ABERTO). Nos dois casos nada é apagado.
+ * Devolve quantos registros (histórico + pedidos) foram anonimizados.
  */
 export async function apagarDadosTutor(petNumber: string): Promise<number> {
   // Dias com documento + todos os dias desde o início do sistema (dias antigos
@@ -262,15 +271,74 @@ export async function apagarDadosTutor(petNumber: string): Promise<number> {
   // 1️⃣ Pet na fila (de hoje ou esquecido): primeiro precisa ser entregue/removido
   if ((await buscar('pets')).length > 0) throw new Error(PET_NA_FILA);
 
-  // 2️⃣ Histórico: troca só o nome do tutor (a regra do Firestore só deixa mudar esse campo)
-  const logs = (await buscar('logs')).filter((l) => l.data.nomeTutor !== TUTOR_REMOVIDO);
-  await Promise.all(logs.map((l) =>
-    updateDoc(docLoja('dias', l.dia, 'logs', l.id), { nomeTutor: TUTOR_REMOVIDO }),
-  ));
+  const ficha = (await getDoc(doc(petsCadastroCollection(), petNumber))).data() as any;
+  const todosLogs = await buscar('logs');
 
-  // 3️⃣ Por último a ficha: se algo falhar antes, dá para tentar de novo
+  // 2️⃣ Pedidos online do tutor: os que viraram atendimento deste pet (petId do
+  //    histórico) e os feitos com o mesmo telefone para o mesmo pet
+  const pedidos = await buscarPedidosDoTutor(ficha, todosLogs.map((l) => l.data.petId).filter(Boolean));
+  if (pedidos.some((p) => ['pendente', 'confirmado', 'buscando'].includes(p.data.status))) {
+    throw new Error(PEDIDO_ABERTO);
+  }
+
+  // 3️⃣ Grava tudo em lotes (menos idas ao banco). A regra do Firestore só deixa
+  //    o admin trocar o nome por "Removido (LGPD)" e apagar telefone/endereço.
+  const logs = todosLogs.filter((l) => l.data.nomeTutor !== TUTOR_REMOVIDO || !!l.data.telefone);
+  const pedidosParaLimpar = pedidos.filter((p) =>
+    p.data.nomeTutor !== TUTOR_REMOVIDO || !!p.data.telefone || p.data.endereco != null || p.data.localizacao != null);
+  const escritas: { ref: any; dados: Record<string, any> }[] = [
+    ...logs.map((l) => ({
+      ref: docLoja('dias', l.dia, 'logs', l.id),
+      dados: { nomeTutor: TUTOR_REMOVIDO, ...('telefone' in l.data ? { telefone: '' } : {}) },
+    })),
+    ...pedidosParaLimpar.map((p) => ({
+      ref: doc(db, 'agendamentos', p.id),
+      dados: {
+        nomeTutor: TUTOR_REMOVIDO,
+        telefone: '',
+        ...(p.data.endereco != null ? { endereco: null } : {}),
+        ...(p.data.localizacao != null ? { localizacao: null } : {}),
+      },
+    })),
+  ];
+  for (let i = 0; i < escritas.length; i += LOTE_LGPD) {
+    const lote = writeBatch(db);
+    escritas.slice(i, i + LOTE_LGPD).forEach((e) => lote.update(e.ref, e.dados));
+    await lote.commit();
+  }
+
+  // 4️⃣ Por último a ficha: se algo falhar antes, dá para tentar de novo
   await deletePetCadastro(petNumber);
-  return logs.length;
+  return logs.length + pedidosParaLimpar.length;
+}
+
+/** Escritas por lote (o Firestore aceita até 500) */
+const LOTE_LGPD = 400;
+
+const normalizarNome = (s: unknown) => String(s ?? '').trim().toLowerCase();
+
+async function buscarPedidosDoTutor(ficha: any, petIds: string[]): Promise<{ id: string; data: any }[]> {
+  const col = collection(db, 'agendamentos');
+  const loja = lojaId();
+  const achados = new Map<string, any>();
+  const guardar = (snap: any) => snap.docs.forEach((d: any) => achados.set(d.id, d.data()));
+
+  const telefone = String(ficha?.telefone ?? '').replace(/\D/g, '');
+  if (telefone) {
+    const snap = await getDocs(query(col, where('lojaId', '==', loja), where('telefone', '==', telefone)));
+    // mesmo telefone pode ser de outro pet do mesmo tutor: fica só o deste pet
+    snap.docs
+      .filter((d: any) => normalizarNome(d.data().nomePet) === normalizarNome(ficha?.nomePet) || petIds.includes(d.data().petId))
+      .forEach((d: any) => achados.set(d.id, d.data()));
+  }
+  // pedidos que chegaram na loja guardam o petId da fila (o telefone pode ser outro)
+  const unicos = [...new Set(petIds)];
+  for (let i = 0; i < unicos.length; i += 10) {
+    const snaps = await Promise.all(unicos.slice(i, i + 10).map((petId) =>
+      getDocs(query(col, where('lojaId', '==', loja), where('petId', '==', petId)))));
+    snaps.forEach(guardar);
+  }
+  return [...achados].map(([id, data]) => ({ id, data }));
 }
 
 /**

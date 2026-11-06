@@ -25,10 +25,11 @@ vi.mock('firebase/firestore', async () => {
 });
 
 import {
-  andamentoDoPedido, escolherVagasOnline, vagasLivres, proximaVagaNaChegada, problemaNoPedido, textoEndereco, linkMapa, limparPedido, proximosDias, diaCurto, mensagemPedido,
+  SERVICOS_ONLINE, andamentoDoPedido, escolherVagasOnline, vagasLivres, proximaVagaNaChegada, problemaNoPedido, textoEndereco, linkMapa, limparPedido, proximosDias, diaCurto, mensagemPedido,
   type DadosPedido,
 } from '../src/utils/agendamento';
 import { modulosDaLoja } from '../src/utils/modulos';
+import { NOME_SERVICO } from '../src/utils/acompanhamento';
 import {
   criarPedido, cancelarPedido, confirmarPedido, recusarPedido, liberarCancelado, marcarChegou, VAGA_TOMADA, type Pedido,
 } from '../src/services/agendamentoService';
@@ -85,6 +86,13 @@ describe('Agendamento: regras puras', () => {
     expect(problemaNoPedido({ ...DADOS, telefone: '123' })).toMatch(/WhatsApp/);
     expect(problemaNoPedido({ ...DADOS, especie: '' })).toMatch(/cão ou gato/);
     expect(limparPedido(DADOS)).toMatchObject({ nomeTutor: 'Ana Souza', telefone: '24999991234' });
+  });
+
+  it('"Banho + Tosa" saiu do pedido online (toda tosa inclui banho); pedido antigo continua com nome', () => {
+    expect(SERVICOS_ONLINE).not.toContain('banho_tosa');
+    expect(SERVICOS_ONLINE).toEqual(['banho', 'tosa', 'higienica', 'hidratacao', 'ozonio']);
+    expect(problemaNoPedido({ ...DADOS, servico: 'banho_tosa' })).toMatch(/serviço/);
+    expect(NOME_SERVICO.banho_tosa).toBe('Banho e tosa');
   });
 
   it('busca e entrega: exige endereço completo; localização é opcional', () => {
@@ -208,6 +216,11 @@ describe('Agendamento: telas da loja', () => {
     expect(screen.getByRole('region', { name: /agendamentos online a confirmar/i }).textContent)
       .toMatch(/Thor foi agendado online para.*Necessário confirmar/);
     expect(screen.getByRole('button', { name: /^confirmar$/i })).toBeTruthy();
+  });
+
+  it('pedido antigo com "Banho e tosa" continua aparecendo normalmente', () => {
+    render(<PedidosOnlineBanner pedidos={[pedido({ servico: 'banho_tosa' })]} />);
+    expect(screen.getByRole('region', { name: /agendamentos online a confirmar/i }).textContent).toMatch(/Banho e tosa/);
   });
 
   it('confirmados de hoje: lista "aguardando chegada" com Confirmar chegada', () => {

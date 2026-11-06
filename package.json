@@ -7,6 +7,7 @@
     "build": "vite build",
     "dev": "vite",
     "test": "vitest run",
+    "test:rules": "firebase emulators:exec --only firestore --project demo-pata-regras \"vitest run -c vitest.rules.config.ts\"",
     "typecheck": "tsc -p tsconfig.check.json",
     "check": "npm run typecheck && npm test",
     "deploy": "npm run check && vite build && firebase deploy --only hosting",
@@ -35,6 +36,7 @@
     "tw-animate-css": "1.3.8"
   },
   "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.2",
     "@tailwindcss/vite": "4.1.12",
     "@testing-library/dom": "10.4.2",
     "@testing-library/react": "16.3.3",
